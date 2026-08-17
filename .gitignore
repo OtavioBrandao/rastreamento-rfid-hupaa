@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Hotspot experiment runtime evidence (review before any manual commit)
+tests/hotspot/results/*
+!tests/hotspot/results/.gitkeep

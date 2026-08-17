@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RFID MVP - Teste de conectividade local</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: system-ui, sans-serif;
+    }
+    body {
+      display: grid;
+      min-height: 100vh;
+      margin: 0;
+      place-items: center;
+      background: #eef4f7;
+      color: #173042;
+    }
+    main {
+      width: min(38rem, calc(100% - 3rem));
+      padding: 2rem;
+      border-radius: 1rem;
+      background: #fff;
+      box-shadow: 0 0.75rem 2rem rgb(23 48 66 / 12%);
+    }
+    h1 { margin-top: 0; }
+    .ok { color: #08783e; font-weight: 700; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #10212c; color: #e7f0f4; }
+      main { background: #19313f; }
+      .ok { color: #63dfa0; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>RFID MVP - Teste de conectividade local</h1>
+    <p class="ok">Conexão confirmada: este dispositivo alcançou o notebook Ubuntu.</p>
+    <p>Esta página é servida diretamente pela rede local do experimento. Nenhuma conexão com a internet é necessária.</p>
+    <p>Horário de acesso no dispositivo: <time id="access-time">carregando…</time></p>
+  </main>
+  <script>
+    document.getElementById('access-time').textContent = new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'full',
+      timeStyle: 'long'
+    }).format(new Date());
+  </script>
+</body>
+</html>
