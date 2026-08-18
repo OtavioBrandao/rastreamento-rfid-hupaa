@@ -4,8 +4,34 @@ MVP para rastreabilidade aproximada, por zonas, de equipamentos hospitalares do 
 
 ## Fase atual
 
-O projeto está na etapa inicial de validação de infraestrutura local. O primeiro experimento verifica se um notebook com Ubuntu 24.04 pode criar um hotspot Wi-Fi isolado, hospedar uma página local e ser acessado por um telefone ou outro dispositivo sem internet e sem a rede institucional.
+A Prova de Conceito foi concluída. A primeira camada do MVP recebe eventos enviados por múltiplos leitores Identix EZ700 por MQTT e os persiste localmente no notebook em JSON Lines. O notebook não cria a rede Wi-Fi: ele funciona como broker Mosquitto e receptor, conectado à mesma rede dos leitores.
 
-Consulte o [roteiro do experimento de hotspot](tests/hotspot/README.md) e o [registro do experimento](docs/experiments/hotspot-validation.md).
+```text
+EZ700 -> Wi-Fi local -> Mosquitto no notebook -> receptor Python -> data/raw_events.jsonl
+```
 
-Integração com o leitor Identix EZ700, arquitetura do servidor, escolha entre MQTT e HTTP, banco de dados, lógica de portal e dashboard estão fora do escopo deste commit inicial. Esses itens dependem de validações físicas posteriores do hardware e de seus protocolos e payloads reais.
+O formato e a configuração reais do EZ700 ainda dependem de validação física. A fixture atual reproduz o JSON documentado pela Identix sem rejeitar campos adicionais.
+
+## Execução rápida
+
+No Ubuntu 24.04, a partir da raiz do repositório:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+docker compose up -d
+python -m rfid_ingestion
+```
+
+Em outro terminal, com o mesmo ambiente virtual ativo:
+
+```bash
+python -m rfid_ingestion.simulator --reader-id EZ700-SIM-01 --count 3 --interval 1
+```
+
+Os eventos são anexados a `data/raw_events.jsonl`. Consulte o [guia completo de ingestão MQTT](docs/mqtt-ingestion.md) e o [roteiro dos testes de rede](docs/experiments/mqtt-network-validation.md).
+
+## Escopo
+
+Esta etapa contém broker local de desenvolvimento, receptor, simulador, persistência JSONL e testes. Dashboard, frontend, CRUD, banco de dados externo, nuvem, lógica definitiva de portal e implantação de produção continuam fora do escopo.
