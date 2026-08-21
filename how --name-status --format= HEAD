@@ -1,0 +1,45 @@
+[33mcommit 5516a0069a0cd3d51231cb2988e9c143e8b570b2[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author:     OtavioBrandao <otaviomenezes574@gmail.com>
+AuthorDate: Mon Aug 17 23:46:47 2026 -0300
+Commit:     OtavioBrandao <otaviomenezes574@gmail.com>
+CommitDate: Mon Aug 17 23:46:47 2026 -0300
+
+    feat: replace laptop hotspot setup with local MQTT ingestion
+
+ .env.example                                 |  11 [32m++[m
+ .gitignore                                   |   6 [32m+[m[31m-[m
+ AGENTS.md                                    |   3 [32m+[m[31m-[m
+ README.md                                    |  32 [32m++[m[31m-[m
+ compose.yaml                                 |   8 [32m+[m
+ {tests/fixtures/identix => data}/.gitkeep    |   0
+ docs/decisions/0001-local-mqtt-ingestion.md  |  39 [32m++++[m
+ docs/decisions/0001-local-rfid-hotspot.md    |  36 [31m----[m
+ docs/experiments/hotspot-validation.md       |  60 [31m------[m
+ docs/experiments/mqtt-network-validation.md  |  70 [32m+++++++[m
+ docs/mqtt-ingestion.md                       | 250 [32m+++++++++++++++++++++++[m
+ mosquitto/mosquitto.dev.conf                 |  11 [32m++[m
+ requirements.txt                             |   1 [32m+[m
+ rfid_ingestion/__init__.py                   |   5 [32m+[m
+ rfid_ingestion/__main__.py                   |  29 [32m+++[m
+ rfid_ingestion/config.py                     |  89 [32m+++++++++[m
+ rfid_ingestion/logging_config.py             |  13 [32m++[m
+ rfid_ingestion/mqtt_client.py                | 148 [32m++++++++++++++[m
+ rfid_ingestion/parsing.py                    |  69 [32m+++++++[m
+ rfid_ingestion/persistence.py                |  31 [32m+++[m
+ rfid_ingestion/simulator.py                  | 160 [32m+++++++++++++++[m
+ tests/fixtures/identix/tag-read.json         |  10 [32m+[m
+ tests/hotspot/README.md                      | 284 [31m---------------------------[m
+ tests/hotspot/check-capabilities.sh          | 144 [31m--------------[m
+ tests/hotspot/collect-results.sh             | 151 [31m--------------[m
+ tests/hotspot/hotspot-status.sh              | 108 [31m----------[m
+ tests/hotspot/public/index.html              |  50 [31m-----[m
+ tests/hotspot/results/.gitkeep               |   0
+ tests/hotspot/serve-test-page.sh             |  56 [31m------[m
+ tests/hotspot/start-hotspot.sh               | 240 [31m----------------------[m
+ tests/hotspot/stop-hotspot.sh                |  68 [31m-------[m
+ tests/reader-connectivity/mqtt/.gitkeep      |   0
+ tests/reader-connectivity/mqtt/smoke-test.sh | 112 [32m+++++++++++[m
+ tests/test_config.py                         |  62 [32m++++++[m
+ tests/test_parsing.py                        |  70 [32m+++++++[m
+ tests/test_persistence.py                    |  42 [32m++++[m
+ 36 files changed, 1264 insertions(+), 1204 deletions(-)
