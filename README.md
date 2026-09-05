@@ -1,255 +1,103 @@
 # RFID Hospital MVP
 
-MVP para rastreabilidade aproximada, por zonas, de equipamentos hospitalares do HUPAA/UFAL utilizando RFID UHF passivo. A posição de um ativo será inferida principalmente por sua última passagem confirmada em uma zona, e não por posicionamento contínuo em ambientes internos.
+MVP experimental para rastreabilidade aproximada por zonas de equipamentos
+hospitalares do HUPAA/UFAL usando RFID UHF passivo. A posição será inferida
+pela última passagem confirmada em uma zona, não por posicionamento contínuo.
 
-## Fase atual
+## Fase atual — ISS-001
 
-A Prova de Conceito foi concluída e a camada de comunicação do MVP já foi validada fisicamente com dois leitores Identix EZ700.
-
-O notebook funciona como servidor local, executando:
-
-- Broker MQTT Mosquitto.
-- Serviço de ingestão em Python.
-- Persistência inicial dos eventos em JSON Lines.
-
-O notebook não cria obrigatoriamente uma rede Wi-Fi. Ele precisa estar conectado a uma rede pela qual os leitores consigam alcançar seu endereço IP e a porta MQTT.
-
-A comunicação pela rede cabeada foi validada com dois leitores publicando simultaneamente:
+**HiveMQ Cloud Serverless é o broker principal escolhido para o MVP.** O código
+suporta modo externo com TLS e modo local com Mosquitto, usando o mesmo ingestor,
+simulador, contrato e JSONL. O cluster e as credenciais ainda não foram criados;
+**a Issue #1 permanece aberta e a validação externa está pendente**.
 
 ```text
-EZ700 -> rede local -> Mosquitto no notebook -> ingestor Python -> data/raw_events.jsonl
+leitor ou simulador → HiveMQ com TLS → ingestor Python/Paho → data/raw_events.jsonl
+                    ou, por seleção manual de desenvolvimento:
+leitor ou simulador → Mosquitto local → mesmo ingestor → JSONL
 ```
 
-A rede poderá ser cabeada, Wi-Fi ou uma combinação das duas, desde que exista comunicação IP entre os leitores e o servidor. O funcionamento por Wi-Fi ainda precisa ser validado em uma rede estável.
+Não há fallback automático nem ponte entre brokers. O notebook executa o ingestor
+e pode executar o broker local; **não funciona como hotspot**. Desenvolvimento,
+testes unitários, integração e fixtures não dependem de acesso ao laboratório.
 
-## Como o servidor funciona
-
-O servidor possui dois componentes principais: o Mosquitto e o ingestor Python.
-
-### Mosquitto
-
-O Mosquitto funciona como broker MQTT e escuta, no ambiente de desenvolvimento, a porta TCP `1883`.
-
-Os leitores EZ700 conectam-se ao endereço IP do notebook e publicam suas leituras em tópicos individuais:
-
-```text
-rfid/<reader-id>/tags
-```
-
-Exemplos:
-
-```text
-rfid/EZ700-82-8A-54/tags
-rfid/EZ700-82-89-14/tags
-```
-
-O Mosquitto recebe as mensagens e as distribui para os serviços inscritos nesses tópicos.
-
-O broker é responsável pelo transporte das mensagens. Ele não interpreta o EPC, não calcula a localização dos equipamentos e não funciona como banco de dados definitivo da aplicação.
-
-### Ingestor Python
-
-O módulo `rfid_ingestion` conecta-se ao Mosquitto e se inscreve no padrão:
-
-```text
-rfid/+/tags
-```
-
-O caractere `+` permite receber eventos de diferentes leitores utilizando um único serviço de ingestão.
-
-Para cada mensagem recebida, o ingestor:
-
-1. Identifica o leitor pelo tópico MQTT.
-2. Preserva o payload original.
-3. Converte o payload para JSON.
-4. Adiciona o horário de recebimento no servidor.
-5. Registra informações como tópico, QoS e retain.
-6. Preserva possíveis erros de conversão.
-7. Anexa o evento ao arquivo `data/raw_events.jsonl`.
-
-Exemplo simplificado de evento recebido:
-
-```json
-{
-  "received_at_utc": "2026-08-20T15:42:17.301Z",
-  "topic": "rfid/EZ700-82-8A-54/tags",
-  "qos": 1,
-  "retain": false,
-  "payload_json": {
-    "epc": "3034000000000C4000000072",
-    "rssi": -6350,
-    "antenna": 1,
-    "timestamp": "1821775"
-  },
-  "parse_error": null
-}
-```
-
-O formato real de publicação do EZ700 foi validado fisicamente. O receptor preserva o payload original e aceita campos adicionais para facilitar futuras alterações de configuração ou firmware.
-
-## Papel do ingestor no software
-
-O ingestor não é apenas um componente temporário de teste. Ele representa a camada de entrada dos dados RFID e deverá permanecer como parte fundamental do software.
-
-Atualmente, ele recebe e preserva os eventos brutos em JSONL. Durante a evolução do projeto, poderá ser ampliado para:
-
-- Validar a estrutura das mensagens.
-- Identificar o equipamento associado ao EPC.
-- Identificar a zona associada ao leitor.
-- Tratar leituras repetidas.
-- Comparar intensidade de sinal.
-- Confirmar mudanças entre zonas.
-- Registrar o estado dos leitores por heartbeat.
-- Salvar leituras processadas em um banco de dados.
-- Alimentar o backend e o dashboard em tempo real.
-
-A evolução esperada é:
-
-```text
-EZ700
-  -> Mosquitto
-  -> ingestor RFID
-  -> validação e processamento
-  -> banco de dados
-  -> backend/API
-  -> dashboard em tempo real
-```
-
-Os eventos brutos em JSONL poderão continuar sendo armazenados para auditoria, testes, reprodução de sessões e reprocessamento com versões futuras dos algoritmos.
-
-## Identificação dos leitores
-
-Cada leitor deve possuir um Client ID e tópicos MQTT exclusivos.
-
-| Leitor | Client ID | Tópico de inventário |
-|---|---|---|
-| Leitor 1 | `EZ700-82-8A-54` | `rfid/EZ700-82-8A-54/tags` |
-| Leitor 2 | `EZ700-82-89-14` | `rfid/EZ700-82-89-14/tags` |
-
-A identificação do leitor é obtida pelo tópico MQTT. Isso permite que vários leitores publiquem simultaneamente no mesmo broker sem misturar a origem das leituras.
-
-## Execução rápida
-
-No Ubuntu 24.04, a partir da raiz do repositório:
+## Execução rápida local (Ubuntu 24.04)
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+cp .env.local.example .env.local
 docker compose up -d
+set -a; source .env.local; set +a
 python -m rfid_ingestion
 ```
 
-Em outro terminal, com o mesmo ambiente virtual ativo, é possível executar o simulador:
+Em outro terminal, com o ambiente virtual ativo e sem importar o perfil do ingestor:
 
 ```bash
-source .venv/bin/activate
-python -m rfid_ingestion.simulator \
-  --reader-id EZ700-SIM-01 \
-  --count 3 \
-  --interval 1
+python -m rfid_ingestion.simulator --reader-id reader-01 --count 3 --interval 1
 ```
 
-Os eventos são anexados ao arquivo:
-
-```text
-data/raw_events.jsonl
-```
-
-Para visualizar diretamente as mensagens MQTT:
+Mosquitto usa MQTT anônimo em 1883 **somente em rede controlada de desenvolvimento**.
+Leitores físicos devem apontar para o IP LAN do notebook, não para localhost.
+Não expor a porta à Internet. Para restringir o broker ao notebook:
+`MQTT_BIND_ADDRESS=127.0.0.1 docker compose up -d`.
 
 ```bash
-mosquitto_sub \
-  -h 127.0.0.1 \
-  -p 1883 \
-  -t 'rfid/+/tags' \
-  -v
+python -m unittest discover -s tests -v
+bash tests/reader-connectivity/mqtt/smoke-test.sh
 ```
 
-Consulte também:
+O smoke executa um broker isolado em loopback:18884 e dois simuladores,
+incluindo mensagens inválidas. TLS, autenticação e ACL do HiveMQ exigem
+validação externa separada.
 
-- [Guia completo de ingestão MQTT](docs/mqtt-ingestion.md)
-- [Roteiro dos testes de rede](docs/experiments/mqtt-network-validation.md)
+## Contrato atual
 
-## Validações realizadas
+Tópico: `easy/<environment>/<site_id>/<portal_id>/<reader_id>/readings`.
+Exemplo: `easy/dev/hupaa/portal-01/reader-01/readings`.
+IDs são lógicos e independentes de fabricante; uma credencial e Client ID por cliente.
+O ingestor pode assinar `easy/+/+/+/+/readings`; o perfil fornecido restringe
+a `easy/dev/hupaa/+/+/readings` para combinar com a ACL do MVP.
 
-Até o momento, foram validados:
+Payload mantém `epc`, `rssi`, `antenna`, `timestamp` e campos extras existentes.
+QoS 1, retain falso. O ingestor preserva payload original, JSON, metadados e
+erros no JSONL; a validação acrescenta `validation_errors` sem descartar mensagens.
+JSON inválido e bytes não UTF-8 continuam preservados. Não há deduplicação,
+banco, inferência de passagem ou dashboard nesta issue.
 
-- Comunicação real do EZ700 por MQTT.
-- Formato JSON publicado pelo leitor.
-- Leitor conectado à rede cabeada por DHCP.
-- Mosquitto acessível pela porta `1883`.
-- Recebimento de eventos por `mosquitto_sub`.
-- Persistência dos eventos pelo ingestor.
-- Dois leitores publicando simultaneamente.
-- Separação dos leitores por Client ID e tópico.
-- Simulação de movimentação de uma tag entre duas zonas.
-- Armazenamento das coletas em sessões JSONL.
+O transporte antigo `rfid/<reader-id>/tags` foi substituído explicitamente.
+As configurações dos leitores precisam migrar antes da próxima coleta.
+JSONLs históricos continuam preservados; não se assinam os dois padrões em silêncio.
 
-## Validações pendentes
+## Guias e evidências
 
-Ainda precisam ser realizados:
+- [Operação local/cloud, cluster, ACL, simuladores e rotação](docs/mqtt-ingestion.md).
+- [Comparação HiveMQ × EMQX e estimativas de volume](docs/decisions/0002-managed-mqtt.md).
+- [Visita curta ao laboratório e comandos para duas redes](docs/experiments/iss001-managed-validation.md).
+- [Resultados reais e matriz de aceite da ISS-001](docs/evidence/iss001/README.md).
+- [Experimento anterior de redes locais](docs/experiments/mqtt-network-validation.md).
 
-- Comunicação com todos os dispositivos no mesmo Wi-Fi.
-- Leitores no Wi-Fi e servidor na rede cabeada.
-- Comunicação entre sub-redes diferentes.
-- Validação das regras de rede e firewall do hospital.
-- Testes com o dashboard em tempo real.
-- Testes prolongados de estabilidade e reconexão.
-- Integração com banco de dados e backend.
-- Tratamento definitivo de leituras repetidas.
-- Inferência de mudança entre zonas.
-- Configuração de autenticação e segurança para produção.
+## Validação física anterior (histórico, não evidência de HiveMQ)
 
-O teste pelo Wi-Fi do Instituto de Computação não foi concluído porque a rede apresentou falha na obtenção de endereço IP. O hotspot móvel também não pôde ser utilizado devido à ausência de sinal adequado no laboratório.
+A comunicação MQTT em rede cabeada já foi validada com dois Identix EZ700,
+Client IDs `EZ700-82-8A-54` e `EZ700-82-89-14`, publicando em
+`rfid/EZ700-82-8A-54/tags` e `rfid/EZ700-82-89-14/tags`.
+Foram observados DHCP, recepção no Mosquitto e no ingestor, persistência JSONL,
+separação dos leitores e simulação de movimentação de tag entre duas zonas.
+Consulte o [registro de laboratório](docs/test1_readers_communication.pdf).
 
-## Considerações para implantação
+O Wi-Fi institucional não foi concluído por falha na obtenção de IP; o hotspot
+móvel não pôde ser usado por falta de sinal. Permanecem pendentes Wi-Fi estável,
+sub-redes, regras da TI, estabilidade prolongada e validação do firmware para
+TLS, certificado, 8883, usuário/senha e Client ID configurável.
+Essas pendências de hardware/campo não impedem o desenvolvimento do software.
 
-No ambiente definitivo, o servidor deverá possuir um endereço estável, preferencialmente por IP fixo ou reserva DHCP.
-
-Caso o endereço IP do servidor seja alterado, será necessário atualizar a URL do broker MQTT na configuração de cada leitor:
-
-```text
-mqtt://IP_DO_SERVIDOR
-```
-
-Também deverão ser avaliados:
-
-- Autenticação MQTT.
-- Controle de acesso aos tópicos.
-- Regras de firewall.
-- Segmentação da rede.
-- Inicialização automática dos serviços.
-- Persistência e backup.
-- Monitoramento dos leitores.
-- Criptografia, caso suportada pelo firmware e pela infraestrutura.
-
-## Escopo atual
-
-Esta etapa contém:
-
-- Broker MQTT Mosquitto.
-- Serviço permanente de ingestão RFID.
-- Simulador de leitores.
-- Persistência bruta em JSONL.
-- Separação de múltiplos leitores por tópico.
-- Testes automatizados.
-- Roteiros de validação de rede.
-- Captura de sessões para reprodução e análise.
-
-Continuam em desenvolvimento:
-
-- Banco de dados da aplicação.
-- Backend e API.
-- Dashboard e frontend.
-- CRUD de equipamentos e leitores.
-- Lógica definitiva de localização por zonas.
-- Deduplicação e agregação.
-- Implantação no ambiente hospitalar.
-- Configuração de produção e segurança.
+O ingestor é permanente na arquitetura e poderá futuramente alimentar banco,
+backend e dashboard. JSONL permite auditoria e reprodução; não substitui o banco
+nem garante entrega offline ou exatamente uma vez.
 
 ## Materiais do projeto
-
-Documentos, registros, vídeos e demais materiais relacionados ao projeto estão disponíveis no Google Drive:
 
 [Google Drive — RFID Hospital MVP](https://drive.google.com/drive/folders/1AYqcT6jRI6UQNMan_DnyVXhEiNwMNgse?hl=pt-br)
