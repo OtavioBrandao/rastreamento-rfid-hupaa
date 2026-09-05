@@ -148,7 +148,7 @@ class MqttReceiver:
             self.settings.mqtt_port,
             self.settings.mqtt_topic,
             self.settings.events_file,
-        )
+        ) 
         try:
             self.start()
             self.failed.wait()
