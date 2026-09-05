@@ -1,0 +1,171 @@
+{
+  "date_utc": "2026-09-05T13:21:48.239272+00:00",
+  "network": "windows-docker-loopback",
+  "steps": {
+    "configuration": "validado",
+    "dns": "validado",
+    "tls": "não executado; modo local sem TLS",
+    "connection_subscription": "validado",
+    "delivery_jsonl": "validado",
+    "security": "pendente"
+  },
+  "physical_validation": "pendente",
+  "different_networks": "pendente",
+  "mode": "local",
+  "source": "simuladores",
+  "client_ids_configured": [
+    "easy-local-ingestor",
+    "easy-local-reader-01",
+    "easy-local-reader-02"
+  ],
+  "events_file": "data\\verification-8749f7ce39784d498c92d0998438c666.jsonl",
+  "received_count": 20,
+  "rate_messages_per_second": 18.034,
+  "observation_seconds": 1.109,
+  "counts_by_topic": {
+    "easy/dev/hupaa/portal-01/reader-01/readings": 10,
+    "easy/dev/hupaa/portal-01/reader-02/readings": 10
+  },
+  "readings": [
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-01/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.427Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-02/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.428Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-01/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.528Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-02/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.529Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-01/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.630Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-02/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.631Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-02/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.731Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-01/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.732Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-02/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.832Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-01/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.833Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-02/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.933Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-01/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:48.934Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-01/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:49.034Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-02/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:49.035Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-01/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:49.135Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-02/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:49.136Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-01/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:49.236Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-02/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:49.237Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-01/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:49.337Z"
+    },
+    {
+      "topic": "easy/dev/hupaa/portal-01/reader-02/readings",
+      "epc": "E2801190A502006016C32F62",
+      "antenna": 1,
+      "timestamp": "1788614508251164500",
+      "received_at_utc": "2026-09-05T13:21:49.339Z"
+    }
+  ]
+}

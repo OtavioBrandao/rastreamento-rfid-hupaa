@@ -40,6 +40,7 @@ def build_event(
         "payload_encoding": "utf-8",
         "payload_json": None,
         "parse_error": None,
+        "validation_errors": [],
     }
 
     try:
@@ -66,4 +67,21 @@ def build_event(
         else:
             event["parse_error"] = f"JSON inválido: {error}"
 
+    if event["parse_error"] is None:
+        event["validation_errors"] = validate_payload(event["payload_json"])
     return event
+
+
+def validate_payload(payload: Any) -> list[str]:
+    """Valida o contrato mínimo; preserva eventos inválidos e campos extras."""
+    if not isinstance(payload, dict):
+        return ["payload deve ser objeto JSON"]
+    errors = []
+    for key in ("epc", "timestamp"):
+        if not isinstance(payload.get(key), str) or not payload[key].strip():
+            errors.append(f"{key} deve ser texto não vazio")
+    if type(payload.get("antenna")) is not int or payload["antenna"] < 1:
+        errors.append("antenna deve ser inteiro positivo")
+    if type(payload.get("rssi")) not in (int, float):
+        errors.append("rssi deve ser numérico")
+    return errors

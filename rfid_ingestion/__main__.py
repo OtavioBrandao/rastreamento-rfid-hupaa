@@ -19,10 +19,13 @@ def main() -> int:
         return 2
 
     configure_logging(settings.log_level)
-    store = JsonlEventStore(settings.events_file)
-    receiver = MqttReceiver(settings, store)
-    receiver.run()
-    return 0
+    try:
+        store = JsonlEventStore(settings.events_file)
+        receiver = MqttReceiver(settings, store)
+        return receiver.run()
+    except (OSError, ValueError):
+        logging.getLogger(__name__).error("Falha ao preparar certificado ou arquivo JSONL")
+        return 1
 
 
 if __name__ == "__main__":
