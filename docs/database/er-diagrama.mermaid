@@ -1,0 +1,165 @@
+erDiagram
+    TIPOS_EQUIPAMENTO ||--o{ EQUIPAMENTOS : classifica
+    EQUIPAMENTOS ||--o{ ASSOCIACOES_TAG_EQUIPAMENTO : "possui historico de"
+    TAGS ||--o{ ASSOCIACOES_TAG_EQUIPAMENTO : "vinculada em"
+
+    ANDARES ||--o{ SETORES : contem
+    SETORES ||--o{ ZONAS : contem
+    ZONAS ||--o{ PORTAIS : "lado A"
+    ZONAS ||--o{ PORTAIS : "lado B"
+    PORTAIS ||--o{ ANTENAS : "instalada em (via zona)"
+    ZONAS ||--o{ ANTENAS : cobre
+    LEITORES ||--o{ ANTENAS : possui
+    PORTAIS ||--o{ LEITORES : "opcionalmente vinculado a"
+
+    ANTENAS ||--o{ LEITURAS_BRUTAS : gera
+    PORTAIS ||--o{ PASSAGENS : "ocorre em"
+    ANTENAS ||--o{ PASSAGENS : "origem"
+    ANTENAS ||--o{ PASSAGENS : "destino (opcional)"
+    LEITURAS_BRUTAS ||--o{ PASSAGENS : "evidencia origem"
+    LEITURAS_BRUTAS ||--o{ PASSAGENS : "evidencia destino (opcional)"
+
+    EQUIPAMENTOS ||--o{ HISTORICO_MOVIMENTACOES : historico
+    ZONAS ||--o{ HISTORICO_MOVIMENTACOES : "zona origem (opcional)"
+    ZONAS ||--o{ HISTORICO_MOVIMENTACOES : "zona destino"
+    PASSAGENS ||--o| HISTORICO_MOVIMENTACOES : "gera (opcional)"
+    ZONAS ||--o{ EQUIPAMENTOS : "ultima zona conhecida (opcional)"
+
+    PERFIS ||--o{ USUARIOS : define
+    USUARIOS ||--o{ AUDITORIAS : realiza
+
+    TIPOS_EQUIPAMENTO {
+        bigint id PK
+        string nome UK
+        string descricao
+    }
+
+    EQUIPAMENTOS {
+        bigint id PK
+        string nome
+        bigint tipo_id FK
+        string identificador_interno UK
+        string status
+        bigint ultima_zona_id FK
+        timestamptz ultima_deteccao_em
+        bigint ultima_passagem_id FK
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    TAGS {
+        bigint id PK
+        string epc UK
+        timestamptz criada_em
+    }
+
+    ASSOCIACOES_TAG_EQUIPAMENTO {
+        bigint id PK
+        bigint tag_id FK
+        bigint equipamento_id FK
+        timestamptz inicio
+        timestamptz fim "NULL = ativa; unico ativo por tag e por equipamento"
+    }
+
+    ANDARES {
+        bigint id PK
+        string nome UK
+    }
+
+    SETORES {
+        bigint id PK
+        bigint andar_id FK
+        string nome
+    }
+
+    ZONAS {
+        bigint id PK
+        bigint setor_id FK
+        string nome
+        text observacoes "ex.: presenca de zona morta"
+    }
+
+    PORTAIS {
+        bigint id PK
+        string nome
+        bigint zona_a_id FK
+        bigint zona_b_id FK
+        text localizacao_fisica
+    }
+
+    LEITORES {
+        bigint id PK
+        bigint portal_id FK "opcional"
+        string fabricante
+        string modelo
+        string identificador_serial UK
+        string endereco_rede
+        string status
+        timestamptz ultimo_heartbeat_em
+    }
+
+    ANTENAS {
+        bigint id PK
+        bigint leitor_id FK
+        int porta_numero
+        bigint zona_associada_id FK
+        string funcao "entrada, saida, indefinido"
+    }
+
+    LEITURAS_BRUTAS {
+        bigint id PK
+        uuid event_id UK "idempotencia"
+        bigint antena_id FK
+        string epc "sem FK direta p/ tags"
+        numeric rssi
+        timestamptz lido_em
+        timestamptz recebido_em
+    }
+
+    PASSAGENS {
+        bigint id PK
+        string epc
+        bigint portal_id FK
+        bigint antena_origem_id FK
+        bigint antena_destino_id FK "opcional, RF-011 e Should"
+        string direcao "entrada, saida, indeterminada"
+        bigint leitura_origem_id FK
+        bigint leitura_destino_id FK "opcional"
+        timestamptz detectada_em
+    }
+
+    HISTORICO_MOVIMENTACOES {
+        bigint id PK
+        bigint equipamento_id FK
+        bigint zona_origem_id FK "opcional"
+        bigint zona_destino_id FK
+        bigint passagem_id FK "opcional, NULL = correcao manual"
+        string origem_registro "passagem_automatica, correcao_manual"
+        timestamptz registrado_em
+    }
+
+    PERFIS {
+        bigint id PK
+        string nome UK
+    }
+
+    USUARIOS {
+        bigint id PK
+        string nome
+        string email UK
+        string senha_hash
+        bigint perfil_id FK
+        boolean ativo
+        timestamptz created_at
+    }
+
+    AUDITORIAS {
+        bigint id PK
+        bigint usuario_id FK "NULL = sistema"
+        string entidade
+        bigint entidade_id
+        string acao "create, update, delete, correcao_manual"
+        jsonb dados_antes
+        jsonb dados_depois
+        timestamptz registrado_em
+    }
