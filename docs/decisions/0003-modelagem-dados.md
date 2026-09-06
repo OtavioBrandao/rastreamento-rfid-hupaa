@@ -1,0 +1,40 @@
+# 0003 — Modelagem de dados e camada de persistência (PostgreSQL/Neon + SQLAlchemy/Alembic)
+
+## Status
+Proposto (aguardando revisão da dupla e merge do PR da ISS-002a)
+
+## Contexto
+O MVP precisa persistir ativos, tags, topologia física (andares/setores/zonas/portais/leitores/antenas), leituras brutas, passagens inferidas, histórico de movimentação, usuários e auditoria (RF-001 a RF-023; RNF-006, RNF-011, RNF-015). Até esta decisão, o repositório só tinha a camada de ingestão MQTT (`rfid_ingestion/`), sem nenhuma camada de persistência relacional.
+
+Decisão de banco (PostgreSQL) e de hospedagem (Neon, gerenciado) já haviam sido tomadas anteriormente, fora deste ADR — este documento cobre a modelagem em si e a ferramenta de migrations.
+
+## Decisão
+- **ORM/toolchain:** SQLAlchemy (models declarativos) + Alembic (migrations versionadas), ambos commitados no Git.
+- **Convenção de nomenclatura:** tabelas em português, plural, `snake_case` (ex.: `equipamentos`, `leituras_brutas`).
+- **Estratégia de ID:** `BIGINT` autoincremento (identity) como PK interna em todas as tabelas, exceto `leituras_brutas.event_id`, que é `UUID` gerado na aplicação (não no banco) — é a chave de idempotência do RF-008, e precisa ser gerada na borda (ingestão), potencialmente por múltiplos produtores concorrentes, sem depender de uma sequência central do Postgres.
+- **Timestamps:** sempre `TIMESTAMP(timezone=True)`; a aplicação grava em UTC.
+- **Última localização conhecida do ativo (RF-012):** modelada como colunas diretas em `equipamentos` (`ultima_zona_id`, `ultima_deteccao_em`, `ultima_passagem_id`), não como tabela separada — é uma relação 1:1, e uma tabela à parte só adicionaria um join sem ganho.
+- **Zona morta:** não é uma entidade — é um campo textual (`zonas.observacoes`) descrevendo uma característica de uma zona já existente, conforme o glossário do documento de arquitetura original.
+- **Histórico de vínculo tag↔equipamento:** tabela própria (`associacoes_tag_equipamento`) com `inicio`/`fim` (NULL = ativa), garantindo suporte a troca de tag sem perder rastreabilidade (RF-003).
+- **Regra "no máximo uma associação ativa por EPC":** garantida via índice único parcial no Postgres (`WHERE fim IS NULL`), não apenas validação de aplicação — constraint a nível de banco.
+- **Auditoria (RF-023/RNF-006):** tabela genérica (`auditorias`) com `entidade`/`entidade_id`/`acao`/`dados_antes`/`dados_depois` (JSONB), em vez de uma tabela de auditoria por entidade.
+
+O modelo completo (colunas, constraints, índices, cenários de validação) está documentado em `docs/database/modelagem-dados.md`, com diagrama ER em `docs/database/er-diagrama.mermaid`.
+
+## Validação realizada
+Antes deste PR, o schema foi criado e testado contra um PostgreSQL 16 real (ambiente local descartável, não o Neon de produção):
+- `alembic upgrade head` cria as 16 tabelas + constraints sem erro.
+- `alembic downgrade base` reverte de forma limpa.
+- Regra de associação ativa única por EPC testada manualmente: bloqueia segunda associação ativa; permite nova associação após encerrar a anterior (`fim = now()`).
+- CHECK constraint de portal (`zona_a_id <> zona_b_id`) testado manualmente: bloqueia portal com a mesma zona nos dois lados.
+
+## Consequências
+- Toda mudança de schema a partir de agora passa por `alembic revision --autogenerate` + revisão manual do arquivo gerado — nunca alterar tabela direto no banco.
+- Dependências novas em `requirements.txt`: `SQLAlchemy`, `alembic`, `psycopg2-binary`.
+- Nova variável de ambiente: `DATABASE_URL` (adicionada aos `.env.*.example`).
+
+## Pendências (dependem do HUPAA — não bloqueiam este PR)
+- Nomenclatura oficial de andares/setores do hospital (para alinhar `zonas.nome`).
+- Patamar formal de retenção de `leituras_brutas` (RNF-015).
+- RPO/RTO formal de backup (RNF-011) — depende de qual plano do Neon for contratado.
+- Confirmação de exigência de residência de dados em território nacional (pode impactar a região do Neon, hoje `AWS US East 2 — Ohio`).
