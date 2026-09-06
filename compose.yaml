@@ -2,7 +2,7 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2.1.2-alpine
     ports:
-      - "1883:1883"
+      - "${MQTT_BIND_ADDRESS:-0.0.0.0}:${MQTT_LOCAL_PORT:-1883}:1883"
     volumes:
       - ./mosquitto/mosquitto.dev.conf:/mosquitto/config/mosquitto.conf:ro
     restart: "no"
