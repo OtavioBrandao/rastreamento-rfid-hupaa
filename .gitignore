@@ -150,6 +150,13 @@ activemq-data/
 # Environments
 .env
 .envrc
+.env.*
+!.env.example
+!.env.*.example
+*.key
+*.p12
+*.pfx
+mosquitto/passwords
 .venv
 env/
 venv/

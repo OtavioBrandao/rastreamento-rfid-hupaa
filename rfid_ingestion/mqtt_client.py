@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
+from threading import Event
 
 import paho.mqtt.client as mqtt
 
 from .config import Settings
+from .connection import create_client
 from .parsing import build_event
 from .persistence import JsonlEventStore
 
@@ -21,23 +24,31 @@ class MqttReceiver:
     def __init__(self, settings: Settings, store: JsonlEventStore) -> None:
         self.settings = settings
         self.store = store
-        self.client = mqtt.Client(
-            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-            client_id=settings.mqtt_client_id,
-            protocol=mqtt.MQTTv311,
-            reconnect_on_failure=True,
-        )
+        self.ready = Event()
+        self.failed = Event()
+        self.failure: str | None = None
+        self.client = create_client(settings)
         self.client.on_connect = self._on_connect
         self.client.on_connect_fail = self._on_connect_fail
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
+        self.client.on_subscribe = self._on_subscribe
         self.client.reconnect_delay_set(min_delay=1, max_delay=30)
-        self.client.enable_logger(logging.getLogger("paho.mqtt"))
 
-        if settings.mqtt_username is not None:
-            self.client.username_pw_set(
-                settings.mqtt_username, settings.mqtt_password
-            )
+    def _fail(self, stage: str) -> None:
+        self.failure = stage
+        self.failed.set()
+        self.ready.clear()
+        LOGGER.error("Falha MQTT: %s", stage)
+        self.client.disconnect()
+
+    def _on_subscribe(self, _client, _userdata, _mid, reason_codes, _properties):
+        if not reason_codes or any(code.is_failure or code.value != 1 for code in reason_codes):
+            self._fail("assinatura recusada ou QoS 1 não concedido")
+            return
+        self.ready.set()
+        LOGGER.info("Assinatura ativa: tópico=%s qos=1 client_id=%s",
+                    self.settings.mqtt_topic, self.settings.mqtt_client_id)
 
     def _on_connect(
         self,
@@ -48,7 +59,7 @@ class MqttReceiver:
         _properties: mqtt.Properties | None,
     ) -> None:
         if reason_code.is_failure:
-            LOGGER.error("Conexão MQTT recusada: %s", reason_code)
+            self._fail("conexão recusada")
             return
 
         LOGGER.info(
@@ -60,17 +71,8 @@ class MqttReceiver:
             self.settings.mqtt_topic, qos=self.settings.mqtt_qos
         )
         if result != mqtt.MQTT_ERR_SUCCESS:
-            LOGGER.error(
-                "Falha ao assinar o tópico %s: código %s",
-                self.settings.mqtt_topic,
-                result,
-            )
+            self._fail("envio de assinatura")
             return
-        LOGGER.info(
-            "Assinatura ativa: tópico=%s qos=%d",
-            self.settings.mqtt_topic,
-            self.settings.mqtt_qos,
-        )
 
     def _on_connect_fail(
         self, _client: mqtt.Client, _userdata: Any
@@ -87,6 +89,7 @@ class MqttReceiver:
         reason_code: mqtt.ReasonCode,
         _properties: mqtt.Properties | None,
     ) -> None:
+        self.ready.clear()
         if reason_code.is_failure:
             LOGGER.warning(
                 "Conexão MQTT perdida (%s); aguardando reconexão", reason_code
@@ -122,27 +125,39 @@ class MqttReceiver:
                     event["parse_error"],
                 )
         except Exception:
-            LOGGER.exception(
-                "Falha ao persistir mensagem do tópico %s; receptor continuará ativo",
-                message.topic,
-            )
+            self._fail("persistência JSONL")
 
-    def run(self) -> None:
+    def start(self, timeout: float = 10) -> None:
+        self.client.connect(self.settings.mqtt_host, self.settings.mqtt_port,
+                            keepalive=self.settings.mqtt_keepalive)
+        self.client.loop_start()
+        deadline = time.monotonic() + timeout
+        while not self.ready.wait(0.05):
+            if self.failed.is_set() or time.monotonic() >= deadline:
+                self.stop()
+                raise RuntimeError("Conexão/assinatura MQTT não confirmada")
+
+    def stop(self) -> None:
+        self.client.disconnect()
+        self.client.loop_stop()
+
+    def run(self) -> int:
         LOGGER.info(
             "Iniciando receptor: broker=%s:%d tópico=%s arquivo=%s",
             self.settings.mqtt_host,
             self.settings.mqtt_port,
             self.settings.mqtt_topic,
             self.settings.events_file,
-        )
-        self.client.connect_async(
-            self.settings.mqtt_host,
-            self.settings.mqtt_port,
-            keepalive=60,
-        )
+        ) 
         try:
-            self.client.loop_forever(retry_first_connection=True)
+            self.start()
+            self.failed.wait()
+            return 1
+        except (OSError, ValueError, RuntimeError):
+            LOGGER.error("Falha de conexão/assinatura MQTT; verifique rede, TLS e permissões")
+            return 1
         except KeyboardInterrupt:
             LOGGER.info("Interrupção recebida; encerrando o receptor")
+            return 0
         finally:
-            self.client.disconnect()
+            self.stop()
