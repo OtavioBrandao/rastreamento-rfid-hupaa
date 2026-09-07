@@ -73,7 +73,7 @@ class PipelineIntegrationTests(unittest.TestCase):
         suffix = uuid.uuid4().hex[:8]
         env = dict(MQTT_MODE="local", MQTT_HOST="127.0.0.1", MQTT_PORT=os.getenv("TEST_MQTT_PORT", "1883"),
                    MQTT_TLS_ENABLED="false", MQTT_TOPIC=f"easy/test/hupaa/{suffix}/+/readings",
-                   MQTT_CLIENT_ID=f"ingestor-{suffix}")
+                   MQTT_CLIENT_ID=f"ingestor-{suffix}", EZ700_TIMESTAMP_FORMAT="epoch_ms")
         with TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
             receiver = MqttReceiver(Settings.from_env(env), JsonlEventStore(path))

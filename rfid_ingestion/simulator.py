@@ -53,14 +53,15 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _payload(args: argparse.Namespace) -> dict[str, Any]:
-    timestamp = args.timestamp or datetime.now(timezone.utc).isoformat()
     if args.format == "simulator":
-        return {"tag": args.epc, "port": args.antenna, "observed_at": timestamp,
+        return {"tag": args.epc, "port": args.antenna,
+                "observed_at": args.timestamp or datetime.now(timezone.utc).isoformat(),
                 "signal": {"value": -38.8, "unit": "dBm"}, "reader_id": args.reader_id}
     return {
         "epc": args.epc,
         "tid": SAMPLE_TID,
-        "timestamp": timestamp,
+        # Relógio do simulador; não comprova a semântica do firmware físico.
+        "timestamp": args.timestamp or str(time.time_ns() // 1_000_000),
         "rssi": -3880,
         "phase": 49,
         "channel": 906250,

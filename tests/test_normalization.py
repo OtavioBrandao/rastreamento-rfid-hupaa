@@ -43,6 +43,29 @@ class NormalizationTests(unittest.TestCase):
     def test_numeric_timestamp_requires_explicit_profile(self):
         self.assertIsNone(self.build(settings=Settings())["canonical_event"])
 
+    def test_ez700_simulator_clock_requires_explicit_epoch_ms(self):
+        with patch.dict("os.environ", {}, clear=True):
+            parser = _parser()
+        for options in ([], ["--format", "ez700"]):
+            args = parser.parse_args(options + ["--reader-id", self.reader])
+            with patch("rfid_ingestion.simulator.time.time_ns", return_value=1632759395291999999):
+                payload = _payload(args)
+            self.assertEqual(payload["timestamp"], "1632759395291")
+            self.assertIsNone(self.build(payload, Settings())["canonical_event"])
+            self.assertEqual(self.build(payload)["canonical_event"]["timestamp"],
+                             "2021-09-27T16:16:35.291000Z")
+
+    def test_simulator_timestamps_and_explicit_override(self):
+        with patch.dict("os.environ", {}, clear=True):
+            parser = _parser()
+        args = parser.parse_args(["--format", "simulator", "--reader-id", self.reader])
+        payload = _payload(args)
+        self.assertIsNotNone(self.build(payload, Settings(normalization_adapter="simulator"))["canonical_event"])
+        self.assertTrue(payload["observed_at"].endswith("+00:00"))
+        for source_format, key in (("ez700", "timestamp"), ("simulator", "observed_at")):
+            args = parser.parse_args(["--format", source_format, "--timestamp", "explicit-replay"])
+            self.assertEqual(_payload(args)[key], "explicit-replay")
+
     def test_simulator_and_equivalence(self):
         equivalent = {"tag": self.payload["epc"], "port": 1,
                       "signal": {"value": -3880, "unit": "unknown"},

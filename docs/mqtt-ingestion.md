@@ -2,7 +2,9 @@
 
 O mesmo ingestor, simulador, payload e tópicos funcionam nos dois modos.
 HiveMQ Cloud Serverless é o broker principal do MVP; Mosquitto é o ambiente
-local/offline de desenvolvimento e contingência manual. **Aceite externo pendente.**
+local/offline de desenvolvimento e contingência manual. A [ISS-001 encerrada](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/1#issuecomment-5553433705)
+registra validação com simuladores no HiveMQ, TLS/autenticação/ACL e duas redes.
+EZ700 físico e infraestrutura do hospital continuam pendentes de validação de campo.
 Veja a [decisão e comparação dos provedores](decisions/0002-managed-mqtt.md).
 
 ## Instalação (Ubuntu 24.04)
@@ -58,7 +60,8 @@ cp .env.local.example .env.local
 chmod 600 .env.local
 docker compose up -d
 set -a; source .env.local; set +a
-python -m rfid_ingestion
+# Somente para os timestamps gerados pelo nosso simulador ez700:
+EZ700_TIMESTAMP_FORMAT=epoch_ms python -m rfid_ingestion
 ```
 
 O Compose mantém o listener da PoC em 1883 em todas as interfaces. Para
@@ -84,7 +87,8 @@ usuário/senha também no modo local, caso a equipe provisione Mosquitto autenti
 4. Criar três usuários com senhas independentes e fortes, associando uma permissão
    a cada usuário. Não reutilizar a credencial do ingestor nos simuladores/leitores.
 5. Preencher os três arquivos privados descritos abaixo. Não exportar screenshots
-   que mostrem senhas. O login/MFA e a criação do cluster são ações manuais pendentes.
+   que mostrem senhas. Este roteiro serve para novo provisionamento; o cluster
+   da ISS-001 já foi configurado conforme o registro de validação vinculado acima.
 
 | Identidade lógica | Client ID de exemplo | Permissão | Filtro/tópico |
 |---|---|---|---|
@@ -112,7 +116,8 @@ Ingestor, em seu terminal:
 
 ```bash
 set -a; source .env.cloud; set +a
-python -m rfid_ingestion
+# Para os simuladores ez700 dos exemplos abaixo:
+EZ700_TIMESTAMP_FORMAT=epoch_ms python -m rfid_ingestion
 ```
 
 O mesmo comando com `.env.local` seleciona manualmente Mosquitto. Pare a sessão
@@ -181,8 +186,13 @@ e `--reader-id` constroem o tópico quando `MQTT_TOPIC`/`--topic` não for infor
 O leitor lógico deve coincidir com o tópico. Senhas nunca são argumentos de CLI.
 `--format simulator` publica o formato alternativo (`tag`, `port`, `signal`,
 `observed_at`). Configure o adapter correspondente no ingestor. O padrão
-`--format ez700` preserva a estrutura anterior, mas o relógio sintético agora
-publica RFC3339 UTC; `--timestamp` continua permitindo replay explícito.
+`--format ez700` (padrão) preserva a estrutura da fixture e gera timestamp
+numérico em string, em milissegundos desde Unix epoch, pelo relógio do próprio
+simulador. O formato alternativo `simulator` gera RFC3339 UTC. `--timestamp`
+preserva literalmente o valor informado para replay. O ingestor exige
+`EZ700_TIMESTAMP_FORMAT=epoch_ms` explícito para aceitar os números sintéticos;
+o default continua `rfc3339`. Isso não comprova a semântica do firmware EZ700,
+que permanece **PENDENTE DE VALIDAÇÃO FÍSICA**.
 PUBACK MQTT 3.1.1 isolado não prova entrega: conferir sempre o JSONL do ingestor.
 
 ## Testes e comando de aceite
@@ -200,7 +210,12 @@ Os três testes de handshake TLS usam OpenSSL (certificado efêmero em diretóri
 temporário); se o executável não estiver instalado, são explicitamente pulados.
 Eles validam o transporte TLS local, não o serviço HiveMQ.
 
-Após provisionar o HiveMQ, pare qualquer ingestor com o mesmo Client ID e execute:
+Para repetir a verificação com simuladores, configure explicitamente
+`EZ700_TIMESTAMP_FORMAT=epoch_ms` no arquivo de perfil do **ingestor** (`.env.cloud`
+no exemplo). `verification` lê esse arquivo e gera marcador numérico em
+milissegundos para seus publicadores EZ700 sintéticos; não infere formato do
+leitor nem altera Settings automaticamente. Pare qualquer ingestor com o mesmo
+Client ID e execute:
 
 ```bash
 python -m rfid_ingestion.verification \

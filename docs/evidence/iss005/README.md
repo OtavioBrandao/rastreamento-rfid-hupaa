@@ -5,6 +5,28 @@ partir de `origin/main` atualizada, base `f5c2ffc`. Implementação: `14306ca`
 (`feat: normaliza leituras RFID com adapters MQTT explícitos`). A documentação
 e este relatório compõem o commit seguinte, identificável pelo histórico da branch.
 
+**Nota da revisão pontual:** as seções abaixo preservam o registro dos commits
+`14306ca`/`0eacc6c`. Na correção posterior, o simulador `ez700` e o marcador de
+`verification` voltam a gerar strings numéricas de epoch em milissegundos;
+o ingestor exige `EZ700_TIMESTAMP_FORMAT=epoch_ms` explícito. Apenas o formato
+alternativo `simulator` gera RFC3339 por padrão. Os templates do ingestor agora
+expõem as quatro opções de normalização, mantendo os defaults de Settings.
+Isso não altera a fixture nem comprova a semântica do hardware. A verificação
+automatizada desta correção é do Codex; a validação oficial da ISS-005 será
+executada manualmente pela equipe.
+
+Verificação Codex da correção: suíte de 46 testes, com 43 aprovados e 3 skips
+TLS no Windows; 44 aprovados e 2 skips MQTT no Ubuntu/WSL. Os 46 testes distintos
+passaram na união das execuções. As integrações usaram Mosquitto temporário em
+loopback:18884; `verification` recebeu 4/4 mensagens com o perfil epoch_ms
+explícito. `bash -n` dos três templates e `git diff --check` aprovados. Nenhum
+novo teste cloud ou físico foi executado; o broker temporário foi removido.
+
+O [registro posterior da equipe na ISS-001](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/1#issuecomment-5553433705)
+confirma HiveMQ/TLS/ACL e duas redes com simuladores, e a issue está encerrada.
+As pendências físicas continuam separadas desses resultados; os testes locais
+registrados neste documento não são a evidência de aceite do HiveMQ.
+
 ## Arquitetura e contrato entregue
 
 O receptor Paho da ISS-001 mantém Settings, conexão, TLS/autenticação, QoS 1,
