@@ -4,9 +4,29 @@ from pathlib import Path
 import unittest
 
 from rfid_ingestion.config import Settings
+from rfid_ingestion.verification import read_environment
 
 
 class SettingsTests(unittest.TestCase):
+    def test_ingestor_templates_use_supported_normalization_defaults(self):
+        defaults = Settings()
+        for name in (".env.example", ".env.local.example", ".env.cloud.example"):
+            with self.subTest(template=name):
+                source = read_environment(name)
+                self.assertTrue({"MQTT_MAX_PAYLOAD_BYTES", "RFID_DEFAULT_ADAPTER",
+                                 "RFID_READER_ADAPTERS", "EZ700_TIMESTAMP_FORMAT"} <= source.keys())
+                if source["MQTT_MODE"] == "cloud":
+                    source.update(MQTT_USERNAME="synthetic-user", MQTT_PASSWORD="synthetic-password")
+                settings = Settings.from_env(source)
+                self.assertEqual(settings.max_payload_bytes, defaults.max_payload_bytes)
+                self.assertEqual(settings.normalization_adapter, defaults.normalization_adapter)
+                self.assertEqual(settings.reader_adapters, defaults.reader_adapters)
+                self.assertEqual(settings.ez700_timestamp_format, defaults.ez700_timestamp_format)
+                settings = Settings.from_env(source | {"EZ700_TIMESTAMP_FORMAT": "epoch_ms",
+                                                       "RFID_READER_ADAPTERS": '{"reader-02":"simulator"}'})
+                self.assertEqual(settings.reader_adapters, {"reader-02": "simulator"})
+                self.assertEqual(settings.ez700_timestamp_format, "epoch_ms")
+
     def test_defaults(self) -> None:
         settings = Settings.from_env({})
 

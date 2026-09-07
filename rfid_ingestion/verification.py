@@ -165,7 +165,8 @@ def main(argv=None) -> int:
         receiver.start()
         steps[stage] = "validado"
         started = time.monotonic()
-        marker = datetime.now(timezone.utc).isoformat()
+        # O publicador usa formato EZ700 sintético; ingestor exige epoch_ms explícito.
+        marker = str(time.time_ns() // 1_000_000)
         stage = "delivery_jsonl"
         if publishers:
             with ThreadPoolExecutor(max_workers=2) as pool:

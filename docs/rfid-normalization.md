@@ -93,7 +93,13 @@ Com adapter `simulator`, esse exemplo produz os mesmos `epc`, `antenna`, `rssi`,
 diferem, pois identificam origens diferentes. `signal` é preservado integralmente
 em metadata, inclusive campos extras. O CLI `--format simulator` gera por padrão
 `signal: {"value": -38.8, "unit": "dBm"}`; esse valor sintético já declara unidade.
-O simulador padrão continua com estrutura EZ700 e passou a gerar relógio RFC3339.
+O simulador padrão (`--format ez700`) mantém a estrutura da fixture histórica e
+gera `str(time.time_ns() // 1_000_000)`: timestamp numérico em string, em
+milissegundos desde Unix epoch do relógio do próprio simulador. O ingestor deve
+usar `EZ700_TIMESTAMP_FORMAT=epoch_ms` explicitamente para essa origem sintética.
+O formato alternativo `--format simulator` continua gerando RFC3339 UTC.
+`--timestamp` preserva literalmente o valor informado em ambos os formatos.
+Nenhum desses comportamentos comprova o timestamp do equipamento físico.
 
 ## Identidade com QoS 1
 
@@ -106,9 +112,10 @@ Tópico completo evita colisão lógica entre ambientes, sites e portais.
 É identidade de mensagem, não deduplicação semântica: whitespace, ordem dos
 campos, extras ou representação numérica diferentes alteram o ID. Duas leituras
 legítimas de bytes idênticos no mesmo tópico também terão ID igual. Futuramente
-sequência/ID confiável de origem pode demandar nova versão desse contrato;
-ISS-006 decide persistência idempotente e ISS-014 decide debounce. Alterar
-semântica de adapter exige versionar seu nome/contrato e revisar replay histórico.
+sequência/ID confiável de origem pode demandar nova versão desse contrato.
+Não há garantia exactly-once. ISS-006 decide persistência idempotente e ISS-014
+decide debounce. Alterar semântica de adapter exige versionar seu nome/contrato
+e revisar replay histórico.
 
 ## Rejeição e auditoria
 
@@ -150,7 +157,7 @@ Para inspecionar manualmente, iniciar Mosquitto e ingestor em um terminal:
 
 ```bash
 docker compose up -d
-RFID_READER_ADAPTERS='{"reader-02":"simulator"}' python -m rfid_ingestion
+EZ700_TIMESTAMP_FORMAT=epoch_ms RFID_READER_ADAPTERS='{"reader-02":"simulator"}' python -m rfid_ingestion
 ```
 
 Em outro terminal (perfil local e ambiente virtual, sem MQTT_TOPIC do ingestor):

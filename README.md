@@ -8,8 +8,12 @@ pela última passagem confirmada em uma zona, não por posicionamento contínuo.
 
 **HiveMQ Cloud Serverless é o broker principal escolhido para o MVP.** O código
 suporta modo externo com TLS e modo local com Mosquitto, usando o mesmo ingestor,
-simulador, contrato e JSONL. O cluster e as credenciais ainda não foram criados;
-**a Issue #1 permanece aberta e a validação externa está pendente**.
+simulador, contrato e JSONL. **A Issue #1 foi encerrada em 05/09/2026**, com cluster,
+credenciais, TLS e ACLs configurados. O [registro de validação da equipe](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/1#issuecomment-5553433705)
+relata testes com simuladores: 20/20 mensagens no Mosquitto local, 40/40 no HiveMQ
+e 200/200 via HiveMQ entre duas redes distintas. As evidências locais versionadas
+preservam o estado anterior dessa data; o aceite com EZ700 físico e a rede do
+hospital permanece **PENDENTE DE VALIDAÇÃO FÍSICA**.
 
 ```text
 leitor ou simulador → HiveMQ com TLS → ingestor Python/Paho → data/raw_events.jsonl
@@ -30,7 +34,8 @@ python -m pip install -r requirements.txt
 cp .env.local.example .env.local
 docker compose up -d
 set -a; source .env.local; set +a
-python -m rfid_ingestion
+# Perfil explícito para timestamps gerados pelo nosso simulador ez700.
+EZ700_TIMESTAMP_FORMAT=epoch_ms python -m rfid_ingestion
 ```
 
 Em outro terminal, com o ambiente virtual ativo e sem importar o perfil do ingestor:
@@ -50,8 +55,8 @@ bash tests/reader-connectivity/mqtt/smoke-test.sh
 ```
 
 O smoke executa um broker isolado em loopback:18884 e dois simuladores,
-incluindo mensagens inválidas. TLS, autenticação e ACL do HiveMQ exigem
-validação externa separada.
+incluindo mensagens inválidas. Ele verifica o pipeline local; o registro acima
+documenta separadamente TLS, autenticação e ACL no HiveMQ com simuladores.
 
 ## Contrato atual
 
