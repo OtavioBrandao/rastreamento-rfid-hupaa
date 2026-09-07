@@ -4,7 +4,7 @@ MVP experimental para rastreabilidade aproximada por zonas de equipamentos
 hospitalares do HUPAA/UFAL usando RFID UHF passivo. A posição será inferida
 pela última passagem confirmada em uma zona, não por posicionamento contínuo.
 
-## Fase atual — ISS-001
+## Fase atual — ISS-005 sobre a infraestrutura da ISS-001
 
 **HiveMQ Cloud Serverless é o broker principal escolhido para o MVP.** O código
 suporta modo externo com TLS e modo local com Mosquitto, usando o mesmo ingestor,
@@ -61,9 +61,12 @@ IDs são lógicos e independentes de fabricante; uma credencial e Client ID por 
 O ingestor pode assinar `easy/+/+/+/+/readings`; o perfil fornecido restringe
 a `easy/dev/hupaa/+/+/readings` para combinar com a ACL do MVP.
 
-Payload mantém `epc`, `rssi`, `antenna`, `timestamp` e campos extras existentes.
+Adapters explícitos convertem EZ700 e simulador em um evento canônico com
+`event_id`, `epc`, `rssi`, `antenna`, `reader_id`, `timestamp` UTC e `metadata`.
 QoS 1, retain falso. O ingestor preserva payload original, JSON, metadados e
-erros no JSONL; a validação acrescenta `validation_errors` sem descartar mensagens.
+erros no JSONL; acrescenta `canonical_event` (nulo quando rejeitado).
+O RSSI EZ700 mantém a unidade pendente e o valor bruto em metadata; timestamp
+numérico exige configuração explícita. Veja o [contrato e adapters](docs/rfid-normalization.md).
 JSON inválido e bytes não UTF-8 continuam preservados. Não há deduplicação,
 banco, inferência de passagem ou dashboard nesta issue.
 
@@ -74,6 +77,8 @@ JSONLs históricos continuam preservados; não se assinam os dois padrões em si
 ## Guias e evidências
 
 - [Operação local/cloud, cluster, ACL, simuladores e rotação](docs/mqtt-ingestion.md).
+- [Contrato canônico, adapters e validação sintética da ISS-005](docs/rfid-normalization.md).
+- [Relatório de entrega e testes da ISS-005](docs/evidence/iss005/README.md).
 - [Comparação HiveMQ × EMQX e estimativas de volume](docs/decisions/0002-managed-mqtt.md).
 - [Visita curta ao laboratório e comandos para duas redes](docs/experiments/iss001-managed-validation.md).
 - [Resultados reais e matriz de aceite da ISS-001](docs/evidence/iss001/README.md).
