@@ -165,7 +165,7 @@ def main(argv=None) -> int:
         receiver.start()
         steps[stage] = "validado"
         started = time.monotonic()
-        marker = str(time.time_ns())
+        marker = datetime.now(timezone.utc).isoformat()
         stage = "delivery_jsonl"
         if publishers:
             with ThreadPoolExecutor(max_workers=2) as pool:
