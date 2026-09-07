@@ -227,3 +227,6 @@ __marimo__/
 # Local MQTT ingestion runtime data
 data/*
 !data/.gitkeep
+
+# Artefatos locais de revisão
+.review/
