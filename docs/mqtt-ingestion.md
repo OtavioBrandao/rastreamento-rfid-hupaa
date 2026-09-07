@@ -33,6 +33,10 @@ O ingestor não contém lógica específica de firmware.
 | `MQTT_QOS` | 1, fixado pelo contrato |
 | `EVENTS_FILE` | `data/raw_events.jsonl` por padrão |
 | `LOG_LEVEL` | INFO por padrão; DEBUG, WARNING, ERROR e CRITICAL também aceitos |
+| `MQTT_MAX_PAYLOAD_BYTES` | Limite antes do parsing JSON; 65536 bytes por padrão |
+| `RFID_DEFAULT_ADAPTER` | `ez700` por padrão; `simulator` para o formato alternativo |
+| `RFID_READER_ADAPTERS` | Objeto JSON que mapeia reader_id para adapter; sobrepõe o padrão |
+| `EZ700_TIMESTAMP_FORMAT` | `rfc3339` por padrão; `epoch_ms` somente por seleção explícita |
 
 TLS valida certificado **e hostname**, mínimo TLS 1.2. Não há opção insegura.
 Erros de rede, TLS, autenticação ou assinatura inicial encerram com código não
@@ -133,13 +137,16 @@ Payload preservado, baseado na fixture existente:
 {"epc":"E2801190A502006016C32F62","tid":"E280119020004F62B6190300","timestamp":"1632759395291","rssi":-3880,"phase":49,"channel":906250,"antenna":1,"readerid":"reader-01"}
 ```
 
-Obrigatórios para validade do contrato: `epc` e `timestamp` como strings não vazias,
-`rssi` numérico, `antenna` inteiro positivo. Campos extras continuam aceitos.
-O timestamp é preservado sem inferir epoch ou unidade do firmware; os registros
-anteriores têm formatos distintos. A origem lógica vem do tópico, não de `readerid`.
+O exemplo numérico exige `EZ700_TIMESTAMP_FORMAT=epoch_ms` para normalização
+sintética; a semântica física ainda precisa de confirmação. O padrão aceita
+RFC3339 com fuso explícito. A origem lógica vem do tópico; identidade divergente
+no payload rejeita o evento canônico. Campos extras ficam em metadata, RSSI EZ700
+permanece bruto e o campo canônico em dBm fica nulo. Contrato completo, validações,
+seleção explícita e limites em [normalização RFID](rfid-normalization.md).
 
 JSONL mantém `received_at_utc`, `topic`, `qos`, `retain`, `payload_original`,
-`payload_encoding`, `payload_json`, `parse_error`; acrescenta `validation_errors`.
+`payload_encoding`, `payload_json`, `parse_error`; acrescenta `validation_errors`,
+`canonical_event`, `reader_id` e `adapter`.
 Mensagens incompletas também são gravadas, com erros de validação, sem derrubar
 o ingestor. Bytes inválidos continuam em base64. QoS 1 permite duplicação; não
 há deduplicação nem garantia de exatamente uma vez, nem fila durável offline.
@@ -172,6 +179,10 @@ e `--interval` controlam quantidade/frequência; `--invalid json` e
 `--invalid missing` reproduzem erros. `--environment`, `--site-id`, `--portal-id`
 e `--reader-id` constroem o tópico quando `MQTT_TOPIC`/`--topic` não for informado.
 O leitor lógico deve coincidir com o tópico. Senhas nunca são argumentos de CLI.
+`--format simulator` publica o formato alternativo (`tag`, `port`, `signal`,
+`observed_at`). Configure o adapter correspondente no ingestor. O padrão
+`--format ez700` preserva a estrutura anterior, mas o relógio sintético agora
+publica RFC3339 UTC; `--timestamp` continua permitindo replay explícito.
 PUBACK MQTT 3.1.1 isolado não prova entrega: conferir sempre o JSONL do ingestor.
 
 ## Testes e comando de aceite
