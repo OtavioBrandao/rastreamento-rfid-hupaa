@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import os
 import ipaddress
 import re
+import json
 from pathlib import Path
 from typing import Mapping
 
@@ -17,6 +18,7 @@ DEFAULT_MQTT_CLIENT_ID = "rfid-mvp-receiver"
 DEFAULT_MQTT_QOS = 1
 DEFAULT_EVENTS_FILE = Path("data/raw_events.jsonl")
 DEFAULT_LOG_LEVEL = "INFO"
+DEFAULT_MAX_PAYLOAD_BYTES = 65536
 VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
 
@@ -55,6 +57,10 @@ class Settings:
     mqtt_tls_enabled: bool = False
     mqtt_ca_cert: str | None = field(default=None, repr=False)
     mqtt_keepalive: int = 60
+    max_payload_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES
+    normalization_adapter: str = "ez700"
+    reader_adapters: dict[str, str] = field(default_factory=dict)
+    ez700_timestamp_format: str = "rfc3339"
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "Settings":
@@ -88,11 +94,26 @@ class Settings:
             mqtt_tls_enabled=tls == "true",
             mqtt_ca_cert=_optional_value(source.get("MQTT_CA_CERT")),
             mqtt_keepalive=_integer_value(source, "MQTT_KEEPALIVE", 60),
+            max_payload_bytes=_integer_value(source, "MQTT_MAX_PAYLOAD_BYTES", DEFAULT_MAX_PAYLOAD_BYTES),
+            normalization_adapter=source.get("RFID_DEFAULT_ADAPTER", "ez700"),
+            reader_adapters=json.loads(source.get("RFID_READER_ADAPTERS", "{}")),
+            ez700_timestamp_format=source.get("EZ700_TIMESTAMP_FORMAT", "rfc3339"),
         )
         settings.validate()
         return settings
 
     def validate(self) -> None:
+        if type(self.max_payload_bytes) is not int or self.max_payload_bytes < 1:
+            raise ValueError("MQTT_MAX_PAYLOAD_BYTES deve ser inteiro positivo")
+        if self.ez700_timestamp_format not in ("rfc3339", "epoch_ms"):
+            raise ValueError("EZ700_TIMESTAMP_FORMAT deve ser rfc3339 ou epoch_ms")
+        if not isinstance(self.normalization_adapter, str) or not self.normalization_adapter:
+            raise ValueError("RFID_DEFAULT_ADAPTER deve ser texto não vazio")
+        if not isinstance(self.reader_adapters, dict) or any(
+            not re.fullmatch(r"[A-Za-z0-9_-]+", k) or not isinstance(v, str) or not v
+            for k, v in self.reader_adapters.items()
+        ):
+            raise ValueError("RFID_READER_ADAPTERS deve mapear reader_id para nome de adapter")
         if self.mqtt_mode not in ("local", "cloud"):
             raise ValueError("MQTT_MODE deve ser local ou cloud")
         if not re.fullmatch(r"[A-Za-z0-9.:-]+", self.mqtt_host):

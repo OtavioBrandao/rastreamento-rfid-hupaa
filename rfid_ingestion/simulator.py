@@ -1,4 +1,4 @@
-"""Simulador de publicações no formato documentado do Identix EZ700."""
+"""Publicador sintético nos formatos EZ700 e simulator, com transporte único."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import math
+from datetime import datetime, timezone
 from threading import Event
 import time
 from typing import Any, Sequence
@@ -38,6 +39,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--site-id", default="hupaa")
     parser.add_argument("--portal-id", default="portal-01")
     parser.add_argument("--timestamp", help="Timestamp fixo para reprodução determinística")
+    parser.add_argument("--format", choices=("ez700", "simulator"), default="ez700")
     parser.add_argument("--invalid", choices=("json", "missing"))
     parser.add_argument("--antenna", type=int, default=1)
     parser.add_argument("--count", type=int, default=1)
@@ -51,10 +53,14 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _payload(args: argparse.Namespace) -> dict[str, Any]:
+    timestamp = args.timestamp or datetime.now(timezone.utc).isoformat()
+    if args.format == "simulator":
+        return {"tag": args.epc, "port": args.antenna, "observed_at": timestamp,
+                "signal": {"value": -38.8, "unit": "dBm"}, "reader_id": args.reader_id}
     return {
         "epc": args.epc,
         "tid": SAMPLE_TID,
-        "timestamp": args.timestamp or str(int(time.time() * 1000)),
+        "timestamp": timestamp,
         "rssi": -3880,
         "phase": 49,
         "channel": 906250,
@@ -141,7 +147,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for index in range(args.count):
             payload = _payload(args)
             if args.invalid == "missing":
-                del payload["epc"]
+                del payload["tag" if args.format == "simulator" else "epc"]
             serialized = "{" if args.invalid == "json" else json.dumps(payload, separators=(",", ":"))
             publish_result = client.publish(topic, serialized, qos=1, retain=False)
             if publish_result.rc != mqtt.MQTT_ERR_SUCCESS:

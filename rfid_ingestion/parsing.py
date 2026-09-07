@@ -5,11 +5,36 @@ from __future__ import annotations
 import base64
 from datetime import datetime, timezone
 import json
+import math
 from typing import Any
+
+from .config import Settings
+from .normalization import normalize
+from .topics import validate_topic
+
+
+MAX_JSON_DEPTH = 64
+
+
+def _check_json_depth(value):
+    pending = [(value, 0)]
+    while pending:
+        item, depth = pending.pop()
+        if depth > MAX_JSON_DEPTH:
+            raise ValueError("profundidade JSON não suportada")
+        children = item.values() if isinstance(item, dict) else item if isinstance(item, list) else ()
+        pending.extend((child, depth + 1) for child in children)
 
 
 def _reject_non_standard_number(value: str) -> None:
     raise ValueError(f"número JSON não padronizado: {value}")
+
+
+def _finite_float(value):
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError("número JSON fora do intervalo finito")
+    return result
 
 
 def _utc_timestamp(value: datetime) -> str:
@@ -26,9 +51,11 @@ def build_event(
     retain: bool,
     payload: bytes,
     received_at: datetime | None = None,
+    settings: Settings | None = None,
 ) -> dict[str, Any]:
-    """Cria um evento sem impor um esquema rígido ao JSON do leitor."""
+    """Preserva auditoria e acrescenta evento canônico somente após validação."""
 
+    settings = settings or Settings()
     event: dict[str, Any] = {
         "received_at_utc": _utc_timestamp(
             received_at or datetime.now(timezone.utc)
@@ -41,7 +68,21 @@ def build_event(
         "payload_json": None,
         "parse_error": None,
         "validation_errors": [],
+        "canonical_event": None,
+        "reader_id": None,
+        "adapter": settings.normalization_adapter,
     }
+    # Contexto conhecido mesmo quando os bytes não podem ser interpretados.
+    try:
+        validate_topic(topic)
+        event["reader_id"] = topic.split("/")[4]
+        event["adapter"] = settings.reader_adapters.get(event["reader_id"], settings.normalization_adapter)
+    except ValueError:
+        pass
+
+    oversized = len(payload) > settings.max_payload_bytes
+    if oversized:
+        event["validation_errors"] = ["payload excede MQTT_MAX_PAYLOAD_BYTES"]
 
     try:
         text_payload = payload.decode("utf-8")
@@ -54,34 +95,24 @@ def build_event(
         return event
 
     event["payload_original"] = text_payload
+    if oversized:
+        return event  # Evidência preservada; não materializar JSON acima do limite.
     try:
         event["payload_json"] = json.loads(
-            text_payload, parse_constant=_reject_non_standard_number
+            text_payload, parse_constant=_reject_non_standard_number, parse_float=_finite_float
         )
-    except (json.JSONDecodeError, ValueError) as error:
+        _check_json_depth(event["payload_json"])
+    except (json.JSONDecodeError, ValueError, RecursionError) as error:
+        event["payload_json"] = None
         if isinstance(error, json.JSONDecodeError):
             event["parse_error"] = (
                 f"JSON inválido: {error.msg} "
                 f"(linha {error.lineno}, coluna {error.colno})"
             )
         else:
-            event["parse_error"] = f"JSON inválido: {error}"
+            event["parse_error"] = "JSON inválido: número ou profundidade não suportados"
 
     if event["parse_error"] is None:
-        event["validation_errors"] = validate_payload(event["payload_json"])
+        (event["canonical_event"], event["validation_errors"],
+         event["reader_id"], event["adapter"]) = normalize(event["payload_json"], topic, payload, settings)
     return event
-
-
-def validate_payload(payload: Any) -> list[str]:
-    """Valida o contrato mínimo; preserva eventos inválidos e campos extras."""
-    if not isinstance(payload, dict):
-        return ["payload deve ser objeto JSON"]
-    errors = []
-    for key in ("epc", "timestamp"):
-        if not isinstance(payload.get(key), str) or not payload[key].strip():
-            errors.append(f"{key} deve ser texto não vazio")
-    if type(payload.get("antenna")) is not int or payload["antenna"] < 1:
-        errors.append("antenna deve ser inteiro positivo")
-    if type(payload.get("rssi")) not in (int, float):
-        errors.append("rssi deve ser numérico")
-    return errors
