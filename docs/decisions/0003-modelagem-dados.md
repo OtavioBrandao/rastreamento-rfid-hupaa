@@ -11,7 +11,7 @@ Decisão de banco (PostgreSQL) e de hospedagem (Neon, gerenciado) já haviam sid
 ## Decisão
 - **ORM/toolchain:** SQLAlchemy (models declarativos) + Alembic (migrations versionadas), ambos commitados no Git.
 - **Convenção de nomenclatura:** tabelas em português, plural, `snake_case` (ex.: `equipamentos`, `leituras_brutas`).
-- **Estratégia de ID:** `BIGINT` autoincremento (identity) como PK interna em todas as tabelas, exceto `leituras_brutas.event_id`, que é `UUID` gerado na aplicação (não no banco) — é a chave de idempotência do RF-008, e precisa ser gerada na borda (ingestão), potencialmente por múltiplos produtores concorrentes, sem depender de uma sequência central do Postgres.
+- **Estratégia de ID:** `BIGSERIAL` (autoincremento padrão do SQLAlchemy) como PK interna, exceto `leituras_brutas.event_id`, que é `UUID` sem default automático — deve ser gerado de forma determinística pela camada de ingestão.
 - **Timestamps:** sempre `TIMESTAMP(timezone=True)`; a aplicação grava em UTC.
 - **Última localização conhecida do ativo (RF-012):** modelada como colunas diretas em `equipamentos` (`ultima_zona_id`, `ultima_deteccao_em`, `ultima_passagem_id`), não como tabela separada — é uma relação 1:1, e uma tabela à parte só adicionaria um join sem ganho.
 - **Zona morta:** não é uma entidade — é um campo textual (`zonas.observacoes`) descrevendo uma característica de uma zona já existente, conforme o glossário do documento de arquitetura original.
@@ -27,6 +27,15 @@ Antes deste PR, o schema foi criado e testado contra um PostgreSQL 16 real (ambi
 - `alembic downgrade base` reverte de forma limpa.
 - Regra de associação ativa única por EPC testada manualmente: bloqueia segunda associação ativa; permite nova associação após encerrar a anterior (`fim = now()`).
 - CHECK constraint de portal (`zona_a_id <> zona_b_id`) testado manualmente: bloqueia portal com a mesma zona nos dois lados.
+
+## Revisão de código (Otávio) — alterações aplicadas
+- Correção da idempotência do `event_id`: removido o default `uuid.uuid4` gerado no model; a responsabilidade de gerar um `event_id` determinístico a partir do conteúdo da leitura foi movida para a camada de ingestão (ISS-006).
+- Adicionado `CHECK (fim >= inicio)` em `associacoes_tag_equipamento`, com documentação da consulta temporal correta (`inicio <= :t AND (fim IS NULL OR fim > :t)`) e decisão consciente de não impedir sobreposição de períodos via banco no MVP.
+- Alinhamento da documentação quanto a `BIGSERIAL` vs. `IDENTITY` como estratégia de PK.
+- Validação de coerência de topologia antena/portal (`zona_associada_id` pertencer ao portal do leitor) adiada para a ISS-013.
+- Limitação aceita do `updated_at` via ORM: não é atualizado por UPDATEs feitos fora do SQLAlchemy; solução futura seria trigger de banco, não implementada agora.
+- Correção das referências de arquivo no cabeçalho de `db/models.py` (caminhos corretos em `docs/database/`).
+- Strings livres em `status`/`funcao`/`perfis` mantidas — Otávio concordou que é aceitável por ora.
 
 ## Consequências
 - Toda mudança de schema a partir de agora passa por `alembic revision --autogenerate` + revisão manual do arquivo gerado — nunca alterar tabela direto no banco.

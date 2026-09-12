@@ -1,16 +1,16 @@
 """
 Models SQLAlchemy do MVP de rastreamento RFID (EASY/HUPAA).
 
-Espelha 1:1 o documento "Modelagem_Dados_MVP_RFID.md" e o diagrama
-"ER_Diagrama_MVP_RFID.mermaid". Qualquer mudança aqui deve ser refletida
-nos dois artefatos (e vice-versa), para não divergirem.
+Espelha 1:1 o documento "docs/database/modelagem-dados.md" e o diagrama
+"docs/database/er-diagrama.mermaid". Qualquer mudança aqui deve ser
+refletida nos dois artefatos (e vice-versa), para não divergirem.
 
 Convenções:
 - Tabelas em português, plural, snake_case.
-- PK interna: BigInteger autoincremento (identity).
+- PK interna: BigInteger autoincremento (BIGSERIAL, default do SQLAlchemy
+  para `BigInteger, primary_key=True` no dialeto Postgres).
 - Timestamps: sempre TIMESTAMP(timezone=True); a aplicação grava em UTC.
 """
-import uuid
 
 from sqlalchemy import (
     BigInteger,
@@ -59,6 +59,12 @@ class Equipamento(Base):
     ultima_passagem_id = Column(BigInteger, ForeignKey("passagens.id"), nullable=True)
 
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    # onupdate=func.now() só dispara em UPDATEs feitos VIA SQLAlchemy.
+    # Um UPDATE executado direto em SQL (fora do ORM) não atualiza este
+    # campo automaticamente. Aceitável para o MVP (revisão de código,
+    # Otávio) — se isso virar problema real, a correção é um trigger de
+    # banco (`BEFORE UPDATE ... SET updated_at = now()`), não implementado
+    # agora.
     updated_at = Column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
@@ -91,6 +97,33 @@ class AssociacaoTagEquipamento(Base):
     `fim IS NULL` = associação ativa. As duas constraints de índice único
     parcial abaixo garantem, a nível de banco, que existe no máximo UMA
     associação ativa por tag e por equipamento (critério de aceitação).
+
+    Semântica temporal (revisão de código, Otávio): o intervalo de cada
+    associação é **meio-aberto** `[inicio, fim)` — ou seja, uma leitura
+    com `lido_em == fim` já pertence à associação SEGUINTE, não a essa.
+    Para descobrir a qual equipamento um EPC pertencia no momento T de
+    uma leitura (não necessariamente o vínculo ativo HOJE):
+
+        SELECT equipamento_id FROM associacoes_tag_equipamento
+        WHERE tag_id = :tag_id
+          AND inicio <= :t
+          AND (fim IS NULL OR fim > :t)
+
+    Isso é o que garante que uma leitura antiga continue relacionada ao
+    equipamento correto mesmo depois de uma troca de tag (ex.: Tag A na
+    cadeira em janeiro, na maca em março — uma leitura de janeiro deve
+    seguir apontando para a cadeira).
+
+    Constraint de banco vs. responsabilidade de aplicação: o CHECK abaixo
+    garante que `fim >= inicio` dentro de UMA linha. Impedir períodos
+    SOBREPOSTOS entre linhas diferentes da mesma tag (ex.: duas
+    associações "ativas ao mesmo tempo" por erro de aplicação) NÃO é
+    garantido pelo banco nesta migration — fica sob responsabilidade da
+    aplicação, que deve sempre fechar (`fim = now()`) a associação
+    anterior antes de abrir uma nova, dentro da mesma transação. Se isso
+    se mostrar insuficiente, a evolução natural é uma constraint
+    `EXCLUDE` sobre `tstzrange(inicio, fim)` com a extensão `btree_gist`
+    — não implementada agora por ser complexidade desnecessária pro MVP.
     """
 
     __tablename__ = "associacoes_tag_equipamento"
@@ -116,6 +149,9 @@ class AssociacaoTagEquipamento(Base):
             "equipamento_id",
             unique=True,
             postgresql_where=(fim.is_(None)),
+        ),
+        CheckConstraint(
+            "fim IS NULL OR fim >= inicio", name="ck_associacao_periodo_valido"
         ),
     )
 
@@ -192,6 +228,16 @@ class Leitor(Base):
 
 
 class Antena(Base):
+    """
+    Coerência de topologia (revisão de código, Otávio): `zona_associada_id`
+    deveria, por regra de negócio, ser sempre uma das duas zonas do portal
+    do leitor a que esta antena pertence (`leitor.portal.zona_a_id` ou
+    `zona_b_id`). Essa regra NÃO é validada pelo banco nesta migration —
+    fica para a implementação da ISS-013 (associar antena a
+    lado/zona/função do portal), como validação de aplicação no
+    momento do cadastro.
+    """
+
     __tablename__ = "antenas"
 
     id = Column(BigInteger, primary_key=True)
@@ -216,13 +262,30 @@ class LeituraBruta(Base):
     RF-007 / RF-008. Sem FK direta para `tags`: uma leitura de EPC ainda
     não cadastrado não pode ser perdida, só fica "órfã" do lado do ativo
     até alguém cadastrar aquele EPC.
+
+    Semântica de idempotência do `event_id` (revisão de código, Otávio):
+    o `UNIQUE(event_id)` sozinho só garante que dois valores IGUAIS não
+    duplicam — não garante idempotência de retries. `event_id` NÃO tem
+    default gerado no lado do Python (um `uuid.uuid4()` por instância
+    geraria um valor novo a cada tentativa, inclusive em reenvio da MESMA
+    mensagem MQTT, o que anularia a proteção).
+
+    Contrato que a camada de ingestão (ISS-005/ISS-006) deve cumprir:
+    `event_id` precisa ser **determinístico**, derivado do conteúdo da
+    própria leitura bruta (ex.: `uuid.uuid5(NAMESPACE, f"{antena_id}|{epc}|
+    {lido_em.isoformat()}|{rssi}")`, ou o identificador nativo de mensagem
+    do leitor, se houver um). Assim, reenviar a mesma leitura MQTT produz
+    o MESMO `event_id`, e o `UNIQUE` passa a rejeitar o duplicado de
+    verdade. Essa derivação concreta é responsabilidade de implementação
+    da ISS-006, não desta migration.
     """
 
     __tablename__ = "leituras_brutas"
 
     id = Column(BigInteger, primary_key=True)
-    # Gerado no app/ingestão (não no banco) — chave de idempotência.
-    event_id = Column(UUID(as_uuid=True), nullable=False, unique=True, default=uuid.uuid4)
+    # Gerado de forma determinística pela camada de ingestão (ver
+    # docstring acima) — NUNCA por default aleatório aqui no model.
+    event_id = Column(UUID(as_uuid=True), nullable=False, unique=True)
     antena_id = Column(BigInteger, ForeignKey("antenas.id"), nullable=False)
     epc = Column(String, nullable=False)
     rssi = Column(Numeric, nullable=False)
