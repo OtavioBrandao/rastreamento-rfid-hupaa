@@ -1,6 +1,6 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import create_engine
 from sqlalchemy import pool
 
 from alembic import context
@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from db.models import Base  # noqa: E402
+from db.url import get_database_url  # noqa: E402
 
 # Carrega o .env da raiz do projeto (nunca commitado — está no .gitignore).
 # Isso permite trocar de ambiente (local/cloud, Neon dev/prod) só trocando
@@ -20,13 +21,6 @@ load_dotenv()
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
-
-# Se DATABASE_URL estiver definida no ambiente/.env, ela tem prioridade
-# sobre o que está escrito em alembic.ini (que fica só com um placeholder,
-# seguro para commitar).
-database_url = os.environ.get("DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -56,7 +50,11 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    # A URL vai DIRETO pro context.configure — nunca passa por
+    # config.set_main_option/get_main_option (ConfigParser interpretaria
+    # "%" de uma senha percent-encoded como interpolação e lançaria
+    # ValueError, vazando a URL completa na mensagem de erro).
+    url = get_database_url(fallback=config.get_main_option("sqlalchemy.url"))
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -75,11 +73,10 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    # Mesmo motivo do offline: URL direto pro create_engine, nunca
+    # armazenada no ConfigParser do Alembic.
+    url = get_database_url(fallback=config.get_main_option("sqlalchemy.url"))
+    connectable = create_engine(url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
         context.configure(

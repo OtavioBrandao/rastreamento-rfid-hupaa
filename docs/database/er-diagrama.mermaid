@@ -58,7 +58,7 @@ erDiagram
         bigint tag_id FK
         bigint equipamento_id FK
         timestamptz inicio
-        timestamptz fim "NULL = ativa; unico ativo por tag e por equipamento"
+        timestamptz fim "NULL = ativa; unico ativo; CHECK fim >= inicio"
     }
 
     ANDARES {
@@ -108,7 +108,7 @@ erDiagram
 
     LEITURAS_BRUTAS {
         bigint id PK
-        uuid event_id UK "idempotencia"
+        uuid event_id UK "gerado deterministicamente na ingestao, sem default"
         bigint antena_id FK
         string epc "sem FK direta p/ tags"
         numeric rssi
