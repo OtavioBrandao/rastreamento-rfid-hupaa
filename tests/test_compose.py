@@ -69,6 +69,7 @@ class ComposeConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(services["ingestor-local"]["environment"]["MQTT_HOST"], "mosquitto")
         self.assertIn("@postgres:5432/", services["migrate-local"]["environment"]["DATABASE_URL"])
+        self.assertEqual(services["ingestor-local"]["user"], "1000:1000")
         self.assertIn("postgres_data", config["volumes"])
         self.assertIn("rfid-dev", config["networks"])
 

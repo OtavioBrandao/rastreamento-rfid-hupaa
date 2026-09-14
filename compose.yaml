@@ -5,6 +5,7 @@ x-python-service: &python-service
   image: rfid-hospital-mvp:dev
   networks:
     - rfid-dev
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   restart: "no"
 
 services:
