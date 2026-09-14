@@ -13,6 +13,7 @@ Convenções:
 """
 
 from sqlalchemy import (
+    TIMESTAMP,
     BigInteger,
     Boolean,
     CheckConstraint,
@@ -23,7 +24,6 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    TIMESTAMP,
     UniqueConstraint,
     func,
 )

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
 from threading import Event
+from typing import Any
 
 import paho.mqtt.client as mqtt
 
@@ -13,7 +13,6 @@ from .config import Settings
 from .connection import create_client
 from .parsing import build_event
 from .persistence import JsonlEventStore
-
 
 LOGGER = logging.getLogger(__name__)
 

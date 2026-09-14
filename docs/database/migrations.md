@@ -59,7 +59,11 @@ A ISS-002b registra um incidente onde a migration antiga foi aplicada por engano
 
 ## 4. Verificação no CI
 
-Workflow em `.github/workflows/migrations.yml` — roda em todo PR/push que toque `db/`, `alembic/` ou `alembic.ini`. Sobe um Postgres descartável (serviço do GitHub Actions, não é o Neon), e:
+O workflow reutilizável `.github/workflows/migrations.yml` é a única fonte da
+validação de migrations. Ele usa `workflow_call` e é invocado uma vez pelo job
+`Migrations` de `.github/workflows/ci.yml` em cada PR para `main` e push em `main`.
+Não possui gatilho independente. O job sobe um Postgres descartável no GitHub
+Actions, nunca o Neon, e:
 1. Aplica todas as migrations em banco vazio (`upgrade head`)
 2. Roda `upgrade head` de novo, confirmando que não duplica/corrompe
 3. Reverte tudo (`downgrade base`)
