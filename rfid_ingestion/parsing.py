@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timezone
 import json
 import math
+from datetime import datetime, timezone
 from typing import Any
 
 from .config import Settings

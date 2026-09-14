@@ -1,7 +1,9 @@
 """Criação única da conexão para ingestor, simulador e diagnósticos."""
 
 import ssl
+
 import paho.mqtt.client as mqtt
+
 from .config import Settings
 
 

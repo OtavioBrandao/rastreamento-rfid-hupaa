@@ -5,20 +5,19 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
 import math
+import os
+import time
 from datetime import datetime, timezone
 from threading import Event
-import time
 from typing import Any, Sequence
 
 import paho.mqtt.client as mqtt
 
 from .config import Settings
 from .connection import create_client
-from .topics import reading_topic, validate_topic
 from .logging_config import configure_logging
-
+from .topics import reading_topic, validate_topic
 
 LOGGER = logging.getLogger(__name__)
 SAMPLE_EPC = "E2801190A502006016C32F62"

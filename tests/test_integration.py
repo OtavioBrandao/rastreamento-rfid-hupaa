@@ -1,13 +1,13 @@
 """Integração opt-in com Mosquitto real: RUN_MQTT_INTEGRATION=1."""
 
-from concurrent.futures import ThreadPoolExecutor
 import json
 import os
-from pathlib import Path
-from tempfile import TemporaryDirectory
 import time
 import unittest
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from rfid_ingestion.config import Settings
 from rfid_ingestion.connection import create_client
