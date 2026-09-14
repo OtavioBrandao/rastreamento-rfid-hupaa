@@ -1,0 +1,84 @@
+name: Migrations
+
+on:
+  pull_request:
+    paths:
+      - "db/**"
+      - "alembic/**"
+      - "alembic.ini"
+      - "requirements.txt"
+      - "requirements-dev.txt"
+      - ".github/workflows/migrations.yml"
+  push:
+    branches: [main]
+    paths:
+      - "db/**"
+      - "alembic/**"
+      - "alembic.ini"
+      - "requirements.txt"
+      - "requirements-dev.txt"
+
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: ci_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_user -d ci_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://ci_user:ci_password@localhost:5432/ci_db
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Aplicar migrations em banco vazio (upgrade head)
+        run: python -m alembic upgrade head
+
+      - name: Confirmar que reaplicar não duplica nem corrompe
+        run: python -m alembic upgrade head
+
+      - name: Reverter tudo (downgrade base)
+        run: python -m alembic downgrade base
+
+      - name: Reaplicar (confirma que o rollback é reversível)
+        run: python -m alembic upgrade head
+
+      - name: Conferir schema resultante (17 tabelas: 16 do domínio + alembic_version)
+        run: |
+          python -c "
+          import os
+          import psycopg2
+
+          url = os.environ['DATABASE_URL'].replace('postgresql+psycopg2://', 'postgresql://')
+          conn = psycopg2.connect(url)
+          cur = conn.cursor()
+          cur.execute(\"SELECT count(*) FROM pg_tables WHERE schemaname = 'public';\")
+          count = cur.fetchone()[0]
+          print(f'Tabelas encontradas: {count}')
+          assert count == 17, f'Esperava 17 tabelas, encontrou {count} — schema não bateu com o esperado'
+          "
+
+      - name: Rodar suíte de testes
+        run: python -m pytest tests/ -v
