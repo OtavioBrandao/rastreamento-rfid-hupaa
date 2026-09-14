@@ -47,8 +47,9 @@ make smoke
 ```
 
 O modo gerenciado usa `.env.cloud` e `make managed-up`; não inicia Postgres nem
-Mosquitto locais. Credenciais reais permanecem fora do Git. A validação no Neon
-aguarda ISS-002b, e a persistência de eventos em banco pertence à ISS-006.
+Mosquitto locais. Ele consome as convenções `DATABASE_URL`/`APP_DATABASE_URL` da
+ISS-002b e o Alembic da ISS-002c. Credenciais reais permanecem fora do Git; a
+persistência de eventos em banco pertence à ISS-006.
 
 Veja o [guia completo da ISS-003](docs/infrastructure/iss-003-docker-compose.md)
 para arquitetura, variáveis, comandos equivalentes sem Make, evidências, reset,

@@ -30,8 +30,8 @@ O objetivo é oferecer comandos repetíveis para:
 | Issue | Relação com a ISS-003 |
 |---|---|
 | ISS-001 | Forneceu o contrato MQTT local/cloud que o Compose consome. |
-| ISS-002b | Provisionará o Neon e as credenciais reais; continua pendente. |
-| ISS-002c | Finalizará e versionará o fluxo de migrations; a ISS-003 apenas consome a interface Alembic atual. |
+| ISS-002b | Forneceu o contrato de PostgreSQL gerenciado, com `DATABASE_URL` direta para migrations e `APP_DATABASE_URL` pooled para a aplicação. |
+| ISS-002c | Forneceu o fluxo Alembic final; a ISS-003 o consome sem duplicar configuração. |
 | ISS-006 | Implementará persistência de leituras RFID no PostgreSQL; não faz parte desta entrega. |
 
 ## 5. O que foi implementado agora
@@ -47,10 +47,10 @@ O objetivo é oferecer comandos repetíveis para:
 
 ## 6. O que permanece pendente
 
-O perfil gerenciado foi validado estruturalmente, mas não foi conectado ao Neon,
-pois a ISS-002b ainda não forneceu banco/credenciais de desenvolvimento. O fluxo
-final da ISS-002c também deverá ser revalidado após seu merge. Nenhuma dessas
-pendências impede o modo local.
+O perfil gerenciado foi revalidado estruturalmente após os merges da ISS-002b e
+da ISS-002c, mas não foi conectado ao Neon porque não havia credenciais externas
+disponíveis nesta execução. Essa pendência não impede o modo local e não autoriza
+testes destrutivos no banco compartilhado.
 
 ## 7. Arquitetura do ambiente local
 
@@ -148,6 +148,7 @@ Os exemplos usam projetos distintos (`rfid-hospital-local` e
 | Variável | Local | Managed | Observação |
 |---|---|---|---|
 | `COMPOSE_PROJECT_NAME` | `rfid-hospital-local` | `rfid-hospital-managed` | separa recursos Docker |
+| `HOST_UID` / `HOST_GID` | UID/GID do usuário | UID/GID do usuário | mantém o contêiner sem privilégios e permite escrever no bind mount `data/` |
 | `MQTT_MODE` | `local` | `cloud` | perfil managed força `cloud` |
 | `MQTT_HOST` | `localhost` no host; `mosquitto` no contêiner | endpoint externo | sem esquema/credenciais |
 | `MQTT_PORT` | `1883` | `8883` | cloud exige 8883 |
@@ -157,6 +158,7 @@ Os exemplos usam projetos distintos (`rfid-hospital-local` e
 | `MQTT_CLIENT_ID` | identificador local | obrigatório e único | não é senha |
 | `MQTT_TOPIC` | filtro `easy/dev/...` | filtro permitido pela ACL | QoS 1 |
 | `DATABASE_URL` | URL para comandos no host | URL externa completa | Alembic a consome diretamente |
+| `APP_DATABASE_URL` | mesma instância local | URL pooled externa | reservada para a aplicação; não usada pelo ingestor atual |
 | `POSTGRES_DB` / `USER` / `PASSWORD` | defaults somente dev | não usados | senha local não é produção |
 | `POSTGRES_BIND_ADDRESS` / `PORT` | `127.0.0.1:5432` | não usados | acesso de ferramentas do host |
 | `MQTT_BIND_ADDRESS` / `MQTT_LOCAL_PORT` | publicação do broker | não usados | restringir a loopback quando possível |
@@ -170,6 +172,9 @@ vazamento conhecido de senhas percent-encoded em exceções.
 
 Pré-requisitos no Ubuntu 24.04: Docker Engine com Compose v2, GNU Make e permissão
 para usar Docker.
+
+Os exemplos usam UID/GID `1000:1000`. Em hosts com valores diferentes, ajuste
+`HOST_UID=$(id -u)` e `HOST_GID=$(id -g)` no arquivo privado antes de iniciar.
 
 ```bash
 cp .env.local.example .env.local
@@ -223,8 +228,9 @@ make migrate-managed
 make migration-current-managed
 ```
 
-Esses comandos consomem o Alembic atual; não substituem as convenções que a
-ISS-002c ainda finalizará. Nunca aponte o teste para dados principais/produção.
+Esses comandos consomem diretamente o Alembic e o `db/url.py` finalizados pela
+ISS-002c, inclusive URLs com percent-encoding; não existe configuração paralela
+de migrations no Compose. Nunca execute downgrade no Neon compartilhado.
 
 ## 19. Executar o simulador
 
@@ -276,8 +282,8 @@ apagados automaticamente.
 
 - persistir eventos RFID no PostgreSQL (ISS-006);
 - criar backend, API, dashboard ou regras de passagem;
-- provisionar Neon e suas credenciais (ISS-002b);
-- assumir a evolução/convenção final das migrations (ISS-002c);
+- alterar o provisionamento ou as credenciais do Neon definidos pela ISS-002b;
+- substituir as convenções e o fluxo de migrations definidos pela ISS-002c;
 - validar protocolo, payload ou TLS do Identix EZ700 sem o equipamento físico;
 - tornar o Mosquitto anônimo adequado à Internet/produção;
 - configurar o notebook como hotspot.
@@ -300,21 +306,36 @@ Validação executada em 13/09/2026 com Docker Desktop/engine Linux:
 | `tests/infrastructure/compose-smoke-test.sh` | passou os dois ciclos, incluindo reset e recriação do schema |
 | reset protegido | volume local removido; inspeção retornou `no such volume` |
 
-O host de validação não tinha GNU Make; os comandos Compose equivalentes e o
-script via Git Bash foram executados. Isso não substitui uma repetição em Ubuntu
-24.04, alvo oficial dos scripts.
+A validação original não tinha GNU Make; os comandos Compose equivalentes e o
+script via Git Bash foram executados. O registro histórico foi mantido acima e
+complementado pela revalidação no sistema-alvo.
+
+Revalidação executada em 14/09/2026 no Ubuntu 24.04 após ISS-002b e ISS-002c:
+
+| Comando/checagem | Resultado observado |
+|---|---|
+| `docker compose ... config --quiet` nos perfis local e managed | sucesso estrutural nos dois perfis |
+| `docker compose ... --profile local build` | imagem construída com sucesso |
+| `make tests` com a `.venv` no `PATH` | 32 testes, OK; 1 integração MQTT opt-in pulada |
+| `python -m pytest -q` | 35 aprovados, 1 pulado e 18 subtestes aprovados |
+| migration managed com `DATABASE_URL` vazia | recusada com status 2 sem imprimir URL |
+| perfil local com `make local-up` | Postgres e Mosquitto saudáveis; migration saiu 0; ingestor ativo |
+| `make simulator-local` | 3/3 eventos válidos persistidos no JSONL esperado |
+| primeira execução do smoke | revelou falta de permissão no bind mount Linux; corrigida com `HOST_UID`/`HOST_GID` |
+| `make smoke` após a correção | passou os dois ciclos, incluindo reset e recriação do schema |
+| reset protegido | contêineres, rede e volume PostgreSQL locais removidos |
 
 ## 24. Pendências para revalidação
 
-- [ ] Rebasear/verificar com o fluxo final de migrations da ISS-002c.
+- [x] Integrar e verificar com o fluxo final de migrations da ISS-002c.
 - [ ] Testar o perfil gerenciado com um banco/branch de desenvolvimento Neon da ISS-002b.
 - [ ] Confirmar migrations no Neon sem tocar dados principais ou de produção.
-- [ ] Reexecutar o perfil local após os merges das dependências.
-- [ ] Reexecutar o perfil gerenciado após os merges das dependências.
-- [ ] Repetir `make smoke` em Ubuntu 24.04 com OpenSSL disponível.
+- [x] Reexecutar o perfil local após os merges das dependências.
+- [x] Reexecutar estruturalmente o perfil gerenciado após os merges das dependências.
+- [x] Repetir `make smoke` em Ubuntu 24.04 com OpenSSL disponível.
 
-Somente os critérios que exigem Neon/fluxo final permanecem pendentes; o ambiente
-local não depende deles.
+Somente os critérios que exigem credenciais e conectividade externa com o Neon
+permanecem pendentes; o ambiente local não depende deles.
 
 ## 25. Troubleshooting
 
