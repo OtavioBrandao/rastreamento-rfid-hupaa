@@ -18,6 +18,7 @@ DEFAULT_MQTT_QOS = 1
 DEFAULT_EVENTS_FILE = Path("data/raw_events.jsonl")
 DEFAULT_LOG_LEVEL = "INFO"
 VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
+LOCAL_MQTT_HOSTNAMES = frozenset({"localhost", "mosquitto"})
 
 
 def _optional_value(value: str | None) -> str | None:
@@ -110,9 +111,12 @@ class Settings:
                     ipaddress.ip_network("192.168.0.0/16"), ipaddress.ip_network("fc00::/7"),
                 ) if address.version == network.version)
             except ValueError:
-                local = self.mqtt_host == "localhost"
+                local = self.mqtt_host in LOCAL_MQTT_HOSTNAMES
             if not local:
-                raise ValueError("Modo local exige IP privado/loopback ou localhost; use cloud para broker externo")
+                raise ValueError(
+                    "Modo local exige IP privado/loopback, localhost ou o serviço "
+                    "mosquitto do Compose; use cloud para broker externo"
+                )
         if bool(self.mqtt_username) != bool(self.mqtt_password):
             raise ValueError("MQTT_USERNAME e MQTT_PASSWORD devem ser definidos juntos")
         if not 1 <= self.mqtt_keepalive <= 65535:

@@ -1,8 +1,137 @@
+x-python-service: &python-service
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: rfid-hospital-mvp:dev
+  networks:
+    - rfid-dev
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+  restart: "no"
+
 services:
+  postgres:
+    image: postgres:16.15-alpine
+    profiles: ["local"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rfid_hospital_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-rfid_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rfid_dev_only}
+    ports:
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - rfid-dev
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: "no"
+
   mosquitto:
     image: eclipse-mosquitto:2.1.2-alpine
+    profiles: ["local"]
     ports:
       - "${MQTT_BIND_ADDRESS:-0.0.0.0}:${MQTT_LOCAL_PORT:-1883}:1883"
     volumes:
       - ./mosquitto/mosquitto.dev.conf:/mosquitto/config/mosquitto.conf:ro
+    networks:
+      - rfid-dev
+    healthcheck:
+      test:
+        - CMD
+        - mosquitto_sub
+        - -h
+        - 127.0.0.1
+        - -t
+        - $$SYS/broker/version
+        - -C
+        - "1"
+        - -W
+        - "3"
+      interval: 5s
+      timeout: 4s
+      retries: 10
+      start_period: 5s
     restart: "no"
+
+  migrate-local:
+    <<: *python-service
+    profiles: ["local"]
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-rfid_dev}:${POSTGRES_PASSWORD:-rfid_dev_only}@postgres:5432/${POSTGRES_DB:-rfid_hospital_dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ingestor-local:
+    <<: *python-service
+    profiles: ["local"]
+    environment:
+      MQTT_MODE: local
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_TLS_ENABLED: "false"
+      MQTT_USERNAME: ""
+      MQTT_PASSWORD: ""
+      MQTT_CA_CERT: ""
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-easy-local-ingestor}
+      MQTT_TOPIC: ${MQTT_TOPIC:-easy/dev/hupaa/+/+/readings}
+      MQTT_QOS: ${MQTT_QOS:-1}
+      MQTT_KEEPALIVE: ${MQTT_KEEPALIVE:-60}
+      EVENTS_FILE: ${EVENTS_FILE:-data/raw_events.jsonl}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-rfid_dev}:${POSTGRES_PASSWORD:-rfid_dev_only}@postgres:5432/${POSTGRES_DB:-rfid_hospital_dev}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      migrate-local:
+        condition: service_completed_successfully
+
+  migrate-managed:
+    <<: *python-service
+    profiles: ["managed"]
+    entrypoint: ["/app/docker/require-database-url.sh"]
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+
+  ingestor-managed:
+    <<: *python-service
+    profiles: ["managed"]
+    entrypoint: ["/app/docker/require-database-url.sh"]
+    command: ["python", "-m", "rfid_ingestion"]
+    environment:
+      MQTT_MODE: cloud
+      MQTT_HOST: ${MQTT_HOST:-}
+      MQTT_PORT: ${MQTT_PORT:-8883}
+      MQTT_TLS_ENABLED: "true"
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_CA_CERT: ${MQTT_CA_CERT:-}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-}
+      MQTT_TOPIC: ${MQTT_TOPIC:-easy/dev/hupaa/+/+/readings}
+      MQTT_QOS: ${MQTT_QOS:-1}
+      MQTT_KEEPALIVE: ${MQTT_KEEPALIVE:-60}
+      EVENTS_FILE: ${EVENTS_FILE:-data/raw_events.jsonl}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DATABASE_URL:-}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      migrate-managed:
+        condition: service_completed_successfully
+
+networks:
+  rfid-dev:
+    driver: bridge
+
+volumes:
+  postgres_data:
