@@ -1,21 +1,20 @@
 """Validação sintética da ISS-005; nenhuma evidência física é inferida."""
 
+import json
+import unittest
 from dataclasses import replace
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 from unittest.mock import Mock, patch
 
 from rfid_ingestion.config import Settings
+from rfid_ingestion.mqtt_client import MqttReceiver
 from rfid_ingestion.normalization import ADAPTERS
 from rfid_ingestion.parsing import build_event
 from rfid_ingestion.persistence import JsonlEventStore
-from rfid_ingestion.mqtt_client import MqttReceiver
 from rfid_ingestion.simulator import _parser, _payload
 from rfid_ingestion.topics import reading_topic
-
 
 FIXTURE = Path("tests/fixtures/identix/tag-read.json")
 

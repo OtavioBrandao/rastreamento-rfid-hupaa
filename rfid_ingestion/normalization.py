@@ -1,9 +1,9 @@
 """Adapters explícitos e contrato canônico v1, sem dependência do transporte."""
 
-from datetime import datetime, timedelta, timezone
 import hashlib
 import math
 import re
+from datetime import datetime, timedelta, timezone
 
 from .topics import validate_topic
 

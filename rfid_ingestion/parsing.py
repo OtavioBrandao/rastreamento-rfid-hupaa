@@ -12,7 +12,6 @@ from .config import Settings
 from .normalization import normalize
 from .topics import validate_topic
 
-
 MAX_JSON_DEPTH = 64
 
 

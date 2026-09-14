@@ -5,6 +5,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
+from rfid_ingestion.config import Settings
 from rfid_ingestion.parsing import build_event
 
 FIXTURE_PATH = (
@@ -18,15 +19,16 @@ class ParsingTests(unittest.TestCase):
         raw_payload = FIXTURE_PATH.read_bytes()
 
         event = build_event(
-            topic="easy/dev/hupaa/portal-01/reader-01/readings",
+            topic="easy/dev/hupaa/portal-01/EZ700-PORTAL-01/readings",
             qos=1,
             retain=False,
             payload=raw_payload,
+            settings=Settings(ez700_timestamp_format="epoch_ms"),
         )
 
         self.assertIsNone(event["parse_error"])
         self.assertEqual(event["validation_errors"], [])
-        self.assertEqual(event["topic"], "easy/dev/hupaa/portal-01/reader-01/readings")
+        self.assertEqual(event["topic"], "easy/dev/hupaa/portal-01/EZ700-PORTAL-01/readings")
         self.assertEqual(event["qos"], 1)
         self.assertIs(event["retain"], False)
         self.assertEqual(
