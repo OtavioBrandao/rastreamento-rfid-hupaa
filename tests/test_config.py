@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from rfid_ingestion.config import Settings
 from rfid_ingestion.verification import read_environment
@@ -76,6 +76,13 @@ class SettingsTests(unittest.TestCase):
             with self.subTest(environment=environment):
                 with self.assertRaises(ValueError):
                     Settings.from_env(environment)
+
+    def test_compose_service_dns_is_allowed_only_for_local_mosquitto(self) -> None:
+        settings = Settings.from_env({"MQTT_MODE": "local", "MQTT_HOST": "mosquitto"})
+
+        self.assertEqual(settings.mqtt_host, "mosquitto")
+        with self.assertRaises(ValueError):
+            Settings.from_env({"MQTT_MODE": "local", "MQTT_HOST": "broker.example"})
 
 
 if __name__ == "__main__":
