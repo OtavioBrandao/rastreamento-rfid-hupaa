@@ -148,6 +148,8 @@ Em 13/09/2026, na branch `feat/iss-004-ci-lint-tests`:
 - `alembic upgrade head`: aprovado em PostgreSQL 16 vazio.
 - `alembic current`: `44ef89b10f17 (head)`.
 - inspeção do banco: 17 tabelas no schema `public`, contando `alembic_version`.
+- primeira execução do GitHub Actions no PR #39: `Lint` aprovado em 21 s, `Testes`
+  aprovado em 29 s e `Migrations` aprovado em 42 s.
 
 Falha controlada: foi criado temporariamente `controlled_failure_iss004.py` com
 `import os` não utilizado. Ruff reportou `F401` e encerrou com código 1. O arquivo foi
@@ -156,5 +158,4 @@ do histórico final.
 
 ## Pendências
 
-- Confirmar os três jobs na execução real do GitHub Actions aberta por este PR.
 - Revalidar o job `Migrations` depois do merge da versão final da ISS-002c.
