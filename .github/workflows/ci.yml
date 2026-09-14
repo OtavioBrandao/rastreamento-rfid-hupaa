@@ -77,3 +77,45 @@ jobs:
       - name: Encerrar Mosquitto local
         if: always()
         run: docker compose down --volumes --remove-orphans
+
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql+psycopg2://rfid_ci:rfid_ci_only@localhost:5432/rfid_ci
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: rfid_ci
+          POSTGRES_USER: rfid_ci
+          POSTGRES_PASSWORD: rfid_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rfid_ci -d rfid_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependências
+        run: python -m pip install -r requirements.txt
+
+      - name: Aplicar migrations em banco vazio
+        run: alembic upgrade head
+
+      - name: Exibir revisão aplicada
+        run: alembic current
