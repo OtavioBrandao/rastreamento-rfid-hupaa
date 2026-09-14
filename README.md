@@ -53,6 +53,22 @@ O smoke executa um broker isolado em loopback:18884 e dois simuladores,
 incluindo mensagens inválidas. TLS, autenticação e ACL do HiveMQ exigem
 validação externa separada.
 
+## Qualidade e CI
+
+Pushes para `main` e Pull Requests direcionados a ela executam jobs separados de
+lint, testes e migrations. Para reproduzir as verificações básicas localmente:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m ruff check --select E4,E7,E9,F .
+python -m ruff check --select I .
+python -m pytest -q
+```
+
+A migration exige PostgreSQL disponível e usa `DATABASE_URL`; os comandos completos,
+o banco efêmero e a interpretação das falhas estão no
+[guia da ISS-004](docs/infrastructure/iss-004-ci.md).
+
 ## Contrato atual
 
 Tópico: `easy/<environment>/<site_id>/<portal_id>/<reader_id>/readings`.
