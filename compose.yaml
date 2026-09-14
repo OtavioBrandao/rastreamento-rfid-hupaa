@@ -1,8 +1,57 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["local"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-rfid_hospital_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-rfid_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rfid_dev_only}
+    ports:
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - rfid-dev
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: "no"
+
   mosquitto:
     image: eclipse-mosquitto:2.1.2-alpine
+    profiles: ["local"]
     ports:
       - "${MQTT_BIND_ADDRESS:-0.0.0.0}:${MQTT_LOCAL_PORT:-1883}:1883"
     volumes:
       - ./mosquitto/mosquitto.dev.conf:/mosquitto/config/mosquitto.conf:ro
+    networks:
+      - rfid-dev
+    healthcheck:
+      test:
+        - CMD
+        - mosquitto_sub
+        - -h
+        - 127.0.0.1
+        - -t
+        - $$SYS/broker/version
+        - -C
+        - "1"
+        - -W
+        - "3"
+      interval: 5s
+      timeout: 4s
+      retries: 10
+      start_period: 5s
     restart: "no"
+
+networks:
+  rfid-dev:
+    driver: bridge
+
+volumes:
+  postgres_data:
