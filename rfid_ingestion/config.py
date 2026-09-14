@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-import os
 import ipaddress
+import os
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
-
 
 DEFAULT_MQTT_HOST = "127.0.0.1"
 DEFAULT_MQTT_PORT = 1883

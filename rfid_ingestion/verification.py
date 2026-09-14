@@ -1,27 +1,27 @@
 """Roteiro reproduzível com simuladores ou coleta de campo, sem segredos no relatório."""
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
-from datetime import datetime, timezone
 import json
 import math
 import os
-from pathlib import Path
 import socket
 import subprocess
 import sys
-from threading import Event
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from datetime import datetime, timezone
+from pathlib import Path
+from threading import Event
 
 import paho.mqtt.client as mqtt
 
 from .config import Settings
 from .connection import create_client, tls_context
+from .logging_config import configure_logging
 from .mqtt_client import MqttReceiver
 from .persistence import JsonlEventStore
-from .logging_config import configure_logging
 
 
 def read_environment(path: str) -> dict[str, str]:
