@@ -57,6 +57,13 @@ class SettingsTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     Settings.from_env(environment)
 
+    def test_compose_service_dns_is_allowed_only_for_local_mosquitto(self) -> None:
+        settings = Settings.from_env({"MQTT_MODE": "local", "MQTT_HOST": "mosquitto"})
+
+        self.assertEqual(settings.mqtt_host, "mosquitto")
+        with self.assertRaises(ValueError):
+            Settings.from_env({"MQTT_MODE": "local", "MQTT_HOST": "broker.example"})
+
 
 if __name__ == "__main__":
     unittest.main()
