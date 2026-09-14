@@ -37,7 +37,7 @@ O objetivo é oferecer comandos repetíveis para:
 ## 5. O que foi implementado agora
 
 - imagem Python não interativa, executada por usuário sem privilégios;
-- PostgreSQL 16 local com volume persistente e `pg_isready`;
+- PostgreSQL 16.15 local com volume persistente e `pg_isready`;
 - Mosquitto local existente com healthcheck nativo;
 - rede bridge explícita `rfid-dev`;
 - migrations Alembic one-shot antes do ingestor;
@@ -97,8 +97,9 @@ Alembic, sem imprimir seu conteúdo.
 | `ingestor-managed` | `managed` | recebe MQTT gerenciado e grava JSONL | contínuo |
 
 O `Dockerfile` existe somente para empacotar o ingestor e o Alembic atuais. Ele
-usa os arquivos de dependências do repositório e não inclui documentação, testes,
-`.env`, Git ou `data/` no contexto final.
+fixa a base pequena `python:3.12.14-slim-bookworm`, usa os arquivos de dependências
+do repositório e não inclui documentação, testes, `.env`, Git ou `data/` no
+contexto final. PostgreSQL também fica fixado em `16.15-alpine`.
 
 ## 10. Volumes
 
@@ -290,8 +291,8 @@ Validação executada em 13/09/2026 com Docker Desktop/engine Linux:
 | `docker build --tag rfid-hospital-mvp:iss003-build-check .` | imagem construída com sucesso |
 | `docker compose ... --profile local config --quiet` | sucesso |
 | `docker compose ... --profile managed config --quiet` | sucesso estrutural; sem conexão externa |
-| `python -m unittest discover -s tests -v` | 32 testes, OK; 3 TLS pulados por falta de OpenSSL no host |
-| suíte com `RUN_MQTT_INTEGRATION=1` | 32 testes, OK; integração MQTT real aprovada; 3 TLS pulados |
+| `python -m unittest discover -s tests -v` | 32 testes, OK; 4 pulados por serem opt-in/dependerem de executáveis externos |
+| suíte final com `RUN_MQTT_INTEGRATION=1` e OpenSSL no `PATH` | 32/32 testes, OK, sem skips |
 | perfil local com `up -d --build --wait` | Postgres e Mosquitto saudáveis; migration saiu 0; ingestor ativo |
 | `alembic current` no contêiner | `44ef89b10f17 (head)` |
 | inspeção do banco | 17 tabelas públicas: 16 do modelo e `alembic_version` |
