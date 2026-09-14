@@ -68,9 +68,10 @@ python -m ruff check --select I .
 python -m pytest -q
 ```
 
-A migration exige PostgreSQL disponível e usa `DATABASE_URL`; os comandos completos,
-o banco efêmero e a interpretação das falhas estão no
-[guia da ISS-004](docs/infrastructure/iss-004-ci.md).
+O job `Migrations` reutiliza a validação rigorosa da ISS-002c em PostgreSQL
+descartável: aplica duas vezes, reverte, reaplica e confere o schema. Os comandos
+locais e a interpretação das falhas estão no [guia da
+ISS-004](docs/infrastructure/iss-004-ci.md).
 
 ## Contrato atual
 

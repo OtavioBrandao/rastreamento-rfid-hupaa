@@ -13,6 +13,7 @@ FIXTURE_PATH = (
 
 
 class ParsingTests(unittest.TestCase):
+    # TODO(ISS-005): revisar este teste quando o contrato canônico do parser mudar.
     def test_identix_fixture_preserves_current_canonical_contract(self) -> None:
         raw_payload = FIXTURE_PATH.read_bytes()
 

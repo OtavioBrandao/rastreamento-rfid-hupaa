@@ -39,8 +39,11 @@ diretamente se o problema está em `Lint`, `Testes` ou `Migrations`.
   baseline para evitar uma alteração massiva sem relação funcional com a issue.
 - **Testes:** executa pytest com os testes unitários e inicia o Mosquitto local para
   habilitar a integração MQTT existente. Não acessa leitor físico, HUPAA ou HiveMQ.
-- **Migrations:** instala as dependências da aplicação, aplica `alembic upgrade head`
-  em um banco vazio e exibe a revisão aplicada com `alembic current`.
+- **Migrations:** o job de `ci.yml` reutiliza `.github/workflows/migrations.yml`,
+  pertencente à ISS-002c. Em PostgreSQL vazio, aplica `upgrade head` duas vezes,
+  executa `downgrade base`, reaplica `upgrade head`, confere exatamente as 17
+  tabelas esperadas e roda os testes. O workflow reutilizável não possui gatilho
+  próprio, portanto cada PR ou push produz uma única execução dessa validação.
 
 O cache usado por `actions/setup-python` considera `requirements.txt` e
 `requirements-dev.txt`; somente pacotes do pip são armazenados, nunca variáveis ou
@@ -84,30 +87,20 @@ Para reproduzir também a integração viável no CI com o Compose já existente
 ```bash
 docker compose up -d mosquitto
 RUN_MQTT_INTEGRATION=1 TEST_MQTT_PORT=1883 python -m pytest -q
-docker compose down --volumes --remove-orphans
+docker compose --profile local down --volumes --remove-orphans
 ```
 
-Enquanto o ambiente PostgreSQL padronizado da ISS-003 não estiver integrado à `main`,
-a validação de migration pode usar um contêiner temporário equivalente ao serviço do
-workflow:
+O ambiente PostgreSQL padronizado da ISS-003 já está disponível. Para validar schema,
+healthchecks, integração MQTT e reset exclusivamente local, use:
 
 ```bash
-docker run --detach --rm --name rfid-ci-iss004 \
-  -e POSTGRES_DB=rfid_ci \
-  -e POSTGRES_USER=rfid_ci \
-  -e POSTGRES_PASSWORD=rfid_ci_only \
-  -p 127.0.0.1:55432:5432 postgres:16-alpine
-until docker exec rfid-ci-iss004 pg_isready -U rfid_ci -d rfid_ci; do sleep 1; done
-export DATABASE_URL='postgresql+psycopg2://rfid_ci:rfid_ci_only@localhost:55432/rfid_ci'
-alembic upgrade head
-alembic current
-docker stop rfid-ci-iss004
-unset DATABASE_URL
+make smoke
 ```
 
-As credenciais acima são descartáveis e existem somente no contêiner local. Após a
-integração da ISS-003, deve-se preferir o comando de migration do ambiente Compose
-padronizado por ela.
+O smoke cria um projeto e um volume descartáveis, aplica a migration atual, remove o
+volume e recria o schema vazio. A sequência exaustiva do CI permanece definida somente
+em `.github/workflows/migrations.yml`; não mantenha uma segunda implementação manual.
+Nunca execute o `downgrade base` de validação contra o Neon compartilhado.
 
 ## Como interpretar uma falha
 
@@ -120,10 +113,11 @@ correspondem aos comandos documentados acima.
 
 ## Relação com ISS-002c
 
-A ISS-004 consome a interface atual do Alembic; ela não cria nem redesenha migrations.
-A ISS-002c (#4) continua aberta. A migration `44ef89b10f17` disponível na `main` foi
-validada, mas o job e esta evidência precisam de nova validação quando o contrato final
-da ISS-002c for integrado.
+A ISS-002c está integrada à `main` e continua dona da validação de migrations. A
+ISS-004 apenas chama seu workflow reutilizável. O `alembic/env.py` final e o
+`db/url.py` continuam enviando `DATABASE_URL` diretamente ao SQLAlchemy/Alembic,
+sem passar URLs com percent-encoding pelo `ConfigParser`. Nenhuma lógica de migration
+foi copiada para `ci.yml`.
 
 ## Relação com ISS-003
 
@@ -131,9 +125,10 @@ A ISS-003 padroniza o ambiente local com Docker. A ISS-004 valida automaticament
 repositório no GitHub. Elas se complementam: o ambiente local facilita a reprodução,
 enquanto a CI evita que a validação dependa de uma execução manual.
 
-Na `main` usada para esta implementação, a padronização PostgreSQL da ISS-003 ainda não
-estava disponível. Por isso o workflow mantém apenas seu serviço efêmero e não altera a
-arquitetura Docker pertencente à ISS-003.
+A ISS-003 já está integrada à `main`. O job `Testes` usa o serviço Mosquitto definido
+no Compose final. O workflow reutilizável de migrations mantém um PostgreSQL efêmero
+do GitHub Actions para isolar a validação e não inicia a pilha local completa; isso não
+altera o Compose nem cria uma segunda implementação dos comandos Alembic.
 
 ## Validação realizada
 
@@ -156,6 +151,23 @@ Falha controlada: foi criado temporariamente `controlled_failure_iss004.py` com
 removido, e as duas verificações de qualidade voltaram a passar. A falha não faz parte
 do histórico final.
 
-## Pendências
+### Revalidação após ISS-002b, ISS-002c e ISS-003
 
-- Revalidar o job `Migrations` depois do merge da versão final da ISS-002c.
+Executada em 14/09/2026 no Ubuntu 24.04:
+
+- `python -m ruff check --select E4,E7,E9,F .`: aprovado.
+- `python -m ruff check --select I .`: aprovado.
+- `python -m pytest -q`: 36 aprovados, 1 pulado e 18 subtestes aprovados.
+- suíte com Mosquitto e `RUN_MQTT_INTEGRATION=1`: 37 aprovados e 18 subtestes.
+- configuração Compose local e managed: aprovada estruturalmente.
+- `make smoke`: aprovado nos dois ciclos, incluindo reset e recriação do schema.
+- `actionlint` nos dois workflows: aprovado sem avisos.
+- ciclo em PostgreSQL local descartável: `upgrade head`, segundo `upgrade head`,
+  `downgrade base` e novo `upgrade head`, todos aprovados.
+- estado final: `44ef89b10f17 (head)` e 17 tabelas públicas.
+- contêineres, redes e volumes descartáveis removidos ao final.
+
+## Regra de merge
+
+Uma branch só deve ser integrada quando `Lint`, `Testes` e a chamada reutilizável de
+`Migrations` estiverem verdes na execução correspondente do GitHub Actions.
