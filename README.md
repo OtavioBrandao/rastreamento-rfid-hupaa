@@ -24,34 +24,36 @@ testes unitários, integração e fixtures não dependem de acesso ao laboratór
 ## Execução rápida local (Ubuntu 24.04)
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
 cp .env.local.example .env.local
-docker compose up -d
-set -a; source .env.local; set +a
-python -m rfid_ingestion
+make local-up
+make status-local
 ```
 
-Em outro terminal, com o ambiente virtual ativo e sem importar o perfil do ingestor:
+Isso inicia PostgreSQL, Mosquitto, aplica as migrations atuais e só então inicia o
+ingestor. O perfil é totalmente local/offline. Para publicar três eventos:
 
 ```bash
-python -m rfid_ingestion.simulator --reader-id reader-01 --count 3 --interval 1
+make simulator-local
+tail -n 3 data/raw_events.jsonl
 ```
 
-Mosquitto usa MQTT anônimo em 1883 **somente em rede controlada de desenvolvimento**.
-Leitores físicos devem apontar para o IP LAN do notebook, não para localhost.
-Não expor a porta à Internet. Para restringir o broker ao notebook:
-`MQTT_BIND_ADDRESS=127.0.0.1 docker compose up -d`.
+Para parar sem apagar o banco: `make stop-local`. O reset exige confirmação e
+remove somente o volume PostgreSQL local:
+`CONFIRM_RESET_LOCAL=APAGAR make reset-local`.
 
 ```bash
-python -m unittest discover -s tests -v
-bash tests/reader-connectivity/mqtt/smoke-test.sh
+make tests
+make smoke
 ```
 
-O smoke executa um broker isolado em loopback:18884 e dois simuladores,
-incluindo mensagens inválidas. TLS, autenticação e ACL do HiveMQ exigem
-validação externa separada.
+O modo gerenciado usa `.env.cloud` e `make managed-up`; não inicia Postgres nem
+Mosquitto locais. Credenciais reais permanecem fora do Git. A validação no Neon
+aguarda ISS-002b, e a persistência de eventos em banco pertence à ISS-006.
+
+Veja o [guia completo da ISS-003](docs/infrastructure/iss-003-docker-compose.md)
+para arquitetura, variáveis, comandos equivalentes sem Make, evidências, reset,
+pendências e troubleshooting. A execução direta no host continua documentada em
+[Ingestão MQTT](docs/mqtt-ingestion.md).
 
 ## Contrato atual
 
