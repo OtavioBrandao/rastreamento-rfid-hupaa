@@ -1,10 +1,10 @@
 import io
 import json
 import logging
-from pathlib import Path
 import ssl
-from tempfile import TemporaryDirectory
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 
 from rfid_ingestion.config import Settings
@@ -14,7 +14,8 @@ from rfid_ingestion.mqtt_client import MqttReceiver
 from rfid_ingestion.parsing import build_event
 from rfid_ingestion.simulator import _parser, _payload, _validate, main
 from rfid_ingestion.topics import reading_topic, validate_topic
-from rfid_ingestion.verification import read_environment, probe, main as verify
+from rfid_ingestion.verification import main as verify
+from rfid_ingestion.verification import probe, read_environment
 
 
 def cloud_env():

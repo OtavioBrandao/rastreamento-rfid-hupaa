@@ -1,13 +1,13 @@
 """Handshake TLS real em loopback, com certificado efêmero; não prova HiveMQ."""
 
-from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 import shutil
 import socket
 import ssl
 import subprocess
-from tempfile import TemporaryDirectory
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from rfid_ingestion.config import Settings
 from rfid_ingestion.connection import tls_context

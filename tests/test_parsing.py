@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import unittest
+from datetime import datetime, timezone
+from pathlib import Path
 
 from rfid_ingestion.parsing import build_event
-
 
 FIXTURE_PATH = (
     Path(__file__).parent / "fixtures" / "identix" / "tag-read.json"
