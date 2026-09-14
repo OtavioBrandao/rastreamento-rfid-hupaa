@@ -2,7 +2,9 @@
 
 O mesmo ingestor, simulador, payload e tópicos funcionam nos dois modos.
 HiveMQ Cloud Serverless é o broker principal do MVP; Mosquitto é o ambiente
-local/offline de desenvolvimento e contingência manual. **Aceite externo pendente.**
+local/offline de desenvolvimento e contingência manual. A [ISS-001 encerrada](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/1#issuecomment-5553433705)
+registra validação com simuladores no HiveMQ, TLS/autenticação/ACL e duas redes.
+EZ700 físico e infraestrutura do hospital continuam pendentes de validação de campo.
 Veja a [decisão e comparação dos provedores](decisions/0002-managed-mqtt.md).
 
 ## Instalação (Ubuntu 24.04)
@@ -33,6 +35,10 @@ O ingestor não contém lógica específica de firmware.
 | `MQTT_QOS` | 1, fixado pelo contrato |
 | `EVENTS_FILE` | `data/raw_events.jsonl` por padrão |
 | `LOG_LEVEL` | INFO por padrão; DEBUG, WARNING, ERROR e CRITICAL também aceitos |
+| `MQTT_MAX_PAYLOAD_BYTES` | Limite antes do parsing JSON; 65536 bytes por padrão |
+| `RFID_DEFAULT_ADAPTER` | `ez700` por padrão; `simulator` para o formato alternativo |
+| `RFID_READER_ADAPTERS` | Objeto JSON que mapeia reader_id para adapter; sobrepõe o padrão |
+| `EZ700_TIMESTAMP_FORMAT` | `rfc3339` por padrão; `epoch_ms` somente por seleção explícita |
 
 TLS valida certificado **e hostname**, mínimo TLS 1.2. Não há opção insegura.
 Erros de rede, TLS, autenticação ou assinatura inicial encerram com código não
@@ -54,7 +60,8 @@ cp .env.local.example .env.local
 chmod 600 .env.local
 docker compose up -d
 set -a; source .env.local; set +a
-python -m rfid_ingestion
+# Somente para os timestamps gerados pelo nosso simulador ez700:
+EZ700_TIMESTAMP_FORMAT=epoch_ms python -m rfid_ingestion
 ```
 
 O Compose mantém o listener da PoC em 1883 em todas as interfaces. Para
@@ -80,7 +87,8 @@ usuário/senha também no modo local, caso a equipe provisione Mosquitto autenti
 4. Criar três usuários com senhas independentes e fortes, associando uma permissão
    a cada usuário. Não reutilizar a credencial do ingestor nos simuladores/leitores.
 5. Preencher os três arquivos privados descritos abaixo. Não exportar screenshots
-   que mostrem senhas. O login/MFA e a criação do cluster são ações manuais pendentes.
+   que mostrem senhas. Este roteiro serve para novo provisionamento; o cluster
+   da ISS-001 já foi configurado conforme o registro de validação vinculado acima.
 
 | Identidade lógica | Client ID de exemplo | Permissão | Filtro/tópico |
 |---|---|---|---|
@@ -108,7 +116,8 @@ Ingestor, em seu terminal:
 
 ```bash
 set -a; source .env.cloud; set +a
-python -m rfid_ingestion
+# Para os simuladores ez700 dos exemplos abaixo:
+EZ700_TIMESTAMP_FORMAT=epoch_ms python -m rfid_ingestion
 ```
 
 O mesmo comando com `.env.local` seleciona manualmente Mosquitto. Pare a sessão
@@ -133,13 +142,16 @@ Payload preservado, baseado na fixture existente:
 {"epc":"E2801190A502006016C32F62","tid":"E280119020004F62B6190300","timestamp":"1632759395291","rssi":-3880,"phase":49,"channel":906250,"antenna":1,"readerid":"reader-01"}
 ```
 
-Obrigatórios para validade do contrato: `epc` e `timestamp` como strings não vazias,
-`rssi` numérico, `antenna` inteiro positivo. Campos extras continuam aceitos.
-O timestamp é preservado sem inferir epoch ou unidade do firmware; os registros
-anteriores têm formatos distintos. A origem lógica vem do tópico, não de `readerid`.
+O exemplo numérico exige `EZ700_TIMESTAMP_FORMAT=epoch_ms` para normalização
+sintética; a semântica física ainda precisa de confirmação. O padrão aceita
+RFC3339 com fuso explícito. A origem lógica vem do tópico; identidade divergente
+no payload rejeita o evento canônico. Campos extras ficam em metadata, RSSI EZ700
+permanece bruto e o campo canônico em dBm fica nulo. Contrato completo, validações,
+seleção explícita e limites em [normalização RFID](rfid-normalization.md).
 
 JSONL mantém `received_at_utc`, `topic`, `qos`, `retain`, `payload_original`,
-`payload_encoding`, `payload_json`, `parse_error`; acrescenta `validation_errors`.
+`payload_encoding`, `payload_json`, `parse_error`; acrescenta `validation_errors`,
+`canonical_event`, `reader_id` e `adapter`.
 Mensagens incompletas também são gravadas, com erros de validação, sem derrubar
 o ingestor. Bytes inválidos continuam em base64. QoS 1 permite duplicação; não
 há deduplicação nem garantia de exatamente uma vez, nem fila durável offline.
@@ -172,6 +184,15 @@ e `--interval` controlam quantidade/frequência; `--invalid json` e
 `--invalid missing` reproduzem erros. `--environment`, `--site-id`, `--portal-id`
 e `--reader-id` constroem o tópico quando `MQTT_TOPIC`/`--topic` não for informado.
 O leitor lógico deve coincidir com o tópico. Senhas nunca são argumentos de CLI.
+`--format simulator` publica o formato alternativo (`tag`, `port`, `signal`,
+`observed_at`). Configure o adapter correspondente no ingestor. O padrão
+`--format ez700` (padrão) preserva a estrutura da fixture e gera timestamp
+numérico em string, em milissegundos desde Unix epoch, pelo relógio do próprio
+simulador. O formato alternativo `simulator` gera RFC3339 UTC. `--timestamp`
+preserva literalmente o valor informado para replay. O ingestor exige
+`EZ700_TIMESTAMP_FORMAT=epoch_ms` explícito para aceitar os números sintéticos;
+o default continua `rfc3339`. Isso não comprova a semântica do firmware EZ700,
+que permanece **PENDENTE DE VALIDAÇÃO FÍSICA**.
 PUBACK MQTT 3.1.1 isolado não prova entrega: conferir sempre o JSONL do ingestor.
 
 ## Testes e comando de aceite
@@ -189,7 +210,12 @@ Os três testes de handshake TLS usam OpenSSL (certificado efêmero em diretóri
 temporário); se o executável não estiver instalado, são explicitamente pulados.
 Eles validam o transporte TLS local, não o serviço HiveMQ.
 
-Após provisionar o HiveMQ, pare qualquer ingestor com o mesmo Client ID e execute:
+Para repetir a verificação com simuladores, configure explicitamente
+`EZ700_TIMESTAMP_FORMAT=epoch_ms` no arquivo de perfil do **ingestor** (`.env.cloud`
+no exemplo). `verification` lê esse arquivo e gera marcador numérico em
+milissegundos para seus publicadores EZ700 sintéticos; não infere formato do
+leitor nem altera Settings automaticamente. Pare qualquer ingestor com o mesmo
+Client ID e execute:
 
 ```bash
 python -m rfid_ingestion.verification \

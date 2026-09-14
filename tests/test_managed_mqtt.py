@@ -76,7 +76,8 @@ class ManagedMqttTests(unittest.TestCase):
 
     def test_fixture_payload_is_preserved_and_validated(self):
         raw = Path("tests/fixtures/identix/tag-read.json").read_bytes()
-        event = build_event(topic=reading_topic("reader-01"), qos=1, retain=False, payload=raw)
+        event = build_event(topic=reading_topic("EZ700-PORTAL-01"), qos=1, retain=False, payload=raw,
+                            settings=Settings(ez700_timestamp_format="epoch_ms"))
         self.assertEqual(event["payload_json"], json.loads(raw))
         self.assertEqual(event["payload_original"], raw.decode())
         self.assertEqual(event["validation_errors"], [])

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from threading import Event
@@ -108,21 +109,16 @@ class MqttReceiver:
                 qos=message.qos,
                 retain=message.retain,
                 payload=message.payload,
+                settings=self.settings,
             )
             self.store.append(event)
-            if event["parse_error"] is None:
-                LOGGER.info(
-                    "Mensagem persistida: tópico=%s qos=%d retain=%s",
-                    message.topic,
-                    message.qos,
-                    message.retain,
-                )
-            else:
-                LOGGER.warning(
-                    "Mensagem persistida com erro de parsing: tópico=%s erro=%s",
-                    message.topic,
-                    event["parse_error"],
-                )
+            canonical = event["canonical_event"]
+            LOGGER.log(logging.INFO if canonical else logging.WARNING, json.dumps({
+                "event_type": "rfid_normalization", "reader_id": event["reader_id"],
+                "adapter": event["adapter"], "result": "accepted" if canonical else "rejected",
+                "reasons": ([event["parse_error"]] if event["parse_error"] else []) + event["validation_errors"],
+                "event_id": canonical["event_id"] if canonical else None,
+            }))
         except Exception:
             self._fail("persistência JSONL")
 

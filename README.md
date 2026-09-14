@@ -4,12 +4,16 @@ MVP experimental para rastreabilidade aproximada por zonas de equipamentos
 hospitalares do HUPAA/UFAL usando RFID UHF passivo. A posição será inferida
 pela última passagem confirmada em uma zona, não por posicionamento contínuo.
 
-## Fase atual — ISS-001
+## Fase atual — ISS-005 sobre a infraestrutura da ISS-001
 
 **HiveMQ Cloud Serverless é o broker principal escolhido para o MVP.** O código
 suporta modo externo com TLS e modo local com Mosquitto, usando o mesmo ingestor,
-simulador, contrato e JSONL. O cluster e as credenciais ainda não foram criados;
-**a Issue #1 permanece aberta e a validação externa está pendente**.
+simulador, contrato e JSONL. **A Issue #1 foi encerrada em 05/09/2026**, com cluster,
+credenciais, TLS e ACLs configurados. O [registro de validação da equipe](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/1#issuecomment-5553433705)
+relata testes com simuladores: 20/20 mensagens no Mosquitto local, 40/40 no HiveMQ
+e 200/200 via HiveMQ entre duas redes distintas. As evidências locais versionadas
+preservam o estado anterior dessa data; o aceite com EZ700 físico e a rede do
+hospital permanece **PENDENTE DE VALIDAÇÃO FÍSICA**.
 
 ```text
 leitor ou simulador → HiveMQ com TLS → ingestor Python/Paho → data/raw_events.jsonl
@@ -25,6 +29,10 @@ testes unitários, integração e fixtures não dependem de acesso ao laboratór
 
 ```bash
 cp .env.local.example .env.local
+docker compose up -d
+set -a; source .env.local; set +a
+# Perfil explícito para timestamps gerados pelo nosso simulador ez700.
+EZ700_TIMESTAMP_FORMAT=epoch_ms python -m rfid_ingestion
 make local-up
 make status-local
 ```
@@ -46,6 +54,9 @@ make tests
 make smoke
 ```
 
+O smoke executa um broker isolado em loopback:18884 e dois simuladores,
+incluindo mensagens inválidas. Ele verifica o pipeline local; o registro acima
+documenta separadamente TLS, autenticação e ACL no HiveMQ com simuladores.
 O modo gerenciado usa `.env.cloud` e `make managed-up`; não inicia Postgres nem
 Mosquitto locais. Ele consome as convenções `DATABASE_URL`/`APP_DATABASE_URL` da
 ISS-002b e o Alembic da ISS-002c. Credenciais reais permanecem fora do Git; a
@@ -81,9 +92,12 @@ IDs são lógicos e independentes de fabricante; uma credencial e Client ID por 
 O ingestor pode assinar `easy/+/+/+/+/readings`; o perfil fornecido restringe
 a `easy/dev/hupaa/+/+/readings` para combinar com a ACL do MVP.
 
-Payload mantém `epc`, `rssi`, `antenna`, `timestamp` e campos extras existentes.
+Adapters explícitos convertem EZ700 e simulador em um evento canônico com
+`event_id`, `epc`, `rssi`, `antenna`, `reader_id`, `timestamp` UTC e `metadata`.
 QoS 1, retain falso. O ingestor preserva payload original, JSON, metadados e
-erros no JSONL; a validação acrescenta `validation_errors` sem descartar mensagens.
+erros no JSONL; acrescenta `canonical_event` (nulo quando rejeitado).
+O RSSI EZ700 mantém a unidade pendente e o valor bruto em metadata; timestamp
+numérico exige configuração explícita. Veja o [contrato e adapters](docs/rfid-normalization.md).
 JSON inválido e bytes não UTF-8 continuam preservados. Não há deduplicação,
 banco, inferência de passagem ou dashboard nesta issue.
 
@@ -94,6 +108,8 @@ JSONLs históricos continuam preservados; não se assinam os dois padrões em si
 ## Guias e evidências
 
 - [Operação local/cloud, cluster, ACL, simuladores e rotação](docs/mqtt-ingestion.md).
+- [Contrato canônico, adapters e validação sintética da ISS-005](docs/rfid-normalization.md).
+- [Relatório de entrega e testes da ISS-005](docs/evidence/iss005/README.md).
 - [Comparação HiveMQ × EMQX e estimativas de volume](docs/decisions/0002-managed-mqtt.md).
 - [Visita curta ao laboratório e comandos para duas redes](docs/experiments/iss001-managed-validation.md).
 - [Resultados reais e matriz de aceite da ISS-001](docs/evidence/iss001/README.md).

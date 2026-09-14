@@ -19,7 +19,7 @@ class JsonlEventStore:
     def append(self, event: Mapping[str, Any]) -> None:
         serialized = json.dumps(
             event,
-            ensure_ascii=False,
+            ensure_ascii=True,
             allow_nan=False,
             separators=(",", ":"),
         )
