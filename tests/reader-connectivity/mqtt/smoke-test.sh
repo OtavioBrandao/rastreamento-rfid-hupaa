@@ -7,12 +7,13 @@ export MQTT_BIND_ADDRESS=127.0.0.1
 export MQTT_LOCAL_PORT=${TEST_MQTT_PORT:-18884}
 export TEST_MQTT_PORT=$MQTT_LOCAL_PORT
 cleanup() {
-    docker compose -p "$COMPOSE_PROJECT" -f "$ROOT_DIR/compose.yaml" down >/dev/null 2>&1 || true
+    docker compose -p "$COMPOSE_PROJECT" -f "$ROOT_DIR/compose.yaml" \
+        --profile local down >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 cd -- "$ROOT_DIR"
 python3 -c 'import paho.mqtt.client'
-docker compose -p "$COMPOSE_PROJECT" up -d
+docker compose -p "$COMPOSE_PROJECT" --profile local up -d --wait mosquitto
 python3 - <<'PY'
 import os
 import socket
