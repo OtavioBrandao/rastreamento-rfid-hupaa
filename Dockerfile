@@ -14,9 +14,12 @@ RUN python -m pip install --no-cache-dir -r requirements.txt
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY db ./db
+COPY docker ./docker
 COPY rfid_ingestion ./rfid_ingestion
 
-RUN mkdir -p /app/data && chown -R app:app /app
+RUN chmod +x /app/docker/require-database-url.sh \
+    && mkdir -p /app/data \
+    && chown -R app:app /app
 
 USER app
 

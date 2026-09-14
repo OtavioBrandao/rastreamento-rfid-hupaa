@@ -1,3 +1,12 @@
+x-python-service: &python-service
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: rfid-hospital-mvp:dev
+  networks:
+    - rfid-dev
+  restart: "no"
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -48,6 +57,76 @@ services:
       retries: 10
       start_period: 5s
     restart: "no"
+
+  migrate-local:
+    <<: *python-service
+    profiles: ["local"]
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-rfid_dev}:${POSTGRES_PASSWORD:-rfid_dev_only}@postgres:5432/${POSTGRES_DB:-rfid_hospital_dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ingestor-local:
+    <<: *python-service
+    profiles: ["local"]
+    environment:
+      MQTT_MODE: local
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_TLS_ENABLED: "false"
+      MQTT_USERNAME: ""
+      MQTT_PASSWORD: ""
+      MQTT_CA_CERT: ""
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-easy-local-ingestor}
+      MQTT_TOPIC: ${MQTT_TOPIC:-easy/dev/hupaa/+/+/readings}
+      MQTT_QOS: ${MQTT_QOS:-1}
+      MQTT_KEEPALIVE: ${MQTT_KEEPALIVE:-60}
+      EVENTS_FILE: ${EVENTS_FILE:-data/raw_events.jsonl}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-rfid_dev}:${POSTGRES_PASSWORD:-rfid_dev_only}@postgres:5432/${POSTGRES_DB:-rfid_hospital_dev}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      migrate-local:
+        condition: service_completed_successfully
+
+  migrate-managed:
+    <<: *python-service
+    profiles: ["managed"]
+    entrypoint: ["/app/docker/require-database-url.sh"]
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-}
+
+  ingestor-managed:
+    <<: *python-service
+    profiles: ["managed"]
+    entrypoint: ["/app/docker/require-database-url.sh"]
+    command: ["python", "-m", "rfid_ingestion"]
+    environment:
+      MQTT_MODE: cloud
+      MQTT_HOST: ${MQTT_HOST:-}
+      MQTT_PORT: ${MQTT_PORT:-8883}
+      MQTT_TLS_ENABLED: "true"
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_CA_CERT: ${MQTT_CA_CERT:-}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-}
+      MQTT_TOPIC: ${MQTT_TOPIC:-easy/dev/hupaa/+/+/readings}
+      MQTT_QOS: ${MQTT_QOS:-1}
+      MQTT_KEEPALIVE: ${MQTT_KEEPALIVE:-60}
+      EVENTS_FILE: ${EVENTS_FILE:-data/raw_events.jsonl}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DATABASE_URL:-}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      migrate-managed:
+        condition: service_completed_successfully
 
 networks:
   rfid-dev:
