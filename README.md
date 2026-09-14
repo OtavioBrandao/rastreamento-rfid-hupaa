@@ -56,6 +56,23 @@ para arquitetura, variáveis, comandos equivalentes sem Make, evidências, reset
 pendências e troubleshooting. A execução direta no host continua documentada em
 [Ingestão MQTT](docs/mqtt-ingestion.md).
 
+## Qualidade e CI
+
+Pushes para `main` e Pull Requests direcionados a ela executam jobs separados de
+lint, testes e migrations. Para reproduzir as verificações básicas localmente:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m ruff check --select E4,E7,E9,F .
+python -m ruff check --select I .
+python -m pytest -q
+```
+
+O job `Migrations` reutiliza a validação rigorosa da ISS-002c em PostgreSQL
+descartável: aplica duas vezes, reverte, reaplica e confere o schema. Os comandos
+locais e a interpretação das falhas estão no [guia da
+ISS-004](docs/infrastructure/iss-004-ci.md).
+
 ## Contrato atual
 
 Tópico: `easy/<environment>/<site_id>/<portal_id>/<reader_id>/readings`.

@@ -1,13 +1,11 @@
+import os
+import sys
 from logging.config import fileConfig
 
-from sqlalchemy import create_engine
-from sqlalchemy import pool
+from dotenv import load_dotenv
+from sqlalchemy import create_engine, pool
 
 from alembic import context
-
-import sys
-import os
-from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from db.models import Base  # noqa: E402
