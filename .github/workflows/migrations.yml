@@ -65,7 +65,7 @@ jobs:
       - name: Reaplicar (confirma que o rollback é reversível)
         run: python -m alembic upgrade head
 
-      - name: Conferir schema resultante (17 tabelas: 16 do domínio + alembic_version)
+      - name: "Conferir schema resultante (17 tabelas: 16 do domínio + alembic_version)"
         run: |
           python -c "
           import os
