@@ -13,6 +13,36 @@ FIXTURE_PATH = (
 
 
 class ParsingTests(unittest.TestCase):
+    def test_identix_fixture_preserves_current_canonical_contract(self) -> None:
+        raw_payload = FIXTURE_PATH.read_bytes()
+
+        event = build_event(
+            topic="easy/dev/hupaa/portal-01/reader-01/readings",
+            qos=1,
+            retain=False,
+            payload=raw_payload,
+        )
+
+        self.assertIsNone(event["parse_error"])
+        self.assertEqual(event["validation_errors"], [])
+        self.assertEqual(event["topic"], "easy/dev/hupaa/portal-01/reader-01/readings")
+        self.assertEqual(event["qos"], 1)
+        self.assertIs(event["retain"], False)
+        self.assertEqual(
+            {
+                field: event["payload_json"][field]
+                for field in ("epc", "readerid", "antenna", "rssi", "timestamp")
+            },
+            {
+                "epc": "E2801190A502006016C32F62",
+                "readerid": "EZ700-PORTAL-01",
+                "antenna": 1,
+                "rssi": -3880,
+                "timestamp": "1632759395291",
+            },
+        )
+        self.assertEqual(event["payload_json"]["tid"], "E280119020004F62B6190300")
+
     def test_valid_json_and_metadata_are_preserved(self) -> None:
         payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
         payload["firmware_extra_field"] = {"enabled": True}
