@@ -218,9 +218,9 @@ teste. Espere `database_unavailable`, restaure o banco e confirme
 ## Evidência observada em 15/09/2026
 
 - testes focados de backoff/configuração: **16 passed, 14 subtests passed**;
-- testes focados MQTT: **48 passed, 38 subtests passed, 3 skipped opt-in**;
+- testes focados MQTT: **49 passed, 38 subtests passed, 3 skipped opt-in**;
 - testes focados PostgreSQL/ACK: **26 passed, 12 skipped sem serviços**;
-- suíte descartável Mosquitto + PostgreSQL: **106 passed, 52 subtests passed** em 8,52 s;
+- suíte descartável Mosquitto + PostgreSQL final: **107 passed, 52 subtests passed** em 7,46 s;
 - smoke ISS-007: passou broker inicialmente ausente, reinício do Mosquitto,
   interrupção/retorno do PostgreSQL, redelivery/idempotência e shutdown em backoff.
 
