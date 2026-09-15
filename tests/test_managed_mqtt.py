@@ -58,6 +58,14 @@ class ManagedMqttTests(unittest.TestCase):
             create_client(Settings.from_env({}))
             factory.return_value.tls_set_context.assert_not_called()
             factory.return_value.username_pw_set.assert_not_called()
+            self.assertTrue(factory.call_args.kwargs["clean_session"])
+            self.assertFalse(factory.call_args.kwargs["reconnect_on_failure"])
+
+    def test_ingestor_uses_explicit_persistent_mqtt311_session(self):
+        with patch("rfid_ingestion.connection.mqtt.Client") as factory:
+            create_client(Settings.from_env({}), persistent_session=True)
+
+        self.assertFalse(factory.call_args.kwargs["clean_session"])
 
     def test_private_lan_and_credential_pair(self):
         for host in ("localhost", "127.0.0.1", "192.168.1.20", "10.0.0.2", "::1"):

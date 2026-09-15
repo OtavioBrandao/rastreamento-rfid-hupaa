@@ -13,11 +13,22 @@ def tls_context(settings: Settings) -> ssl.SSLContext:
     return context
 
 
-def create_client(settings: Settings, *, protocol=mqtt.MQTTv311) -> mqtt.Client:
+def create_client(
+    settings: Settings,
+    *,
+    protocol=mqtt.MQTTv311,
+    persistent_session: bool = False,
+) -> mqtt.Client:
     settings.validate()
-    client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-                         client_id=settings.mqtt_client_id, protocol=protocol,
-                         reconnect_on_failure=True)
+    options = {
+        "callback_api_version": mqtt.CallbackAPIVersion.VERSION2,
+        "client_id": settings.mqtt_client_id,
+        "protocol": protocol,
+        "reconnect_on_failure": False,
+    }
+    if protocol == mqtt.MQTTv311:
+        options["clean_session"] = not persistent_session
+    client = mqtt.Client(**options)
     if settings.mqtt_username:
         client.username_pw_set(settings.mqtt_username, settings.mqtt_password)
     if settings.mqtt_tls_enabled:
