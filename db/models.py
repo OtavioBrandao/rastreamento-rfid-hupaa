@@ -27,7 +27,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from db.base import Base
@@ -219,6 +219,7 @@ class Leitor(Base):
     fabricante = Column(String, nullable=False)
     modelo = Column(String, nullable=False)
     identificador_serial = Column(String, nullable=False, unique=True)
+    reader_id = Column(String, nullable=True, unique=True)
     endereco_rede = Column(String, nullable=True)
     status = Column(String, nullable=False, server_default="offline")
     ultimo_heartbeat_em = Column(TIMESTAMP(timezone=True), nullable=True)
@@ -263,21 +264,8 @@ class LeituraBruta(Base):
     não cadastrado não pode ser perdida, só fica "órfã" do lado do ativo
     até alguém cadastrar aquele EPC.
 
-    Semântica de idempotência do `event_id` (revisão de código, Otávio):
-    o `UNIQUE(event_id)` sozinho só garante que dois valores IGUAIS não
-    duplicam — não garante idempotência de retries. `event_id` NÃO tem
-    default gerado no lado do Python (um `uuid.uuid4()` por instância
-    geraria um valor novo a cada tentativa, inclusive em reenvio da MESMA
-    mensagem MQTT, o que anularia a proteção).
-
-    Contrato que a camada de ingestão (ISS-005/ISS-006) deve cumprir:
-    `event_id` precisa ser **determinístico**, derivado do conteúdo da
-    própria leitura bruta (ex.: `uuid.uuid5(NAMESPACE, f"{antena_id}|{epc}|
-    {lido_em.isoformat()}|{rssi}")`, ou o identificador nativo de mensagem
-    do leitor, se houver um). Assim, reenviar a mesma leitura MQTT produz
-    o MESMO `event_id`, e o `UNIQUE` passa a rejeitar o duplicado de
-    verdade. Essa derivação concreta é responsabilidade de implementação
-    da ISS-006, não desta migration.
+    Preserva diretamente o event_id canônico da ISS-005, sem outro hash.
+    RSSI nulo significa unidade desconhecida; dados_origem preserva a origem.
     """
 
     __tablename__ = "leituras_brutas"
@@ -285,10 +273,11 @@ class LeituraBruta(Base):
     id = Column(BigInteger, primary_key=True)
     # Gerado de forma determinística pela camada de ingestão (ver
     # docstring acima) — NUNCA por default aleatório aqui no model.
-    event_id = Column(UUID(as_uuid=True), nullable=False, unique=True)
+    event_id = Column(String(71), nullable=False, unique=True)
     antena_id = Column(BigInteger, ForeignKey("antenas.id"), nullable=False)
     epc = Column(String, nullable=False)
-    rssi = Column(Numeric, nullable=False)
+    rssi = Column(Numeric, nullable=True)
+    dados_origem = Column(JSONB, nullable=True)
     lido_em = Column(TIMESTAMP(timezone=True), nullable=False)
     recebido_em = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 

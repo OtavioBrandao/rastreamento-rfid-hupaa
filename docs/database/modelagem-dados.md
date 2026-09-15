@@ -6,7 +6,7 @@ Documento de apoio à issue de modelagem (Épico E1, Must, RF-001 a RF-023, RNF-
 
 - **Nomenclatura:** tabelas em português, plural, `snake_case` (ex.: `equipamentos`, `leituras_brutas`).
 - **Timestamps:** todas as colunas de tempo são `TIMESTAMPTZ`. A aplicação sempre grava em UTC; o Postgres já armazena internamente em UTC independente da timezone da sessão — a disciplina de sempre enviar UTC é da camada de ingestão, não do banco.
-- **Estratégia de ID:** `BIGSERIAL` (autoincremento padrão do SQLAlchemy para `BigInteger, primary_key=True` no dialeto Postgres) como PK interna em todas as tabelas — simples, sequencial, suficiente para o volume do MVP. Exceção: `leituras_brutas.event_id` é `UUID`, sem default gerado no banco nem no Python — precisa ser fornecido de forma **determinística** pela camada de ingestão (ver seção 2.1, abaixo), porque é a chave de idempotência pedida pelo RF-008 e precisa sobreviver a reenvio de mensagem MQTT.
+- **Estratégia de ID:** `BIGSERIAL` (autoincremento padrão do SQLAlchemy para `BigInteger, primary_key=True` no dialeto Postgres) como PK interna em todas as tabelas — simples, sequencial, suficiente para o volume do MVP. Exceção: `leituras_brutas.event_id` é `VARCHAR(71)`, sem default; preserva diretamente o ID canônico determinístico `sha256:<64 hex>` da ISS-005.
 
 ## 2. Entidades e colunas
 
@@ -104,6 +104,7 @@ Hierarquia física simples: andar → setor → zona. `zonas.observacoes` é o l
 | fabricante | varchar | NOT NULL |
 | modelo | varchar | NOT NULL |
 | identificador_serial | varchar | UNIQUE, NOT NULL |
+| reader_id | varchar | UNIQUE, NULL — identidade lógica MQTT cadastrada explicitamente |
 | endereco_rede | varchar | NULL (IP/hotspot, ex.: DR-pad) |
 | status | varchar | NOT NULL, default `offline` |
 | ultimo_heartbeat_em | timestamptz | NULL |
@@ -127,10 +128,11 @@ Hierarquia física simples: andar → setor → zona. `zonas.observacoes` é o l
 | Coluna | Tipo | Regra |
 |---|---|---|
 | id | bigint | PK |
-| event_id | uuid | UNIQUE, NOT NULL — chave de idempotência (ver 2.1 abaixo) |
+| event_id | varchar(71) | UNIQUE, NOT NULL — chave de idempotência (ver 2.1 abaixo) |
 | antena_id | bigint | FK → antenas, NOT NULL |
 | epc | varchar | NOT NULL — **sem FK direta para `tags`**: uma leitura pode chegar de um EPC ainda não cadastrado, e a leitura bruta não pode ser perdida por causa disso |
-| rssi | numeric | NOT NULL — **pendência de alinhamento, ver seção 2.2 abaixo**: a regra "/100 quando abs>100" é uma convenção documentada aqui, NÃO uma regra validada fisicamente contra os leitores reais; o contrato real de normalização precisa ser fechado com a ISS-005/006. |
+| rssi | numeric | NULL quando a unidade física não está comprovada |
+| dados_origem | jsonb | NULL para compatibilidade; novos eventos guardam metadata canônica, topic, adapter, qos e retain |
 | lido_em | timestamptz | NOT NULL — timestamp do leitor |
 | recebido_em | timestamptz | NOT NULL, default now() — quando chegou no backend |
 
@@ -138,19 +140,27 @@ Hierarquia física simples: andar → setor → zona. `zonas.observacoes` é o l
 
 > Nota para RNF-015 (retenção/volume): esta é a tabela que mais cresce. Fica registrado como decisão futura (não bloqueante pro MVP) considerar particionamento por mês, algo natural de fazer depois via `TimescaleDB` no próprio Postgres, sem trocar de banco.
 
-#### 2.1 — Idempotência real do `event_id` (revisão de código, Otávio)
+#### 2.1 — Idempotência de mensagem
 
-`UNIQUE(event_id)` sozinho só impede que dois valores **iguais** dupliquem — não garante idempotência de retry. Se `event_id` fosse gerado com `uuid.uuid4()` a cada tentativa (como estava na primeira versão desta modelagem), reenviar a mesma mensagem MQTT geraria um UUID novo a cada vez, e as duas leituras (a original e a reenviada) passariam pelo `UNIQUE` sem problema — a constraint não protegeria nada na prática.
+A PR #37 / ISS-005 já está integrada à main. Seu `event_id` canônico é a fonte
+de verdade: `sha256:` e 64 hexadecimais. A persistência usa esse valor diretamente
+com `ON CONFLICT (event_id) DO NOTHING RETURNING id`, inclusive sob concorrência.
+IDs diferentes permanecem distintos mesmo para o mesmo EPC. Isto não é debounce.
 
-**Correção aplicada:** o model não gera mais `event_id` automaticamente (sem default nem no Python nem no banco). A responsabilidade passa a ser explícita da camada de ingestão (**ISS-005/ISS-006**), que deve gerar um `event_id` **determinístico** — reproduzível a partir do conteúdo da própria leitura — por exemplo `uuid.uuid5(NAMESPACE, f"{antena_id}|{epc}|{lido_em.isoformat()}|{rssi}")`, ou o identificador nativo de mensagem do leitor, se o payload trouxer um. Assim, reenviar a mesma leitura MQTT produz o mesmo `event_id`, e o `UNIQUE` passa a bloquear o duplicado de verdade. A fórmula exata de derivação fica para a implementação da ISS-006 (depende do formato real do payload dos leitores), não é definida nesta migration.
+#### 2.2 — Alinhamento com o contrato canônico (ISS-006)
 
-#### 2.2 — Pendência de alinhamento com a ISS-005/006 (revisão de código, Otávio)
+A migration `da436f7c75b3`, após `44ef89b10f17`, converte UUID para texto com
+`event_id::text`, permite RSSI nulo e adiciona dados_origem e leitores.reader_id.
+Reader_id é independente do serial e não recebe preenchimento automático.
+A antena é resolvida pelo reader_id lógico e porta_numero daquele leitor.
+`lido_em` recebe o timestamp canônico; `recebido_em` recebe received_at_utc.
+Ambos são enviados como datetimes UTC com fuso. RSSI bruto/unidade permanecem
+na metadata em dados_origem, sem divisão por 100 ou escala presumida.
 
-A proposta em andamento da ISS-005 ([PR #37](https://github.com/OtavioBrandao/rfid-hospital-mvp/pull/37) — **ainda não integrado à `main`**, tratado aqui como proposta, não como contrato fechado) usa `event_id` como **texto SHA-256** e `rssi` **nullable**, com o valor e a unidade originais guardados em metadata separada. Este modelo usa `event_id` como `UUID` e `rssi` **obrigatório** (já numérico, pós-normalização).
-
-Esses dois contratos — o do model de persistência (aqui) e o da ingestão (ISS-005/PR #37) — **ainda não foram conciliados**. Isso precisa ser decidido em conjunto **antes da implementação da ISS-006** (que é exatamente a camada que liga um ao outro). Não é uma decisão que este documento ou este PR resolvem sozinhos — fica registrado como pendência explícita, não como "detalhe menor".
-
-Por esse motivo, a regra de RSSI ("/100 quando abs>100") citada na tabela acima é apenas uma convenção **documentada aqui**, não uma regra **validada fisicamente** contra os leitores reais — não deve ser lida como um requisito fechado.
+O downgrade é reversível no banco vazio do CI. Após gravar IDs `sha256:*`, é
+necessário migrar ou remover os dados deliberadamente antes de voltar a UUID;
+essa conversão não é semanticamente possível. RSSI nulo também impede restaurar
+NOT NULL. A migration falha sem apagar ou inventar dados nessas situações.
 
 ### `passagens` (RF-009 a RF-011)
 | Coluna | Tipo | Regra |
@@ -231,7 +241,7 @@ Uma leitura de EPC não cadastrado (sem nenhuma linha em `associacoes_tag_equipa
 ## 5. Decisões e dúvidas pendentes do HUPAA
 
 - **Nomenclatura oficial de andares/setores:** o hospital já tem uma codificação própria (ex.: "4º andar — Ala Norte")? Alinhar `zonas.nome` a essa nomenclatura desde já evita retrabalho depois.
-- **Retenção de `leituras_brutas` (RNF-015):** ainda sem patamar formal — decisão do MVP é reter tudo e revisitar quando o volume no Neon free tier se tornar um limitador real.
+- **Retenção de `leituras_brutas` (RNF-015):** **TBD com HUPAA**; sem expurgo automático. Tamanho de armazenamento exige medição das linhas e índices reais.
 - **Backup/recuperação (RNF-011):** confirmar qual plano do Neon garante quantos dias de *point-in-time recovery* — hoje ainda não definimos RPO/RTO formal.
 - **Residência de dados:** já sinalizado no documento de hospedagem — se o HUPAA exigir dado em território nacional, a região `AWS US East 2 (Ohio)` do Neon precisa ser revista.
 
