@@ -32,7 +32,8 @@ O objetivo é oferecer comandos repetíveis para:
 | ISS-001 | Forneceu o contrato MQTT local/cloud que o Compose consome. |
 | ISS-002b | Forneceu o contrato de PostgreSQL gerenciado, com `DATABASE_URL` direta para migrations e `APP_DATABASE_URL` pooled para a aplicação. |
 | ISS-002c | Forneceu o fluxo Alembic final; a ISS-003 o consome sem duplicar configuração. |
-| ISS-006 | Implementará persistência de leituras RFID no PostgreSQL; não faz parte desta entrega. |
+| ISS-006 | Implementou persistência idempotente das leituras no PostgreSQL. |
+| ISS-007 | Acrescentou recuperação automática e sessão persistente ao ambiente atual. |
 
 ## 5. O que foi implementado agora
 
@@ -59,16 +60,17 @@ flowchart LR
     SIM[Simulador / Leitor] --> MQTT[Mosquitto local]
     MQTT --> ING[Ingestor Python]
     ING --> JSONL[raw_events.jsonl]
+    ING --> PG[(PostgreSQL local)]
 
-    MIG[Alembic] --> PG[(PostgreSQL local)]
+    MIG[Alembic] --> PG
 ```
 
 O ingestor e o simulador usam `mosquitto:1883` dentro da rede Docker. O host usa
 `localhost` e a porta publicada. A migration usa `postgres:5432`; nunca usa
 `localhost` dentro do contêiner.
 
-PostgreSQL/schema e MQTT/JSONL são dois ramos independentes neste momento. Não há
-seta do ingestor para PostgreSQL porque essa persistência pertence à ISS-006.
+Desde a ISS-006, o ingestor grava o evento canônico no PostgreSQL antes do ACK.
+A ISS-007 adiciona recuperação automática quando broker ou banco ficam indisponíveis.
 
 ## 8. Arquitetura com serviços gerenciados
 
@@ -103,7 +105,8 @@ contexto final. PostgreSQL também fica fixado em `16.15-alpine`.
 
 ## 10. Volumes
 
-`postgres_data` preserva somente o PostgreSQL local entre reinicializações. O
+`postgres_data` preserva o PostgreSQL local. `mosquitto_data` preserva sessões e
+mensagens do Mosquitto entre reinicializações do contêiner. O
 diretório `./data` é montado em `/app/data` nos ingestors; assim, o JSONL continua
 visível no host e não entra na imagem. `data/*` já é ignorado, exceto `.gitkeep`.
 
@@ -263,11 +266,12 @@ PostgreSQL vazio -> Alembic -> schema atual
 Mosquitto -> simulador -> ingestor -> JSONL
 ```
 
-Ele não prova MQTT -> PostgreSQL.
+Ele prova MQTT -> JSONL/PostgreSQL. `make smoke-resilience` interrompe e restaura
+broker e banco descartáveis para validar reconexão, redelivery e idempotência.
 
 ## 21. Reset local seguro
 
-Este comando é destrutivo para o banco PostgreSQL **local**:
+Este comando é destrutivo para PostgreSQL e estado de sessão Mosquitto **locais**:
 
 ```bash
 CONFIRM_RESET_LOCAL=APAGAR make reset-local
@@ -280,7 +284,6 @@ apagados automaticamente.
 
 ## 22. Fora do escopo
 
-- persistir eventos RFID no PostgreSQL (ISS-006);
 - criar backend, API, dashboard ou regras de passagem;
 - alterar o provisionamento ou as credenciais do Neon definidos pela ISS-002b;
 - substituir as convenções e o fluxo de migrations definidos pela ISS-002c;
