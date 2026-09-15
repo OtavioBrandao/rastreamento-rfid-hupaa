@@ -86,7 +86,7 @@ services:
       MQTT_KEEPALIVE: ${MQTT_KEEPALIVE:-60}
       EVENTS_FILE: ${EVENTS_FILE:-data/raw_events.jsonl}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-rfid_dev}:${POSTGRES_PASSWORD:-rfid_dev_only}@postgres:5432/${POSTGRES_DB:-rfid_hospital_dev}
+      APP_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-rfid_dev}:${POSTGRES_PASSWORD:-rfid_dev_only}@postgres:5432/${POSTGRES_DB:-rfid_hospital_dev}
     volumes:
       - ./data:/app/data
     depends_on:
@@ -106,7 +106,6 @@ services:
   ingestor-managed:
     <<: *python-service
     profiles: ["managed"]
-    entrypoint: ["/app/docker/require-database-url.sh"]
     command: ["python", "-m", "rfid_ingestion"]
     environment:
       MQTT_MODE: cloud
@@ -122,7 +121,7 @@ services:
       MQTT_KEEPALIVE: ${MQTT_KEEPALIVE:-60}
       EVENTS_FILE: ${EVENTS_FILE:-data/raw_events.jsonl}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      DATABASE_URL: ${DATABASE_URL:-}
+      APP_DATABASE_URL: ${APP_DATABASE_URL:-}
     volumes:
       - ./data:/app/data
     depends_on:
