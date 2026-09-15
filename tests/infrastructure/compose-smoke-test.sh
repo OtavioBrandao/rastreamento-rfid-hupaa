@@ -17,6 +17,7 @@ export POSTGRES_DB=rfid_smoke
 export POSTGRES_USER=rfid_smoke
 export POSTGRES_PASSWORD=rfid_smoke_only
 export EVENTS_FILE="data/$OUTPUT_BASENAME"
+export EZ700_TIMESTAMP_FORMAT=epoch_ms
 
 compose() {
     docker compose --project-name "$COMPOSE_PROJECT" \
@@ -38,10 +39,14 @@ compose up -d --build --wait
 compose exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 
 migration_output=$(compose run --rm migrate-local alembic current 2>&1)
-grep -q '44ef89b10f17 (head)' <<<"$migration_output"
+grep -q 'da436f7c75b3 (head)' <<<"$migration_output"
 compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
     -tAc "SELECT to_regclass('public.leituras_brutas') IS NOT NULL" | grep -qx t
 compose ps --services --filter status=running | grep -qx ingestor-local
+
+# Topologia explícita apenas no banco descartável deste teste.
+compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    < tests/fixtures/topology.sql
 
 compose run --rm --no-deps \
     -e MQTT_CLIENT_ID=easy-smoke-simulator \
@@ -63,11 +68,14 @@ path = Path(sys.argv[1])
 if not path.is_file():
     raise SystemExit("JSONL do smoke test não foi criado")
 events = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-if len(events) != 1 or events[0]["parse_error"] is not None:
+if len(events) != 1 or events[0]["parse_error"] is not None or events[0]["canonical_event"] is None:
     raise SystemExit("JSONL do smoke test não contém exatamente um evento válido")
 if events[0]["topic"] != "easy/dev/hupaa/portal-01/reader-01/readings":
     raise SystemExit("JSONL do smoke test contém tópico inesperado")
 PY
+
+compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    -tAc "SELECT count(*) FROM leituras_brutas" | grep -qx 1
 
 CONFIRM_RESET_LOCAL=APAGAR bash "$ROOT_DIR/scripts/reset-local-dev.sh"
 if docker volume inspect "${COMPOSE_PROJECT}_postgres_data" >/dev/null 2>&1; then
@@ -77,7 +85,7 @@ fi
 
 compose up -d --build --wait
 migration_output=$(compose run --rm migrate-local alembic current 2>&1)
-grep -q '44ef89b10f17 (head)' <<<"$migration_output"
+grep -q 'da436f7c75b3 (head)' <<<"$migration_output"
 
-printf '[PASSOU] Postgres/Mosquitto saudáveis, migration no head, ingestor e MQTT→JSONL.\n'
+printf '[PASSOU] Postgres/Mosquitto saudáveis, migration no head, ingestor e MQTT→JSONL/PostgreSQL.\n'
 printf '[PASSOU] Reset local removeu o volume e a migration recriou o schema vazio.\n'

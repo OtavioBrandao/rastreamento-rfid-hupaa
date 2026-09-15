@@ -4,14 +4,16 @@ import os
 import uuid
 
 import pytest
+from alembic.config import Config
 from sqlalchemy import create_engine
 from sqlalchemy.schema import CreateSchema, DropSchema
 
-from db.models import Andar, Antena, Base, Leitor, Setor, Zona
+from alembic import command
+from db.models import Andar, Antena, Leitor, Setor, Zona
 
 
 @pytest.fixture
-def pg_engine():
+def pg_empty_schema(monkeypatch):
     url = os.environ.get("TEST_DATABASE_URL")
     if not url:
         pytest.skip("exige TEST_DATABASE_URL de PostgreSQL descartável")
@@ -19,14 +21,28 @@ def pg_engine():
     schema = "iss006_" + uuid.uuid4().hex
     with engine.begin() as connection:
         connection.execute(CreateSchema(schema))
-    isolated = engine.execution_options(schema_translate_map={None: schema})
+    isolated_url = engine.url.update_query_dict({"options": "-csearch_path=" + schema})
+    isolated = create_engine(isolated_url, hide_parameters=True)
+    monkeypatch.setenv("DATABASE_URL", isolated_url.render_as_string(hide_password=False))
     try:
-        Base.metadata.create_all(isolated)
         yield isolated
     finally:
+        isolated.dispose()
         with engine.begin() as connection:
             connection.execute(DropSchema(schema, cascade=True))
         engine.dispose()
+
+
+def migration_config():
+    config = Config()
+    config.set_main_option("script_location", "alembic")
+    return config
+
+
+@pytest.fixture
+def pg_engine(pg_empty_schema):
+    command.upgrade(migration_config(), "head")
+    return pg_empty_schema
 
 
 @pytest.fixture
