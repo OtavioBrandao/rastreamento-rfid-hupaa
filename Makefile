@@ -7,7 +7,7 @@ COMPOSE_MANAGED = docker compose --env-file $(MANAGED_ENV) --profile managed
 
 .PHONY: local-up managed-up stop-local stop-managed status-local status-managed \
 	logs-local logs-managed migrate-local migrate-managed migration-current-local \
-	migration-current-managed simulator-local tests smoke reset-local
+	migration-current-managed simulator-local tests smoke smoke-resilience reset-local
 
 local-up:
 	$(COMPOSE_LOCAL) up -d --build --wait
@@ -57,6 +57,9 @@ tests:
 
 smoke:
 	bash tests/infrastructure/compose-smoke-test.sh
+
+smoke-resilience:
+	bash tests/infrastructure/resilience-smoke-test.sh
 
 reset-local:
 	COMPOSE_PROJECT_NAME=$(LOCAL_PROJECT) \
