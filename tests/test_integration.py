@@ -9,15 +9,37 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
+from sqlalchemy import func, select
+
+from db.models import Antena, Leitor, LeituraBruta
 from rfid_ingestion.config import Settings
 from rfid_ingestion.connection import create_client
 from rfid_ingestion.mqtt_client import MqttReceiver
 from rfid_ingestion.persistence import JsonlEventStore
+from rfid_ingestion.repository import RawReadingRepository
 from rfid_ingestion.verification import run_simulator
 
 
 @unittest.skipUnless(os.getenv("RUN_MQTT_INTEGRATION") == "1", "exige Mosquitto local explícito")
 class PipelineIntegrationTests(unittest.TestCase):
+    @pytest.fixture(autouse=True)
+    def database(self, pg_engine, topology):
+        self.engine = pg_engine
+        self.repository = RawReadingRepository(pg_engine)
+        with pg_engine.begin() as connection:
+            for name in ("ez", "sim", "reader-1", "reader-2"):
+                reader = connection.execute(Leitor.__table__.insert().values(
+                    reader_id=name, identificador_serial="serial-" + name,
+                    fabricante="teste", modelo="teste").returning(Leitor.id)).scalar_one()
+                connection.execute(Antena.__table__.insert().values(
+                    leitor_id=reader, porta_numero=1, zona_associada_id=topology["zone"],
+                    funcao="indefinido"))
+
+    def count_readings(self):
+        with self.engine.connect() as connection:
+            return connection.scalar(select(func.count()).select_from(LeituraBruta))
+
     def test_different_adapters_equivalent_readings_and_redelivery(self):
         suffix = uuid.uuid4().hex[:8]
         topic = f"easy/test/hupaa/{suffix}/+/readings"
@@ -30,7 +52,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                "observed_at": "2021-09-27T13:16:35.291-03:00", "reader_id": "sim"}
         with TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            receiver = MqttReceiver(settings, JsonlEventStore(path))
+            receiver = MqttReceiver(settings, JsonlEventStore(path), self.repository)
             clients = []
             try:
                 receiver.start()
@@ -56,6 +78,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                         break
                     time.sleep(.05)
                 self.assertEqual(len(events), 4)
+                self.assertEqual(self.count_readings(), 2)
                 canonical = [event["canonical_event"] for event in events]
                 self.assertTrue(all(canonical))
                 self.assertEqual({event["reader_id"] for event in canonical}, {"ez", "sim"})
@@ -76,7 +99,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                    MQTT_CLIENT_ID=f"ingestor-{suffix}", EZ700_TIMESTAMP_FORMAT="epoch_ms")
         with TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            receiver = MqttReceiver(Settings.from_env(env), JsonlEventStore(path))
+            receiver = MqttReceiver(Settings.from_env(env), JsonlEventStore(path), self.repository)
             try:
                 receiver.start()
                 publishers = [env | dict(MQTT_CLIENT_ID=f"reader-{n}-{suffix}",
@@ -92,6 +115,7 @@ class PipelineIntegrationTests(unittest.TestCase):
                         break
                     time.sleep(.05)
                 self.assertEqual(len(events), 42)
+                self.assertEqual(self.count_readings(), 40)
                 self.assertEqual(sum(e["parse_error"] is not None for e in events), 1)
                 self.assertEqual(sum(bool(e["validation_errors"]) for e in events), 1)
                 self.assertEqual(sum(e["canonical_event"] is not None for e in events), 40)

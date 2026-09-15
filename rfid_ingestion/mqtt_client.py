@@ -14,6 +14,7 @@ from .config import Settings
 from .connection import create_client
 from .parsing import build_event
 from .persistence import JsonlEventStore
+from .repository import PersistenceError, PersistenceResult, RawReadingRepository
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,13 +22,16 @@ LOGGER = logging.getLogger(__name__)
 class MqttReceiver:
     """Mantém a assinatura MQTT e persiste cada mensagem recebida."""
 
-    def __init__(self, settings: Settings, store: JsonlEventStore) -> None:
+    def __init__(self, settings: Settings, store: JsonlEventStore,
+                 repository: RawReadingRepository) -> None:
         self.settings = settings
         self.store = store
+        self.repository = repository
         self.ready = Event()
         self.failed = Event()
         self.failure: str | None = None
         self.client = create_client(settings)
+        self.client.manual_ack_set(True)
         self.client.on_connect = self._on_connect
         self.client.on_connect_fail = self._on_connect_fail
         self.client.on_disconnect = self._on_disconnect
@@ -103,6 +107,8 @@ class MqttReceiver:
         _userdata: Any,
         message: mqtt.MQTTMessage,
     ) -> None:
+        if self.failed.is_set():
+            return
         try:
             event = build_event(
                 topic=message.topic,
@@ -112,15 +118,47 @@ class MqttReceiver:
                 settings=self.settings,
             )
             self.store.append(event)
+        except Exception:
+            self._fail("persistência JSONL")
+            return
+        try:
             canonical = event["canonical_event"]
+            result = (self.repository.persist(event) if canonical else
+                      PersistenceResult("rejected", reason="invalid_input"))
+            # A auditoria original precede o banco. Rejeições de topologia
+            # recebem um registro complementar, sem repetir o payload.
+            outcome = {
+                "event_type": "rfid_persistence", "status": result.status,
+                "reason": result.reason,
+                "event_id": canonical["event_id"] if canonical else None,
+                "received_at_utc": event["received_at_utc"],
+            }
+            if canonical and result.status == "rejected":
+                try:
+                    self.store.append(outcome)
+                except Exception:
+                    self._fail("persistência JSONL")
+                    return
+            LOGGER.log(logging.WARNING if result.status == "rejected" else logging.INFO,
+                       json.dumps(outcome))
             LOGGER.log(logging.INFO if canonical else logging.WARNING, json.dumps({
                 "event_type": "rfid_normalization", "reader_id": event["reader_id"],
                 "adapter": event["adapter"], "result": "accepted" if canonical else "rejected",
                 "reasons": ([event["parse_error"]] if event["parse_error"] else []) + event["validation_errors"],
                 "event_id": canonical["event_id"] if canonical else None,
             }))
+        except PersistenceError:
+            self._fail("persistência PostgreSQL")
+            return
         except Exception:
-            self._fail("persistência JSONL")
+            self._fail("processamento de persistência")
+            return
+        if message.qos == 1:
+            try:
+                if self.client.ack(message.mid, message.qos) != mqtt.MQTT_ERR_SUCCESS:
+                    self._fail("envio de ACK")
+            except Exception:
+                self._fail("envio de ACK")
 
     def start(self, timeout: float = 10) -> None:
         self.client.connect(self.settings.mqtt_host, self.settings.mqtt_port,

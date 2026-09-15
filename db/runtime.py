@@ -10,8 +10,9 @@ class DatabaseConfigurationError(ValueError):
     """Erro seguro de configuração, sem reproduzir a URL recebida."""
 
 
-def create_app_engine() -> Engine:
-    raw = os.environ.get("APP_DATABASE_URL", "")
+def create_app_engine(environ=None) -> Engine:
+    source = os.environ if environ is None else environ
+    raw = source.get("APP_DATABASE_URL", "")
     if not raw.strip():
         raise DatabaseConfigurationError("APP_DATABASE_URL é obrigatória para persistência PostgreSQL")
     try:
