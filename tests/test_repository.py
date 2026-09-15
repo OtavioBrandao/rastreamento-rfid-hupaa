@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 from sqlalchemy import event as sql_event
 from sqlalchemy import func, select
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from db.models import LeituraBruta
 from db.runtime import DatabaseConfigurationError, create_app_engine
@@ -146,4 +146,31 @@ def test_app_url_is_used_directly_without_migration_fallback(monkeypatch):
         assert create_app_engine() is factory.return_value
     args, kwargs = factory.call_args
     assert args[0].password == "fake@value"
-    assert kwargs == {"hide_parameters": True, "echo": False}
+    assert kwargs == {"hide_parameters": True, "echo": False, "pool_pre_ping": True}
+
+
+def test_database_error_classification_does_not_expose_details():
+    repository = RawReadingRepository(Mock())
+    repository.engine.connect.side_effect = OperationalError(
+        "PRIVATE SQL", {}, Exception("PRIVATE PASSWORD")
+    )
+    with pytest.raises(PersistenceError) as transient:
+        repository.check_available()
+    assert transient.value.category == "temporary_database"
+    assert "PRIVATE" not in str(transient.value)
+
+    repository.engine.connect.side_effect = ProgrammingError(
+        "PRIVATE SQL", {}, Exception("PRIVATE PASSWORD")
+    )
+    with pytest.raises(PersistenceError) as permanent:
+        repository.check_available()
+    assert permanent.value.category == "permanent_configuration"
+    assert "PRIVATE" not in str(permanent.value)
+
+    repository.engine.connect.side_effect = OperationalError(
+        None, None, Exception("password authentication failed for PRIVATE role")
+    )
+    with pytest.raises(PersistenceError) as authentication:
+        repository.check_available()
+    assert authentication.value.category == "permanent_configuration"
+    assert "PRIVATE" not in str(authentication.value)
