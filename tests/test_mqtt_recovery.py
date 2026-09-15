@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import ssl
 import time
 from threading import Thread
 from unittest.mock import Mock, patch
@@ -66,6 +67,19 @@ def test_server_unavailable_is_temporary() -> None:
 
     assert not instance.failed.is_set()
     assert instance.disconnected.is_set()
+
+
+def test_invalid_tls_certificate_is_permanent_and_not_retried() -> None:
+    instance, client = receiver()
+    client.connect.side_effect = ssl.SSLCertVerificationError(
+        1, "PRIVATE certificate detail"
+    )
+
+    instance._network_session()
+
+    assert instance.failed.is_set()
+    assert instance.failure_category == "permanent_configuration"
+    assert client.connect.call_count == 1
 
 
 def test_unavailable_broker_retries_with_backoff_without_busy_loop() -> None:

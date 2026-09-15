@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import signal
+import ssl
 import time
 from threading import Event, Thread, current_thread, main_thread
 from typing import Any, Callable
@@ -310,8 +311,20 @@ class MqttReceiver:
                 self.settings.mqtt_port,
                 keepalive=self.settings.mqtt_keepalive,
             )
+        except ssl.SSLCertVerificationError:
+            self._fail(
+                "validação do certificado MQTT",
+                FailureCategory.PERMANENT_CONFIGURATION,
+            )
+            return
         except OSError:
             self._on_connect_fail(self.client, None)
+            return
+        except ValueError:
+            self._fail(
+                "configuração da conexão MQTT",
+                FailureCategory.PERMANENT_CONFIGURATION,
+            )
             return
         if result != mqtt.MQTT_ERR_SUCCESS:
             self._on_connect_fail(self.client, None)
