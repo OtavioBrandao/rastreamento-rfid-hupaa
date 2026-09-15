@@ -93,6 +93,7 @@ erDiagram
         string fabricante
         string modelo
         string identificador_serial UK
+        string reader_id UK "logico MQTT, nullable"
         string endereco_rede
         string status
         timestamptz ultimo_heartbeat_em
@@ -108,10 +109,11 @@ erDiagram
 
     LEITURAS_BRUTAS {
         bigint id PK
-        uuid event_id UK "gerado deterministicamente na ingestao, sem default"
+        varchar_71 event_id UK "SHA-256 canonico, sem default"
         bigint antena_id FK
         string epc "sem FK direta p/ tags"
-        numeric rssi
+        numeric rssi "nullable"
+        jsonb dados_origem
         timestamptz lido_em
         timestamptz recebido_em
     }
