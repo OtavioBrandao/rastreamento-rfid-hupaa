@@ -49,21 +49,31 @@ class MqttReceiver:
         self.failed = Event()
         self.shutdown = Event()
         self.disconnected = Event()
+        self.database_unavailable = Event()
         self.failure: str | None = None
         self.failure_category: FailureCategory | None = None
         self._worker: Thread | None = None
+        self._shutdown_complete_logged = False
         self._ever_ready = False
         self._recovering = False
         self._recovery_started_at: float | None = None
         self._mqtt_attempt = 0
-        policy = BackoffPolicy(
+        mqtt_policy = BackoffPolicy(
             settings.mqtt_reconnect_initial_delay,
             settings.mqtt_reconnect_max_delay,
             settings.mqtt_reconnect_multiplier,
             settings.mqtt_reconnect_jitter,
         )
+        db_policy = BackoffPolicy(
+            settings.db_retry_initial_delay,
+            settings.db_retry_max_delay,
+            settings.db_retry_multiplier,
+            settings.db_retry_jitter,
+        )
         options = {} if random_source is None else {"random_source": random_source}
-        self._mqtt_backoff = Backoff(policy, **options)
+        self._mqtt_backoff = Backoff(mqtt_policy, **options)
+        self._db_backoff = Backoff(db_policy, **options)
+        self._db_recovery_started_at: float | None = None
         self.client = create_client(settings, persistent_session=True)
         self.client.manual_ack_set(True)
         self.client.on_connect = self._on_connect
@@ -175,7 +185,11 @@ class MqttReceiver:
     ) -> None:
         self.ready.clear()
         self.disconnected.set()
-        if self.shutdown.is_set() or self.failed.is_set():
+        if (
+            self.shutdown.is_set()
+            or self.failed.is_set()
+            or self.database_unavailable.is_set()
+        ):
             return
         if self._recovery_started_at is None:
             self._recovery_started_at = time.monotonic()
@@ -192,7 +206,11 @@ class MqttReceiver:
         _userdata: Any,
         message: mqtt.MQTTMessage,
     ) -> None:
-        if self.failed.is_set() or self.shutdown.is_set():
+        if (
+            self.failed.is_set()
+            or self.shutdown.is_set()
+            or self.database_unavailable.is_set()
+        ):
             return
         try:
             event = build_event(
@@ -248,8 +266,25 @@ class MqttReceiver:
                     }
                 ),
             )
-        except PersistenceError:
-            self._fail("persistência PostgreSQL")
+        except PersistenceError as error:
+            if error.category == FailureCategory.TEMPORARY_DATABASE:
+                self.ready.clear()
+                self.database_unavailable.set()
+                self._recovering = True
+                self._db_recovery_started_at = time.monotonic()
+                _log(
+                    logging.ERROR,
+                    "database_unavailable",
+                    failure_category=FailureCategory.TEMPORARY_DATABASE,
+                )
+                # Sem PUBACK. A sessão persistente mantém o trabalho pendente
+                # no broker enquanto a aplicação espera o banco voltar.
+                self.client.disconnect()
+            else:
+                self._fail(
+                    "persistência PostgreSQL",
+                    FailureCategory.PERMANENT_CONFIGURATION,
+                )
             return
         except Exception:
             self._fail("processamento de persistência")
@@ -285,15 +320,70 @@ class MqttReceiver:
         self.disconnected.clear()
         while not self.shutdown.is_set() and not self.failed.is_set():
             result = self.client.loop(timeout=0.2)
-            if result != mqtt.MQTT_ERR_SUCCESS or self.disconnected.is_set():
+            if (
+                result != mqtt.MQTT_ERR_SUCCESS
+                or self.disconnected.is_set()
+                or self.database_unavailable.is_set()
+            ):
                 break
+
+    def _recover_database(self) -> bool:
+        delay = self._db_backoff.next_delay()
+        _log(
+            logging.WARNING,
+            "database_retry_scheduled",
+            attempt=self._db_backoff.attempt,
+            delay_seconds=round(delay, 3),
+            failure_category=FailureCategory.TEMPORARY_DATABASE,
+        )
+        if self.shutdown.wait(delay):
+            return False
+        _log(
+            logging.INFO,
+            "database_retry_attempt",
+            attempt=self._db_backoff.attempt,
+            failure_category=FailureCategory.TEMPORARY_DATABASE,
+        )
+        try:
+            self.repository.check_available()
+        except PersistenceError as error:
+            if error.category == FailureCategory.PERMANENT_CONFIGURATION:
+                self._fail(
+                    "recuperação PostgreSQL",
+                    FailureCategory.PERMANENT_CONFIGURATION,
+                )
+                return False
+            return True
+
+        elapsed = (
+            round(time.monotonic() - self._db_recovery_started_at, 3)
+            if self._db_recovery_started_at is not None
+            else 0.0
+        )
+        successful_attempt = self._db_backoff.attempt
+        self.database_unavailable.clear()
+        self._db_recovery_started_at = None
+        self._db_backoff.reset()
+        _log(
+            logging.INFO,
+            "database_recovered",
+            attempt=successful_attempt,
+            elapsed_seconds=elapsed,
+        )
+        return True
 
     def _supervise(self) -> None:
         try:
             while not self.shutdown.is_set() and not self.failed.is_set():
+                if self.database_unavailable.is_set():
+                    if not self._recover_database():
+                        break
+                    continue
                 self._network_session()
                 if self.shutdown.is_set() or self.failed.is_set():
                     break
+                if self.database_unavailable.is_set():
+                    continue
                 self.ready.clear()
                 self._recovering = True
                 if self._recovery_started_at is None:
@@ -349,7 +439,9 @@ class MqttReceiver:
         worker = self._worker
         if worker is not None and worker is not current_thread():
             worker.join()
-        _log(logging.INFO, "shutdown_complete")
+        if not self._shutdown_complete_logged:
+            _log(logging.INFO, "shutdown_complete")
+            self._shutdown_complete_logged = True
 
     def run(self) -> int:
         _log(
