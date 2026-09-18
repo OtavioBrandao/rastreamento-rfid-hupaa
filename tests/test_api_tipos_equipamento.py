@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from api.database import get_db
 from api.main import app
+from api.normalizacao import normalizar_nome
 from db.models import Equipamento
 
 
@@ -217,11 +218,15 @@ def test_inativar_devolve_200_e_ativo_false(client):
 def test_inativar_tipo_em_uso_devolve_409(client, engine):
     criado = _criar(client, "Maca").json()
     with Session(bind=engine) as session:
+        # `identificador_interno_normalizado` é NOT NULL (ISS-008); a linha
+        # é criada direto pelo model (sem passar pelo serviço de
+        # equipamentos) porque este teste é do domínio de tipos_equipamento.
         session.add(
             Equipamento(
                 nome="Maca do 3o andar",
                 tipo_id=criado["id"],
                 identificador_interno="EQ-API-001",
+                identificador_interno_normalizado=normalizar_nome("EQ-API-001"),
             )
         )
         session.commit()
