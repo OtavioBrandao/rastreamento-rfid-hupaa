@@ -1,5 +1,5 @@
 """
-Aplicação FastAPI do MVP (ISS-008, ISS-009, ISS-010).
+Aplicação FastAPI do MVP (ISS-008, ISS-009, ISS-010, ISS-011).
 
 Sobe com:
     uvicorn api.main:app --reload
@@ -9,6 +9,7 @@ from fastapi import FastAPI
 
 from api.router_associacao import router as router_associacao
 from api.router_equipamento import router as router_equipamento
+from api.router_localizacao import router as router_localizacao
 from api.router_tipos_equipamento import router as router_tipos_equipamento
 
 app = FastAPI(
@@ -24,6 +25,7 @@ app = FastAPI(
 app.include_router(router_tipos_equipamento)
 app.include_router(router_equipamento)
 app.include_router(router_associacao)
+app.include_router(router_localizacao)
 
 
 @app.get("/health", tags=["infra"], summary="Liveness check")
