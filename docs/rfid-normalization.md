@@ -174,5 +174,4 @@ RSSIs diferentes; a equivalência exata é verificada pela integração acima.
 Cloud continua usando os mesmos Settings, CA/TLS, autenticação, assinatura e
 QoS 1. Nenhum teste desta issue requer HiveMQ nem representa validação física.
 
-Revisão Thiego/Otávio permanece necessária antes de merge; discutir RSSI nullable,
-perfil numérico explícito e identidade por bytes como decisões de contrato.
+O alinhamento com a ISS-006 foi concluído: RSSI pode permanecer nulo quando a unidade física não está comprovada, e o `event_id` canônico determinístico continua sendo a identidade usada para idempotência de mensagem.
