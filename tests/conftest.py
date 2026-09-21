@@ -1,6 +1,6 @@
 """
 Fixtures compartilhadas dos testes que precisam de banco (ISS-008, ISS-009,
-ISS-010).
+ISS-010, ISS-011).
 
 Nada de sqlite nem mock: as regras testadas aqui (UNIQUE de
 `nome_normalizado`, `server_default now()`, TRUNCATE ... CASCADE) só
@@ -38,17 +38,25 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 # Só estas: o TRUNCATE ... CASCADE limparia meio schema junto se a lista
-# crescesse sem necessidade. Cresceu de ("equipamentos", "tipos_equipamento")
-# na ISS-009/ISS-008 para incluir tags/associacoes_tag_equipamento/
-# auditorias na ISS-010 — mesmo critério: só o que os testes deste CRUD
-# escrevem. TRUNCATE com várias tabelas na mesma instrução resolve a ordem
-# de dependência sozinho (não precisa listar filhos antes de pais).
+# crescesse sem necessidade. Começou em ("equipamentos", "tipos_equipamento")
+# (ISS-009/ISS-008), ganhou tags/associacoes/auditorias (ISS-010) e a
+# hierarquia física + o que referencia zonas (ISS-011) — mesmo critério: só
+# o que os testes escrevem. TRUNCATE com várias tabelas na mesma instrução
+# resolve a ordem de dependência sozinho (não precisa listar filhos antes de
+# pais); o CASCADE leva junto o que depender delas (passagens, leituras...).
 TABELAS_DO_CRUD = (
     "auditorias",
     "associacoes_tag_equipamento",
+    "historico_movimentacoes",
     "equipamentos",
     "tipos_equipamento",
     "tags",
+    "antenas",
+    "leitores",
+    "portais",
+    "zonas",
+    "setores",
+    "andares",
 )
 
 
@@ -118,20 +126,34 @@ def db(engine):
     transacao_externa = conexao.begin()
     # Estado inicial conhecido DENTRO da transação externa: o banco de
     # desenvolvimento tem os tipos do seed (e pode ter sobras de smoke
-    # test manual — tags, associações, auditorias), e um teste de
+    # test manual — tags, associações, auditorias, hierarquia física), e um teste de
     # paginação que conta linhas não pode depender de quem rodou o quê
     # antes. Como está dentro da transação externa, o rollback do final
     # devolve tudo — isto só ESCONDE o dado pré-existente pela duração
     # deste teste, não apaga de verdade.
-    # Ordem por FK: filhos antes dos pais (associacoes_tag_equipamento
-    # referencia tags e equipamentos; equipamentos referencia
-    # tipos_equipamento). auditorias não tem FK para nenhuma dessas —
-    # ordem livre.
-    conexao.execute(text("DELETE FROM auditorias"))
-    conexao.execute(text("DELETE FROM associacoes_tag_equipamento"))
-    conexao.execute(text("DELETE FROM equipamentos"))
-    conexao.execute(text("DELETE FROM tipos_equipamento"))
-    conexao.execute(text("DELETE FROM tags"))
+    # Ordem por FK: filhos antes dos pais. associacoes_tag_equipamento e
+    # historico_movimentacoes referenciam equipamentos; equipamentos
+    # referencia tipos_equipamento, zonas e passagens; passagens referencia
+    # portais/antenas/leituras_brutas; antenas -> leitores -> portais;
+    # portais/antenas/historico referenciam zonas; zonas -> setores ->
+    # andares. auditorias não tem FK para nenhuma delas — ordem livre.
+    for tabela in (
+        "auditorias",
+        "associacoes_tag_equipamento",
+        "historico_movimentacoes",
+        "equipamentos",
+        "passagens",
+        "leituras_brutas",
+        "antenas",
+        "leitores",
+        "portais",
+        "zonas",
+        "setores",
+        "andares",
+        "tipos_equipamento",
+        "tags",
+    ):
+        conexao.execute(text(f"DELETE FROM {tabela}"))
 
     session = Session(bind=conexao, join_transaction_mode="create_savepoint")
     try:
