@@ -1,5 +1,6 @@
 """
-Fixtures compartilhadas dos testes que precisam de banco (ISS-009).
+Fixtures compartilhadas dos testes que precisam de banco (ISS-008, ISS-009,
+ISS-010).
 
 Nada de sqlite nem mock: as regras testadas aqui (UNIQUE de
 `nome_normalizado`, `server_default now()`, TRUNCATE ... CASCADE) só
@@ -36,9 +37,19 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-# Só estas duas: o TRUNCATE ... CASCADE limparia meio schema junto se a
-# lista crescesse sem necessidade.
-TABELAS_DO_CRUD = ("equipamentos", "tipos_equipamento")
+# Só estas: o TRUNCATE ... CASCADE limparia meio schema junto se a lista
+# crescesse sem necessidade. Cresceu de ("equipamentos", "tipos_equipamento")
+# na ISS-009/ISS-008 para incluir tags/associacoes_tag_equipamento/
+# auditorias na ISS-010 — mesmo critério: só o que os testes deste CRUD
+# escrevem. TRUNCATE com várias tabelas na mesma instrução resolve a ordem
+# de dependência sozinho (não precisa listar filhos antes de pais).
+TABELAS_DO_CRUD = (
+    "auditorias",
+    "associacoes_tag_equipamento",
+    "equipamentos",
+    "tipos_equipamento",
+    "tags",
+)
 
 
 HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
@@ -106,11 +117,21 @@ def db(engine):
     conexao = engine.connect()
     transacao_externa = conexao.begin()
     # Estado inicial conhecido DENTRO da transação externa: o banco de
-    # desenvolvimento tem os tipos do seed, e um teste de paginação que
-    # conta linhas não pode depender de quem rodou o seed antes. Como
-    # está dentro da transação externa, o rollback do final devolve tudo.
+    # desenvolvimento tem os tipos do seed (e pode ter sobras de smoke
+    # test manual — tags, associações, auditorias), e um teste de
+    # paginação que conta linhas não pode depender de quem rodou o quê
+    # antes. Como está dentro da transação externa, o rollback do final
+    # devolve tudo — isto só ESCONDE o dado pré-existente pela duração
+    # deste teste, não apaga de verdade.
+    # Ordem por FK: filhos antes dos pais (associacoes_tag_equipamento
+    # referencia tags e equipamentos; equipamentos referencia
+    # tipos_equipamento). auditorias não tem FK para nenhuma dessas —
+    # ordem livre.
+    conexao.execute(text("DELETE FROM auditorias"))
+    conexao.execute(text("DELETE FROM associacoes_tag_equipamento"))
     conexao.execute(text("DELETE FROM equipamentos"))
     conexao.execute(text("DELETE FROM tipos_equipamento"))
+    conexao.execute(text("DELETE FROM tags"))
 
     session = Session(bind=conexao, join_transaction_mode="create_savepoint")
     try:
