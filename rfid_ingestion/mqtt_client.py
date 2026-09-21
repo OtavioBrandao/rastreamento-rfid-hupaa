@@ -17,10 +17,15 @@ from .connection import create_client
 from .parsing import build_event
 from .persistence import JsonlEventStore
 from .repository import PersistenceError, PersistenceResult, RawReadingRepository
-from .resilience import Backoff, BackoffPolicy, FailureCategory
+from .resilience import (
+    Backoff,
+    BackoffPolicy,
+    FailureCategory,
+    classify_connack_code,
+    classify_connection_exception,
+)
 
 LOGGER = logging.getLogger(__name__)
-PERMANENT_CONNACK_CODES = frozenset({1, 2, 4, 5})
 
 
 def _reason_value(reason_code: Any) -> int | None:
@@ -53,6 +58,7 @@ class MqttReceiver:
         self.database_unavailable = Event()
         self.failure: str | None = None
         self.failure_category: FailureCategory | None = None
+        self.failure_reason: str | None = None
         self._worker: Thread | None = None
         self._shutdown_complete_logged = False
         self._ever_ready = False
@@ -87,18 +93,26 @@ class MqttReceiver:
         self,
         stage: str,
         category: FailureCategory = FailureCategory.PERMANENT_CONFIGURATION,
+        *,
+        reason: str | None = None,
     ) -> None:
         if self.failed.is_set():
             return
         self.failure = stage
         self.failure_category = category
+        self.failure_reason = reason
         self.failed.set()
         self.ready.clear()
+        fields: dict[str, Any] = {
+            "stage": stage,
+            "failure_category": category,
+        }
+        if reason is not None:
+            fields["reason"] = reason
         _log(
             logging.ERROR,
             "ingestor_failed",
-            stage=stage,
-            failure_category=category,
+            **fields,
         )
         self.client.disconnect()
 
@@ -142,14 +156,22 @@ class MqttReceiver:
     ) -> None:
         code = _reason_value(reason_code)
         if reason_code.is_failure:
-            if code in PERMANENT_CONNACK_CODES:
-                self._fail("conexão MQTT recusada")
+            category, reason_str = classify_connack_code(code)
+            if category == FailureCategory.PERMANENT_CONFIGURATION:
+                stage = {
+                    "authentication_failure": "autenticação MQTT recusada",
+                    "authorization_failure": "autorização MQTT recusada",
+                    "client_id_rejected": "identificador do cliente MQTT recusado",
+                    "protocol_rejected": "versão do protocolo MQTT recusada",
+                }.get(reason_str, "conexão MQTT recusada")
+                self._fail(stage, category, reason=reason_str)
             else:
                 self.disconnected.set()
                 _log(
                     logging.WARNING,
                     "mqtt_disconnected",
-                    failure_category=FailureCategory.TEMPORARY_MQTT,
+                    failure_category=category,
+                    reason=reason_str,
                     reason_code=code,
                 )
             return
@@ -168,12 +190,18 @@ class MqttReceiver:
         if result != mqtt.MQTT_ERR_SUCCESS:
             self._fail("envio de assinatura")
 
-    def _on_connect_fail(self, _client: mqtt.Client, _userdata: Any) -> None:
+    def _on_connect_fail(
+        self,
+        _client: mqtt.Client,
+        _userdata: Any,
+        *,
+        reason: str = "broker_unavailable",
+    ) -> None:
         _log(
             logging.WARNING,
             "mqtt_disconnected",
             failure_category=FailureCategory.TEMPORARY_MQTT,
-            reason="broker_unreachable",
+            reason=reason,
         )
 
     def _on_disconnect(
@@ -287,8 +315,6 @@ class MqttReceiver:
                     FailureCategory.PERMANENT_CONFIGURATION,
                 )
             return
-            self._fail("processamento de persistência")
-            return
         if message.qos == 1:
             try:
                 if self.client.ack(message.mid, message.qos) != mqtt.MQTT_ERR_SUCCESS:
@@ -314,19 +340,42 @@ class MqttReceiver:
             self._fail(
                 "validação do certificado MQTT",
                 FailureCategory.PERMANENT_CONFIGURATION,
+                reason="tls_certificate_failure",
             )
             return
-        except OSError:
-            self._on_connect_fail(self.client, None)
+        except OSError as exc:
+            category, reason_str = classify_connection_exception(exc)
+            if category == FailureCategory.PERMANENT_CONFIGURATION:
+                self._fail(
+                    "validação do certificado MQTT",
+                    category,
+                    reason=reason_str,
+                )
+            else:
+                self._on_connect_fail(self.client, None, reason=reason_str)
             return
         except ValueError:
             self._fail(
                 "configuração da conexão MQTT",
                 FailureCategory.PERMANENT_CONFIGURATION,
+                reason="configuration_error",
             )
             return
         if result != mqtt.MQTT_ERR_SUCCESS:
-            self._on_connect_fail(self.client, None)
+            if result == mqtt.MQTT_ERR_TLS:
+                self._fail(
+                    "validação do certificado MQTT",
+                    FailureCategory.PERMANENT_CONFIGURATION,
+                    reason="tls_certificate_failure",
+                )
+            elif result in {mqtt.MQTT_ERR_AUTH, mqtt.MQTT_ERR_ACL_DENIED}:
+                self._fail(
+                    "autenticação MQTT recusada",
+                    FailureCategory.PERMANENT_CONFIGURATION,
+                    reason="authentication_failure",
+                )
+            else:
+                self._on_connect_fail(self.client, None, reason="broker_unavailable")
             return
 
         self.disconnected.clear()
