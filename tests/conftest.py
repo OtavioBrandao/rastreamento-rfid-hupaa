@@ -1,6 +1,6 @@
 """
-Fixtures compartilhadas dos testes que precisam de banco (ISS-008, ISS-009,
-ISS-010, ISS-011).
+Fixtures compartilhadas dos testes que precisam de banco (ISS-006, ISS-008, ISS-009,
+ISS-010, ISS-011, ISS-012).
 
 Nada de sqlite nem mock: as regras testadas aqui (UNIQUE de
 `nome_normalizado`, `server_default now()`, TRUNCATE ... CASCADE) só
@@ -31,11 +31,17 @@ checar se o nome do banco contém "test" seria frágil nos dois sentidos:
 from __future__ import annotations
 
 import os
+import uuid
 
 import pytest
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
+from sqlalchemy.schema import CreateSchema, DropSchema
+
+from alembic import command
+from db.models import Andar, Antena, Leitor, Setor, Zona
 
 # Só estas: o TRUNCATE ... CASCADE limparia meio schema junto se a lista
 # crescesse sem necessidade. Começou em ("equipamentos", "tipos_equipamento")
@@ -124,43 +130,47 @@ def db(engine):
     """
     conexao = engine.connect()
     transacao_externa = conexao.begin()
-    # Estado inicial conhecido DENTRO da transação externa: o banco de
-    # desenvolvimento tem os tipos do seed (e pode ter sobras de smoke
-    # test manual — tags, associações, auditorias, hierarquia física), e um teste de
-    # paginação que conta linhas não pode depender de quem rodou o quê
-    # antes. Como está dentro da transação externa, o rollback do final
-    # devolve tudo — isto só ESCONDE o dado pré-existente pela duração
-    # deste teste, não apaga de verdade.
-    # Ordem por FK: filhos antes dos pais. associacoes_tag_equipamento e
-    # historico_movimentacoes referenciam equipamentos; equipamentos
-    # referencia tipos_equipamento, zonas e passagens; passagens referencia
-    # portais/antenas/leituras_brutas; antenas -> leitores -> portais;
-    # portais/antenas/historico referenciam zonas; zonas -> setores ->
-    # andares. auditorias não tem FK para nenhuma delas — ordem livre.
-    for tabela in (
-        "auditorias",
-        "associacoes_tag_equipamento",
-        "historico_movimentacoes",
-        "equipamentos",
-        "passagens",
-        "leituras_brutas",
-        "antenas",
-        "leitores",
-        "portais",
-        "zonas",
-        "setores",
-        "andares",
-        "tipos_equipamento",
-        "tags",
-    ):
-        conexao.execute(text(f"DELETE FROM {tabela}"))
-
-    session = Session(bind=conexao, join_transaction_mode="create_savepoint")
     try:
-        yield session
+        # Estado inicial conhecido DENTRO da transação externa: o banco de
+        # desenvolvimento tem os tipos do seed (e pode ter sobras de smoke
+        # test manual — tags, associações, auditorias, hierarquia física), e um teste de
+        # paginação que conta linhas não pode depender de quem rodou o quê
+        # antes. Como está dentro da transação externa, o rollback do final
+        # devolve tudo — isto só ESCONDE o dado pré-existente pela duração
+        # deste teste, não apaga de verdade.
+        # Ordem por FK: filhos antes dos pais. associacoes_tag_equipamento e
+        # historico_movimentacoes referenciam equipamentos; equipamentos
+        # referencia tipos_equipamento, zonas e passagens; passagens referencia
+        # portais/antenas/leituras_brutas; antenas -> leitores -> portais;
+        # portais/antenas/historico referenciam zonas; zonas -> setores ->
+        # andares. auditorias não tem FK para nenhuma delas — ordem livre.
+        for tabela in (
+            "auditorias",
+            "associacoes_tag_equipamento",
+            "historico_movimentacoes",
+            "equipamentos",
+            "passagens",
+            "leituras_brutas",
+            "antenas",
+            "leitores",
+            "portais",
+            "zonas",
+            "setores",
+            "andares",
+            "tipos_equipamento",
+            "tags",
+        ):
+            conexao.execute(text(f"DELETE FROM {tabela}"))
+
+        session = Session(bind=conexao, join_transaction_mode="create_savepoint")
+        try:
+            yield session
+        finally:
+            session.close()
     finally:
-        session.close()
-        transacao_externa.rollback()
+        # Protect connection pool against leaks if setup DELETEs or session creation fail.
+        if transacao_externa.is_active:
+            transacao_externa.rollback()
         conexao.close()
 
 
@@ -189,3 +199,69 @@ def truncate_all(engine):
     limpar()
     yield
     limpar()
+
+
+# Fixtures isoladas da ISS-006 para testes de persistência e migrations
+@pytest.fixture
+def pg_empty_schema(monkeypatch):
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("exige TEST_DATABASE_URL de PostgreSQL descartável")
+    _exigir_host_local(url)
+    engine = create_engine(url, hide_parameters=True)
+    schema = "iss006_" + uuid.uuid4().hex
+    with engine.begin() as connection:
+        connection.execute(CreateSchema(schema))
+    isolated_url = engine.url.update_query_dict({"options": "-csearch_path=" + schema})
+    isolated = create_engine(isolated_url, hide_parameters=True)
+    monkeypatch.setenv("DATABASE_URL", isolated_url.render_as_string(hide_password=False))
+    try:
+        yield isolated
+    finally:
+        isolated.dispose()
+        with engine.begin() as connection:
+            connection.execute(DropSchema(schema, cascade=True))
+        engine.dispose()
+
+
+def migration_config():
+    config = Config()
+    config.set_main_option("script_location", "alembic")
+    return config
+
+
+@pytest.fixture
+def pg_engine(pg_empty_schema):
+    command.upgrade(migration_config(), "head")
+    return pg_empty_schema
+
+
+@pytest.fixture
+def topology(pg_engine):
+    with pg_engine.begin() as connection:
+        floor = connection.execute(
+            Andar.__table__.insert().values(nome="teste", nome_normalizado="teste").returning(Andar.id)
+        ).scalar_one()
+        sector = connection.execute(
+            Setor.__table__.insert().values(andar_id=floor, nome="teste", nome_normalizado="teste").returning(Setor.id)
+        ).scalar_one()
+        zone = connection.execute(
+            Zona.__table__.insert().values(setor_id=sector, nome="teste", nome_normalizado="teste").returning(Zona.id)
+        ).scalar_one()
+        reader = connection.execute(
+            Leitor.__table__.insert().values(
+                reader_id="reader-01",
+                identificador_serial="serial-independente",
+                fabricante="teste",
+                modelo="teste",
+            ).returning(Leitor.id)
+        ).scalar_one()
+        antenna = connection.execute(
+            Antena.__table__.insert().values(
+                leitor_id=reader,
+                porta_numero=1,
+                zona_associada_id=zone,
+                funcao="indefinido",
+            ).returning(Antena.id)
+        ).scalar_one()
+    return {"reader": reader, "antenna": antenna, "zone": zone}

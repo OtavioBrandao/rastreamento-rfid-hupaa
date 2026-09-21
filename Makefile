@@ -53,7 +53,7 @@ simulator-local:
 		--reader-id reader-01 --count 3 --interval 1
 
 tests:
-	python3 -m unittest discover -s tests -v
+	python3 -m pytest -q
 
 smoke:
 	bash tests/infrastructure/compose-smoke-test.sh

@@ -105,11 +105,11 @@ class ManagedMqttTests(unittest.TestCase):
 
     def test_suback_required_and_refusal_is_failure(self):
         with patch("rfid_ingestion.mqtt_client.create_client"):
-            receiver = MqttReceiver(Settings(), Mock())
+            receiver = MqttReceiver(Settings(), Mock(), Mock())
             receiver._on_subscribe(None, None, 1, [Mock(is_failure=True)], None)
             self.assertTrue(receiver.failed.is_set())
             self.assertFalse(receiver.ready.is_set())
-            receiver = MqttReceiver(Settings(), Mock())
+            receiver = MqttReceiver(Settings(), Mock(), Mock())
             receiver._on_subscribe(None, None, 1, [Mock(is_failure=False, value=1)], None)
             self.assertTrue(receiver.ready.is_set())
 
@@ -117,7 +117,7 @@ class ManagedMqttTests(unittest.TestCase):
         with patch("rfid_ingestion.mqtt_client.create_client"):
             store = Mock()
             store.append.side_effect = OSError("synthetic-secret")
-            receiver = MqttReceiver(Settings(), store)
+            receiver = MqttReceiver(Settings(), store, Mock())
             with self.assertLogs("rfid_ingestion.mqtt_client", level="ERROR") as captured:
                 receiver._on_message(None, None, Mock(topic=reading_topic("r"), qos=1, retain=False, payload=b'{}'))
             self.assertTrue(receiver.failed.is_set())
