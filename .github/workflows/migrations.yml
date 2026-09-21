@@ -29,6 +29,10 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+psycopg2://ci_user:ci_password@localhost:5432/ci_db
+      # A suíte de banco (ISS-009) exige TEST_DATABASE_URL explícita e recusa
+      # host não-local: ela roda TRUNCATE nas tabelas do CRUD. Sem esta linha
+      # os testes de banco seriam PULADOS aqui, em silêncio. O banco é o
+      # container efêmero do job, então truncar é inofensivo.
       TEST_DATABASE_URL: postgresql+psycopg2://ci_user:ci_password@localhost:5432/ci_db
 
     steps:

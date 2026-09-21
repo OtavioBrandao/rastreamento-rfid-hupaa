@@ -68,7 +68,6 @@ def _database_failure_category(error: SQLAlchemyError) -> FailureCategory:
 def _safe_persistence_error(error: SQLAlchemyError) -> PersistenceError:
     return PersistenceError("falha PostgreSQL", _database_failure_category(error))
 
-
 def _utc(value: str) -> datetime:
     instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if instant.tzinfo is None:
@@ -89,7 +88,8 @@ class RawReadingRepository:
                 topology = connection.execute(
                     select(Leitor.id, Antena.id).outerjoin(
                         Antena, and_(Antena.leitor_id == Leitor.id,
-                                     Antena.porta_numero == canonical["antenna"])
+                                     Antena.porta_numero == canonical["antenna"],
+                                     Antena.ativo.is_(True))
                     ).where(Leitor.reader_id == canonical["reader_id"])
                 ).one_or_none()
                 if topology is None:

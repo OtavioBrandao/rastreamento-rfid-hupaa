@@ -287,7 +287,6 @@ class MqttReceiver:
                     FailureCategory.PERMANENT_CONFIGURATION,
                 )
             return
-        except Exception:
             self._fail("processamento de persistência")
             return
         if message.qos == 1:

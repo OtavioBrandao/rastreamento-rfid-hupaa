@@ -27,7 +27,8 @@ def test_empty_upgrade_repeat_downgrade_reupgrade(pg_empty_schema):
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "da436f7c75b3"
 
 
-def test_existing_reader_gets_no_invented_identity(pg_empty_schema):
+def test_existing_reader_receives_serial_as_initial_reader_id(pg_empty_schema):
+    """Sob ISS-012, reader_id é NOT NULL e inicializado a partir do serial único."""
     config = migration_config()
     command.upgrade(config, "44ef89b10f17")
     with pg_empty_schema.begin() as connection:
@@ -35,4 +36,4 @@ def test_existing_reader_gets_no_invented_identity(pg_empty_schema):
                                 "VALUES ('teste', 'teste', 'reader-01')"))
     command.upgrade(config, "head")
     with pg_empty_schema.connect() as connection:
-        assert connection.execute(text("SELECT reader_id, identificador_serial FROM leitores")).one() == (None, "reader-01")
+        assert connection.execute(text("SELECT reader_id, identificador_serial FROM leitores")).one() == ("reader-01", "reader-01")

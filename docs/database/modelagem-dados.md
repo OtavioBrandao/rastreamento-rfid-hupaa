@@ -93,6 +93,10 @@ Hierarquia física simples: andar → setor → zona. `zonas.observacoes` é o l
 | zona_a_id | bigint | FK → zonas, NOT NULL |
 | zona_b_id | bigint | FK → zonas, NOT NULL |
 | localizacao_fisica | text | NULL |
+| ativo | boolean | NOT NULL, default `true` (ISS-012 — baixa lógica, nunca DELETE) |
+| created_at / updated_at | timestamptz | NOT NULL, default now() (ISS-012) |
+
+Um portal agrega antenas via `antenas.portal_id` (associação direta — **as antenas de um mesmo portal podem vir de leitores diferentes**).
 
 `CHECK (zona_a_id <> zona_b_id)` — um portal sempre liga duas zonas distintas (é o conceito de "conjunto de antenas posicionadas para detectar entrada/saída de uma zona").
 
@@ -100,14 +104,18 @@ Hierarquia física simples: andar → setor → zona. `zonas.observacoes` é o l
 | Coluna | Tipo | Regra |
 |---|---|---|
 | id | bigint | PK |
-| portal_id | bigint | FK → portais, NULL (leitor pode ser cadastrado antes de instalado) |
+| reader_id | varchar | UNIQUE, NOT NULL (ISS-012 — identificador lógico usado como origem no MQTT, segmento `<reader_id>` do tópico; **campo distinto de `identificador_serial`**, os dois podem coincidir por acaso) |
 | fabricante | varchar | NOT NULL |
 | modelo | varchar | NOT NULL |
-| identificador_serial | varchar | UNIQUE, NOT NULL |
-| reader_id | varchar | UNIQUE, NULL — identidade lógica MQTT cadastrada explicitamente |
+| identificador_serial | varchar | UNIQUE, NOT NULL (número de série de fábrica) |
 | endereco_rede | varchar | NULL (IP/hotspot, ex.: DR-pad) |
-| status | varchar | NOT NULL, default `offline` |
-| ultimo_heartbeat_em | timestamptz | NULL |
+| parametros_ingestao | jsonb | NULL (ISS-012 — metadado de ingestão **estritamente não-secreto**. **Allowlist fechada** de chaves, validada no schema da API: `protocolo`, `adapter`, `formato_timestamp`, `topico`, `qos` — qualquer outra chave é 422, e o valor de cada uma tem forma validada. Senha/credencial de broker fica fora do banco, em env/secret manager) |
+| status | varchar | NOT NULL, default `offline` (conectividade ao vivo — gerida pela ingestão/heartbeat) |
+| ultimo_heartbeat_em | timestamptz | NULL (idem) |
+| ativo | boolean | NOT NULL, default `true` (ISS-012 — cadastro/ciclo de vida, **separado de `status`**) |
+| created_at / updated_at | timestamptz | NOT NULL, default now() (ISS-012) |
+
+> **ISS-012:** `leitores.portal_id` foi **removida**. A associação com o portal mora na antena (`antenas.portal_id`): um leitor pode ter antenas em portais diferentes e um portal pode reunir antenas de leitores diferentes.
 
 `fabricante`/`modelo` como colunas livres (não enum fechado) é o que garante suporte a múltiplos fabricantes/modelos sem alterar schema — critério de aceitação explícito.
 
@@ -115,14 +123,17 @@ Hierarquia física simples: andar → setor → zona. `zonas.observacoes` é o l
 | Coluna | Tipo | Regra |
 |---|---|---|
 | id | bigint | PK |
-| leitor_id | bigint | FK → leitores, NOT NULL |
+| leitor_id | bigint | FK → leitores, NOT NULL (imutável: a antena é fisicamente cabeada no leitor) |
+| portal_id | bigint | FK → portais, NULL (ISS-012 — associação lógica ao portal; editável, inclusive de volta a NULL) |
 | porta_numero | int | NOT NULL |
 | zona_associada_id | bigint | FK → zonas, NOT NULL |
 | funcao | varchar | NOT NULL, CHECK IN ('entrada','saida','indefinido') |
+| ativo | boolean | NOT NULL, default `true` (ISS-012) |
+| created_at / updated_at | timestamptz | NOT NULL, default now() (ISS-012) |
 
-`UNIQUE(leitor_id, porta_numero)` — cada porta física do leitor só pode estar ligada a uma antena por vez.
+`UNIQUE(leitor_id, porta_numero) WHERE ativo` — **índice único parcial** (`uq_antena_ativa_por_porta_leitor`, mesmo padrão de `uq_tag_ativa`): cada porta física do leitor tem no máximo uma antena **ativa**. Inativar uma antena libera a porta para uma antena nova; a linha antiga continua existindo (o histórico de leituras a referencia). Uma porta pode, portanto, ter várias linhas (uma ativa e as demais inativas): quem resolve `(leitor, porta) → antena` — como a ingestão — deve filtrar por `ativo`. Reativar uma antena cuja porta já foi tomada por outra ativa é bloqueado.
 
-> **Pendência não-bloqueante (revisão de código, Otávio):** por regra de negócio, `zona_associada_id` deveria sempre ser uma das duas zonas do portal do leitor dono da antena (`leitor.portal.zona_a_id` ou `zona_b_id`). Isso não é validado pelo banco nesta migration — fica para a implementação da ISS-013 como validação de aplicação no cadastro.
+> **Pendência não-bloqueante (revisão de código, Otávio):** por regra de negócio, `zona_associada_id` deveria sempre ser uma das duas zonas do portal a que a antena pertence (`portal.zona_a_id` ou `zona_b_id`, via `antenas.portal_id`). Isso não é validado pelo banco nesta migration — fica para a implementação da ISS-013 como validação de aplicação no cadastro.
 
 ### `leituras_brutas` (RF-007, RF-008)
 | Coluna | Tipo | Regra |
@@ -149,13 +160,18 @@ IDs diferentes permanecem distintos mesmo para o mesmo EPC. Isto não é debounc
 
 #### 2.2 — Alinhamento com o contrato canônico (ISS-006)
 
-A migration `da436f7c75b3`, após `44ef89b10f17`, converte UUID para texto com
-`event_id::text`, permite RSSI nulo e adiciona dados_origem e leitores.reader_id.
-Reader_id é independente do serial e não recebe preenchimento automático.
-A antena é resolvida pelo reader_id lógico e porta_numero daquele leitor.
-`lido_em` recebe o timestamp canônico; `recebido_em` recebe received_at_utc.
-Ambos são enviados como datetimes UTC com fuso. RSSI bruto/unidade permanecem
-na metadata em dados_origem, sem divisão por 100 ou escala presumida.
+A migration `da436f7c75b3` sucede `6b3e5f7a91c4`, última revisão da ISS-012,
+e altera somente o contrato de persistência de `leituras_brutas`: converte
+`event_id` de UUID para `VARCHAR(71)`, permite RSSI nulo e adiciona
+`dados_origem` JSONB. O `reader_id` pertence à ISS-012 e permanece
+`NOT NULL` + `UNIQUE`, independente de `identificador_serial`.
+
+Na ingestão, a antena é resolvida pelo `reader_id` lógico e `porta_numero`,
+considerando somente `Antena.ativo = true`; antenas inativas permanecem como
+histórico e podem coexistir com uma substituta ativa na mesma porta.
+`lido_em` recebe o timestamp canônico e `recebido_em` recebe
+`received_at_utc`. RSSI bruto/unidade permanecem na metadata em
+`dados_origem`, sem escala física presumida.
 
 O downgrade é reversível no banco vazio do CI. Após gravar IDs `sha256:*`, é
 necessário migrar ou remover os dados deliberadamente antes de voltar a UUID;
@@ -211,7 +227,7 @@ Genérica o suficiente pra auditar qualquer tabela sem precisar de uma tabela de
 
 ## 3. Rastreabilidade (critério de aceitação)
 
-`leituras_brutas.antena_id → antenas.leitor_id → leitores` (leitor) e `antenas.zona_associada_id/leitor.portal_id → portais` (portal). Uma leitura sempre chega até leitor/antena/portal.
+`leituras_brutas.antena_id → antenas.leitor_id → leitores` (leitor) e `antenas.portal_id → portais` (portal). Uma leitura sempre chega até leitor/antena/portal.
 
 Do lado do ativo, a consulta **depende do que se quer saber**:
 

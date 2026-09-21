@@ -34,5 +34,6 @@ for attempt in range(30):
 else:
     raise SystemExit("[FALHOU] Mosquitto não abriu a porta de teste")
 PY
+DATABASE_URL="$TEST_DATABASE_URL" "$PYTHON_BIN" -m alembic upgrade head
 RUN_MQTT_INTEGRATION=1 "$PYTHON_BIN" -m pytest -q
 printf '[PASSOU] Dois simuladores, mensagens inválidas, JSONL e PostgreSQL no Mosquitto local.\n'

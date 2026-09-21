@@ -54,15 +54,23 @@ sem conhecer o transporte MQTT. Não existe cadastro automático de topologia.
 
 ## Contrato e schema
 
-A migration **`da436f7c75b3`**, gerada por autogenerate e revisada, sucede
-`44ef89b10f17`. A migration inicial não foi alterada.
+A migration **`da436f7c75b3`** sucede **`6b3e5f7a91c4`** (head da ISS-012),
+integrando-se ao grafo linear de migrations após a stack ISS-008..012
+(`44ef89b10f17` → `7c1d4e9a2b83` → `992c5c770214` → `af6d99290414` → `019782a38ff7` → `6b3e5f7a91c4` → `da436f7c75b3`).
+Essa linearização garante exatamente uma head no Alembic sem necessidade de merge
+migrations artificiais.
+
+A ISS-012 é a **fonte da verdade para o modelo de hardware** (leitores, antenas,
+portais e ciclo de vida). A ISS-006 não define nem altera o schema de `leitores`
+ou `antenas`, limitando-se a consumir suas informações para persistência e
+resolução topológica.
 
 | Campo | Decisão |
 |---|---|
 | `leituras_brutas.event_id` | `VARCHAR(71)`, NOT NULL, UNIQUE; ID canônico preservado literalmente |
 | `leituras_brutas.rssi` | Nullable; unidade desconhecida não significa intensidade zero |
 | `leituras_brutas.dados_origem` | JSONB nullable para linhas anteriores; novos eventos guardam metadata canônica, topic, adapter, qos e retain |
-| `leitores.reader_id` | VARCHAR nullable e UNIQUE; identidade lógica MQTT, independente de identificador_serial |
+| `leitores.reader_id` | VARCHAR, NOT NULL, UNIQUE (definido pela ISS-012); identidade lógica MQTT independente de `identificador_serial` |
 | `lido_em` | Timestamp da leitura, vindo de canonical_event.timestamp |
 | `recebido_em` | Timestamp de recepção do servidor, vindo de received_at_utc |
 
@@ -74,26 +82,37 @@ RSSI sem unidade comprovada é gravado como NULL. Valor bruto e unidade ficam em
 `dados_origem.metadata.rssi_original` e `rssi_unit`. Não há divisão por 100, nova
 escala ou interpretação do relógio do EZ700 físico.
 
-A conversão de UUID para texto usa explicitamente `USING event_id::text`,
-preservando UUIDs legados como texto, sem inventar hashes. O downgrade usa
-`event_id::uuid`: **IDs sha256:* não podem ser convertidos semanticamente em UUID**.
+A conversão de UUID para texto em `leituras_brutas.event_id` usa explicitamente
+`USING event_id::text`, preservando UUIDs legados como texto, sem inventar hashes.
+O downgrade usa `event_id::uuid`: **IDs sha256:* não podem ser convertidos semanticamente em UUID**.
 Dados incompatíveis precisam ser migrados/removidos deliberadamente antes do
 rollback; RSSI NULL também impede restaurar NOT NULL. O downgrade não apaga dados
 para contornar essas restrições. O ciclo no banco vazio do CI é reversível.
 
 Os índices existentes `(epc, lido_em)` e `(antena_id, lido_em)` são preservados.
-A busca por leitor usa reader_id UNIQUE e a chave única `(leitor_id, porta_numero)`
-das antenas, mantendo o caminho de consulta por leitor e período.
+A busca por leitor usa `reader_id` UNIQUE e a associação com antena ativa, mantendo o caminho de consulta por leitor e período.
 
-## Resolução de leitor e antena
+## Resolução de leitor e antena ativa
 
 O repositório procura `Leitor.reader_id == canonical.reader_id` e a antena desse
-leitor cujo `porta_numero == canonical.antenna`. O `Antena.id` encontrado alimenta
-`leituras_brutas.antena_id`. Serial, fabricante e modelo não participam da busca.
+leitor cujo `porta_numero == canonical.antenna` E que esteja ATIVA (`Antena.ativo.is_(True)`).
+O `Antena.id` encontrado alimenta `leituras_brutas.antena_id`. Serial, fabricante
+e modelo não participam da busca.
 
-Leitor desconhecido retorna `rejected / unknown_reader`; porta inexistente no
-leitor conhecido retorna `rejected / unknown_antenna`. Nenhum desses casos grava
-leitura bruta. Leitores existentes mantêm reader_id NULL até cadastro explícito.
+Com o modelo da ISS-012, a unicidade de porta do leitor é garantida por índice
+único parcial (`uq_antena_ativa_por_porta_leitor WHERE ativo`). Isso permite que
+uma porta física seja reutilizada quando uma antena é inativada e substituída por
+uma nova antena ativa (ex.: Leitor X porta 1 com Antena A inativa e Antena B ativa).
+As antenas inativas históricas são preservadas no banco e continuam referenciadas
+pelo histórico de leituras e passagens. A consulta de ingestão filtra expressamente
+`Antena.ativo.is_(True)`, evitando erros do tipo `MultipleResultsFound` em portas
+reconfiguradas.
+
+Leitor desconhecido retorna `rejected / unknown_reader`; porta inexistente ou
+sem antena ativa no leitor conhecido retorna `rejected / unknown_antenna`. Nenhum
+desses casos grava leitura bruta. Não foi adicionado filtro de `Leitor.ativo`
+nesta issue, pois a política de rejeição de leitor inativo é regra de domínio a
+ser definida separadamente.
 
 ## Idempotência de mensagem, sem debounce
 
