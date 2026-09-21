@@ -1,8 +1,9 @@
 # ADR 0002 — HiveMQ principal e Mosquitto para desenvolvimento
 
 Data da decisão e consulta: **2026-09-05**. Implementação da ISS-001;
-**aceite externo pendente**, issue permanece aberta. Atualiza a ADR 0001 para
-o MVP; preserva seu ambiente de desenvolvimento e os registros históricos.
+o cluster HiveMQ Cloud Serverless foi provisionado e a camada de software validada com simuladores
+(TLS + autenticação por usuário/senha e ACLs por tópico). A validação física presencial no hospital
+permanece pendente. Atualiza a ADR 0001 para o MVP; preserva seu ambiente de desenvolvimento e os registros históricos.
 
 ## Diagnóstico anterior
 

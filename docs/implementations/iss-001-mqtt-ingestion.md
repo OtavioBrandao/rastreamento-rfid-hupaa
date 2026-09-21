@@ -3,7 +3,7 @@
 O mesmo ingestor, simulador, payload e tópicos funcionam nos dois modos.
 HiveMQ Cloud Serverless é o broker principal do MVP; Mosquitto é o ambiente
 local/offline de desenvolvimento e contingência manual. A [ISS-001 encerrada](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/1#issuecomment-5553433705)
-registra validação com simuladores no HiveMQ, TLS/autenticação/ACL e duas redes.
+registra validação com simuladores no HiveMQ (TLS + autenticação por usuário/senha e ACLs por tópico) e duas redes.
 EZ700 físico e infraestrutura do hospital continuam pendentes de validação de campo.
 Veja a [decisão e comparação dos provedores](../decisions/0002-managed-mqtt.md).
 

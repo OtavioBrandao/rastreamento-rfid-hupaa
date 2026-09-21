@@ -1,11 +1,9 @@
 # ISS-001 — roteiro compacto de laboratório e redes distintas
 
-**Estado: pendente de campo.** O software não depende dos leitores para evoluir.
-A integração de software pode ser considerada funcional depois de dois simuladores
-no HiveMQ, autenticação e ACL comprovadas. Nesta entrega o cluster não existe;
-a equipe confirmou que a validação externa deve permanecer pendente.
-A Issue #1 permanece aberta. Validação física deve ser vinculada separadamente
-às ISS-029/ISS-030, sem criar ou fechar issues automaticamente.
+**Estado: software validado com simuladores no HiveMQ Cloud; validação física de campo pendente.**
+Historicamente, na formulação inicial desta entrega o cluster em nuvem ainda não havia sido provisionado. Em 05/09/2026, o cluster HiveMQ Cloud Serverless foi provisionado e a integração de software foi validada com sucesso utilizando simuladores sintéticos, cobrindo transporte criptografado via TLS (porta 8883), TLS + autenticação por usuário/senha e ACLs por tópico em redes distintas.
+
+A validação física com hardware Identix EZ700 na infraestrutura de rede corporativa do HUPAA/UFAL permanece pendente de visita presencial (a ser vinculada futuramente às ISS-029/ISS-030). A evolução do software (normalização, persistência, resiliência e modelagem) não é bloqueada por essa validação de campo.
 
 ## Preparar antes da visita
 
