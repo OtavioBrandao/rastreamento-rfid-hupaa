@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import math
 import random
+import socket
+import ssl
 from dataclasses import dataclass
 from enum import StrEnum
 from threading import Event
@@ -75,3 +78,76 @@ class Backoff:
 
         delay = self.next_delay()
         return not stop_event.wait(delay), delay
+
+
+# Network unreachable error codes covering both standard POSIX and Windows socket (WSA) constants.
+UNREACHABLE_ERRNOS: frozenset[int] = frozenset(
+    filter(
+        None,
+        (
+            getattr(errno, name, None)
+            for name in (
+                "ENETUNREACH",
+                "EHOSTUNREACH",
+                "ENETDOWN",
+                "WSAENETUNREACH",
+                "WSAEHOSTUNREACH",
+                "WSAENETDOWN",
+            )
+        ),
+    )
+)
+
+PERMANENT_CONNACK_CODES = frozenset({1, 2, 4, 5})
+
+CONNACK_REASONS: dict[int, tuple[FailureCategory, str]] = {
+    1: (FailureCategory.PERMANENT_CONFIGURATION, "protocol_rejected"),
+    2: (FailureCategory.PERMANENT_CONFIGURATION, "client_id_rejected"),
+    3: (FailureCategory.TEMPORARY_MQTT, "broker_unavailable"),
+    4: (FailureCategory.PERMANENT_CONFIGURATION, "authentication_failure"),
+    5: (FailureCategory.PERMANENT_CONFIGURATION, "authorization_failure"),
+    132: (FailureCategory.PERMANENT_CONFIGURATION, "protocol_rejected"),
+    133: (FailureCategory.PERMANENT_CONFIGURATION, "client_id_rejected"),
+    134: (FailureCategory.PERMANENT_CONFIGURATION, "authentication_failure"),
+    135: (FailureCategory.PERMANENT_CONFIGURATION, "authorization_failure"),
+    136: (FailureCategory.TEMPORARY_MQTT, "broker_unavailable"),
+    140: (FailureCategory.PERMANENT_CONFIGURATION, "authentication_failure"),
+}
+
+
+def classify_connection_exception(error: BaseException) -> tuple[FailureCategory, str]:
+    """
+    Classify low-level network connection exceptions into operational categories and safe reasons.
+
+    Subclass check order is strictly preserved: ssl.SSLCertVerificationError, socket.gaierror,
+    ConnectionRefusedError, and TimeoutError all inherit from OSError, so specific subclasses
+    must be matched before the generic OSError fallback. Raw exception messages are never
+    returned or logged to avoid leaking internal host addresses or credentials.
+    """
+    if isinstance(error, ssl.SSLCertVerificationError):
+        return FailureCategory.PERMANENT_CONFIGURATION, "tls_certificate_failure"
+    if isinstance(error, socket.gaierror):
+        return FailureCategory.TEMPORARY_MQTT, "dns_failure"
+    if isinstance(error, ConnectionRefusedError):
+        return FailureCategory.TEMPORARY_MQTT, "broker_unavailable"
+    if isinstance(error, TimeoutError):
+        return FailureCategory.TEMPORARY_MQTT, "network_timeout"
+    if isinstance(error, OSError):
+        if error.errno in UNREACHABLE_ERRNOS:
+            return FailureCategory.TEMPORARY_MQTT, "network_unreachable"
+        return FailureCategory.TEMPORARY_MQTT, "network_error"
+    return FailureCategory.TEMPORARY_MQTT, "network_error"
+
+
+def classify_connack_code(code: int | None) -> tuple[FailureCategory, str]:
+    """
+    Classify MQTT CONNACK return codes (MQTT 3.1.1 return codes and MQTT 5.0 reason codes).
+
+    Permanent configuration or authentication refusals must halt supervisor loops rather
+    than retry indefinitely, while temporary broker unavailability triggers exponential backoff.
+    """
+    if code is not None and code in CONNACK_REASONS:
+        return CONNACK_REASONS[code]
+    if code in PERMANENT_CONNACK_CODES or (code is not None and code >= 128):
+        return FailureCategory.PERMANENT_CONFIGURATION, "connection_rejected"
+    return FailureCategory.TEMPORARY_MQTT, "broker_unavailable"
