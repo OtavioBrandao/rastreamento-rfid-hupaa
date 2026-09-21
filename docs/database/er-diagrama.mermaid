@@ -7,10 +7,9 @@ erDiagram
     SETORES ||--o{ ZONAS : contem
     ZONAS ||--o{ PORTAIS : "lado A"
     ZONAS ||--o{ PORTAIS : "lado B"
-    PORTAIS ||--o{ ANTENAS : "instalada em (via zona)"
+    PORTAIS ||--o{ ANTENAS : "agrega (antenas de leitores distintos)"
     ZONAS ||--o{ ANTENAS : cobre
     LEITORES ||--o{ ANTENAS : possui
-    PORTAIS ||--o{ LEITORES : "opcionalmente vinculado a"
 
     ANTENAS ||--o{ LEITURAS_BRUTAS : gera
     PORTAIS ||--o{ PASSAGENS : "ocorre em"
@@ -85,25 +84,36 @@ erDiagram
         bigint zona_a_id FK
         bigint zona_b_id FK
         text localizacao_fisica
+        boolean ativo
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     LEITORES {
         bigint id PK
-        bigint portal_id FK "opcional"
+        string reader_id UK "origem no MQTT"
         string fabricante
         string modelo
-        string identificador_serial UK
+        string identificador_serial UK "serie de fabrica"
         string endereco_rede
-        string status
+        jsonb parametros_ingestao "nao-secreto"
+        string status "conectividade ao vivo"
         timestamptz ultimo_heartbeat_em
+        boolean ativo "cadastro"
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     ANTENAS {
         bigint id PK
         bigint leitor_id FK
+        bigint portal_id FK "opcional"
         int porta_numero
         bigint zona_associada_id FK
         string funcao "entrada, saida, indefinido"
+        boolean ativo "UK(leitor,porta) so entre ativas"
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     LEITURAS_BRUTAS {
