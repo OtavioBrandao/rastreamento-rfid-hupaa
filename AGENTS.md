@@ -6,5 +6,6 @@
 - Nunca registre credenciais, tokens ou senhas MQTT no repositório.
 - Execute as validações relevantes antes de criar um commit.
 - Mantenha a documentação em português, salvo se uma issue futura solicitar outro idioma.
+- Toda issue implementada deve deixar um `.md` em `docs/` explicando o que é a issue, sua importância para o MVP e o que foi feito para resolvê-la.
 - Os scripts shell têm como alvo o Ubuntu 24.04 e devem usar finais de linha LF.
 - Não configure o notebook como hotspot; ele atua somente como broker e receptor MQTT.

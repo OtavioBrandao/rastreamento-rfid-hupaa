@@ -3,8 +3,8 @@ Testes das migrations da ISS-012 com DADOS PRÉ-EXISTENTES (não confiam em banc
 
 São DUAS revisões: `019782a38ff7` (portal_id na antena, reader_id...) e
 `6b3e5f7a91c4` (índice único parcial da porta + timestamps). Os testes da
-primeira miram a REVISÃO dela explicitamente (não "head"), para continuarem
-testando o que dizem testar quando a cadeia crescer.
+testes específicos miram suas REVISÕES explicitamente (não "head"), para
+continuarem testando o que dizem testar quando a cadeia crescer.
 
 A primeira migration troca `leitores.portal_id` por `antenas.portal_id`. O risco que
 este arquivo cobre: a informação de "em que portal o leitor está instalado"
@@ -39,7 +39,7 @@ from sqlalchemy.exc import IntegrityError
 RAIZ = Path(__file__).resolve().parent.parent
 REVISAO_ANTERIOR = "af6d99290414"  # ISS-011
 REVISAO_ISS012 = "019782a38ff7"  # portal_id na antena, reader_id, ativo, parametros_ingestao
-REVISAO_ISS012_AJUSTES = "6b3e5f7a91c4"  # índice único parcial da porta + timestamps (head)
+REVISAO_ISS012_AJUSTES = "6b3e5f7a91c4"  # índice único parcial da porta + timestamps
 
 
 @pytest.fixture
@@ -262,7 +262,7 @@ def test_ajustes_trocam_a_unique_pelo_indice_parcial_e_adicionam_timestamps(banc
     _migrar(banco, REVISAO_ISS012)
     assert "uq_antena_por_porta_leitor" in _constraints(banco)  # ainda a UNIQUE total
 
-    _migrar(banco, "head")
+    _migrar(banco, REVISAO_ISS012_AJUSTES)
 
     assert "uq_antena_por_porta_leitor" not in _constraints(banco)
     definicao = _definicao_do_indice(banco, "uq_antena_ativa_por_porta_leitor")
@@ -277,7 +277,7 @@ def test_ajustes_trocam_a_unique_pelo_indice_parcial_e_adicionam_timestamps(banc
 
 def test_indice_parcial_libera_a_porta_da_antena_inativa_mas_barra_duas_ativas(banco):
     _semear_esquema_antigo(banco)
-    _migrar(banco, "head")
+    _migrar(banco, REVISAO_ISS012_AJUSTES)
 
     # duas ATIVAS na mesma porta: barrado, e com o nome do índice que a aplicação reconhece
     with pytest.raises(IntegrityError) as erro:
@@ -293,7 +293,7 @@ def test_indice_parcial_libera_a_porta_da_antena_inativa_mas_barra_duas_ativas(b
 
 def test_downgrade_dos_ajustes_restaura_a_unique_total_e_remove_os_timestamps(banco):
     _semear_esquema_antigo(banco)
-    _migrar(banco, "head")
+    _migrar(banco, REVISAO_ISS012_AJUSTES)
 
     processo = _alembic(banco, "downgrade", REVISAO_ISS012)
 
@@ -309,7 +309,7 @@ def test_downgrade_dos_ajustes_restaura_a_unique_total_e_remove_os_timestamps(ba
 def test_downgrade_dos_ajustes_aborta_se_uma_porta_e_compartilhada_por_inativa_e_ativa(banco):
     """A UNIQUE antiga não admite o que o índice parcial admitia: aborta em vez de apagar linha."""
     _semear_esquema_antigo(banco)
-    _migrar(banco, "head")
+    _migrar(banco, REVISAO_ISS012_AJUSTES)
     _sql(banco, "UPDATE antenas SET ativo = false WHERE id = 1")
     _sql(banco, NOVA_ANTENA_NA_PORTA_1_DO_LEITOR_1)  # a porta 1 do leitor 1 agora tem 2 linhas
 
@@ -327,7 +327,7 @@ def test_downgrade_dos_ajustes_aborta_se_uma_porta_e_compartilhada_por_inativa_e
 def test_cadeia_inteira_da_iss012_faz_roundtrip_com_dados_pre_existentes(banco):
     _semear_esquema_antigo(banco)
 
-    _migrar(banco, "head")
+    _migrar(banco, REVISAO_ISS012_AJUSTES)
     assert _revisao_atual(banco) == REVISAO_ISS012_AJUSTES
     processo = _alembic(banco, "downgrade", REVISAO_ANTERIOR)  # as duas revisões de volta
 
@@ -335,5 +335,5 @@ def test_cadeia_inteira_da_iss012_faz_roundtrip_com_dados_pre_existentes(banco):
     assert _revisao_atual(banco) == REVISAO_ANTERIOR
     assert _portais_dos_leitores(banco) == {1: 1, 2: 2, 3: None, 4: None}  # como estava
 
-    _migrar(banco, "head")
+    _migrar(banco, REVISAO_ISS012_AJUSTES)
     assert _portais_das_antenas(banco) == {1: 1, 2: 1, 3: 2, 4: None}

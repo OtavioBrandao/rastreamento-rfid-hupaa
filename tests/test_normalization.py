@@ -13,6 +13,7 @@ from rfid_ingestion.mqtt_client import MqttReceiver
 from rfid_ingestion.normalization import ADAPTERS
 from rfid_ingestion.parsing import build_event
 from rfid_ingestion.persistence import JsonlEventStore
+from rfid_ingestion.repository import PersistenceResult
 from rfid_ingestion.simulator import _parser, _payload
 from rfid_ingestion.topics import reading_topic
 
@@ -162,7 +163,9 @@ class NormalizationTests(unittest.TestCase):
     def test_receiver_continues_and_logs_no_payload(self):
         with TemporaryDirectory() as directory, patch("rfid_ingestion.mqtt_client.create_client"):
             path = Path(directory) / "audit.jsonl"
-            receiver = MqttReceiver(self.settings, JsonlEventStore(path))
+            receiver = MqttReceiver(self.settings, JsonlEventStore(path),
+                                    Mock(persist=Mock(return_value=PersistenceResult("inserted", 1))))
+            receiver.client.ack.return_value = 0
             raws = [b'{"private":"DO-NOT-LOG",', b'\xff', b'{}',
                     b'{"extra":"\\ud800"}', FIXTURE.read_bytes()]
             with self.assertLogs("rfid_ingestion.mqtt_client") as logs:
