@@ -11,7 +11,7 @@ from sqlalchemy import event as sql_event
 from sqlalchemy import func, select
 from sqlalchemy.exc import OperationalError, ProgrammingError
 
-from db.models import LeituraBruta
+from db.models import Antena, LeituraBruta
 from db.runtime import DatabaseConfigurationError, create_app_engine
 from rfid_ingestion.config import Settings
 from rfid_ingestion.parsing import build_event
@@ -102,6 +102,72 @@ def test_unknown_topology(pg_engine, topology, changes, reason):
     assert rows(pg_engine) == []
 
 
+def test_inactive_antenna_is_rejected_as_unknown(pg_engine, topology):
+    with pg_engine.begin() as connection:
+        connection.execute(
+            Antena.__table__.update().where(Antena.id == topology["antenna"]).values(ativo=False)
+        )
+    result = RawReadingRepository(pg_engine).persist(envelope())
+    assert result.status == "rejected"
+    assert result.reason == "unknown_antenna"
+    assert rows(pg_engine) == []
+
+
+def test_antenna_replacement_topology_resolves_active_antenna(pg_engine, topology):
+    """
+    Cobre cenário de substituição de hardware da topologia ISS-012:
+    1. Leitor reader-01 com Antena A na porta 1;
+    2. Antena A é inativada no banco;
+    3. Antena B é criada no mesmo leitor e mesma porta 1 (ativo=True);
+    4. Antena A permanece presente e inativa no banco (histórico preservado);
+    5. Leitura recebida para reader-01 / porta 1 persiste com sucesso;
+    6. Leitura associa-se à Antena B;
+    7. Nenhuma MultipleResultsFound ocorre.
+    """
+    antenna_a_id = topology["antenna"]
+    reader_id = topology["reader"]
+    zone_id = topology["zone"]
+
+    with pg_engine.begin() as connection:
+        connection.execute(
+            Antena.__table__.update().where(Antena.id == antenna_a_id).values(ativo=False)
+        )
+        antenna_b_id = connection.execute(
+            Antena.__table__.insert().values(
+                leitor_id=reader_id,
+                porta_numero=1,
+                zona_associada_id=zone_id,
+                funcao="entrada",
+                ativo=True,
+            ).returning(Antena.id)
+        ).scalar_one()
+
+    assert antenna_a_id != antenna_b_id
+
+    event = envelope(reader_id="reader-01", antenna=1)
+    repository = RawReadingRepository(pg_engine)
+    result = repository.persist(event)
+
+    assert result.status == "inserted"
+    assert result.reading_id is not None
+
+    with pg_engine.connect() as connection:
+        reading = connection.execute(
+            select(LeituraBruta.__table__).where(LeituraBruta.id == result.reading_id)
+        ).mappings().one()
+        assert reading["antena_id"] == antenna_b_id
+
+        antenna_a_row = connection.execute(
+            select(Antena.__table__).where(Antena.id == antenna_a_id)
+        ).mappings().one()
+        assert antenna_a_row["ativo"] is False
+
+        antenna_b_row = connection.execute(
+            select(Antena.__table__).where(Antena.id == antenna_b_id)
+        ).mappings().one()
+        assert antenna_b_row["ativo"] is True
+
+        assert connection.scalar(select(func.count()).select_from(LeituraBruta)) == 1
 def test_source_data_nullable_rssi_and_distinct_utc_timestamps(pg_engine, topology):
     original = envelope()
     RawReadingRepository(pg_engine).persist(original)

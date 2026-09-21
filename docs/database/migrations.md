@@ -75,9 +75,11 @@ Se qualquer um desses passos falhar, o PR fica com o check vermelho — é isso 
 
 ## 5. Alinhamento de leituras brutas — ISS-006
 
-A revisão `da436f7c75b3`, posterior a `44ef89b10f17`, foi gerada por autogenerate
-e revisada para incluir casts explícitos UUID/texto e nomear a constraint do
-reader_id. Veja [persistência de leituras](raw-readings-persistence.md).
+A revisão `da436f7c75b3`, posterior a `6b3e5f7a91c4` (head da ISS-012), foi gerada
+por autogenerate e revisada para incluir casts explícitos UUID/texto, campos
+`dados_origem` (JSONB) e `rssi` (nullable). O `reader_id` e a infraestrutura de
+hardware/topologia pertencem e são governados pela ISS-012 (`019782a38ff7` e `6b3e5f7a91c4`).
+Veja [persistência de leituras](raw-readings-persistence.md).
 O downgrade no banco vazio é reversível. Com IDs sha256:* ou RSSI nulo, tratar
 os dados deliberadamente antes de restaurar UUID/NOT NULL; a migration não
 apaga dados nem inventa valores para permitir rollback.
