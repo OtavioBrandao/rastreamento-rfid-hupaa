@@ -10,7 +10,7 @@ Este documento é o ponto de entrada principal para desenvolvedores, avaliadores
 
 O **RFID Hospital MVP** é uma solução de software experimental orientada a **rastreabilidade aproximada por zonas** de equipamentos médico-hospitalares móveis (como bombas de infusão, desfibriladores, macas e cadeiras de rodas) utilizando **RFID UHF passivo** (EPC Gen2).
 
-Diferente de sistemas complexos de RTLS (*Real-Time Locating Systems*) baseados em triangulação contínua (como BLE, UWB ou Wi-Fi), este MVP infere a posição do equipamento com base em sua **última passagem confirmada por um portal ou zona de leitura**, garantindo menor custo, simplicidade operacional e robustez no ambiente assistencial.
+O MVP tem como objetivo inferir a localização aproximada de equipamentos por zonas. A implementação atual cobre ingestão, normalização, persistência idempotente, resiliência e modelagem de infraestrutura e domínio. Inferência de passagens e localização pertencem às próximas etapas.
 
 ---
 
@@ -177,5 +177,5 @@ docs/
 
 Em conformidade com as boas práticas científicas e as diretrizes do projeto:
 - **Ambiente de Hardware:** O projeto foi exaustivamente validado com simuladores e contêineres Docker reproduzindo os formatos do Identix EZ700. O aceite definitivo com **leitores físicos EZ700 e na rede Wi-Fi hospitalar** permanece como **PENDENTE DE VALIDAÇÃO FÍSICA** (aguardando liberação de infraestrutura de TI do HUPAA).
-- **Sem inferência de passagem ainda:** A persistência atual é de *leituras brutas*. O cálculo de direção e passagem através de portais é o escopo das issues imediatas subsequentes (ISS-013 a ISS-015).
+- **Sem inferência de passagem ou localização ainda:** A persistência atual é de *leituras brutas*. O cálculo de direção e passagem através de portais e a atualização da localização do ativo pertencem às próximas etapas (ISS-013 a ISS-016).
 - **Retenção de Leituras:** O expurgo ou particionamento de leituras brutas antigas depende de definição formal de governança com o hospital (RNF-015).
