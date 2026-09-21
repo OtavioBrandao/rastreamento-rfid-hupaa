@@ -70,6 +70,11 @@ class ComposeConfigurationTests(unittest.TestCase):
         self.assertIn("@postgres:5432/", services["migrate-local"]["environment"]["DATABASE_URL"])
         self.assertEqual(services["ingestor-local"]["user"], "1000:1000")
         self.assertIn("postgres_data", config["volumes"])
+        self.assertIn("mosquitto_data", config["volumes"])
+        self.assertIn(
+            "mosquitto_data",
+            services["mosquitto"]["volumes"][1]["source"],
+        )
         self.assertIn("rfid-dev", config["networks"])
 
     def test_managed_profile_does_not_start_local_infrastructure(self) -> None:

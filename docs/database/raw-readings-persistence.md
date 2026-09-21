@@ -138,7 +138,8 @@ O receptor Paho habilita `manual_ack_set(True)` antes de conectar. Para QoS 1:
 | Duplicata | Novo envelope JSONL e log duplicate | Uma vez |
 | Parsing/normalização inválidos | Envelope com parse_error/validation_errors e canonical_event nulo | Uma vez, sem consultar o banco |
 | Leitor/antena desconhecidos | Envelope original e registro JSONL complementar de rejeição | Uma vez |
-| Falha PostgreSQL, inclusive no commit | Envelope original permanece; log de categoria segura; receptor falha | Não |
+| Falha PostgreSQL temporária, inclusive no commit | Envelope original permanece; recuperação com backoff | Não |
+| Falha PostgreSQL permanente/configuração | Envelope original permanece; receptor falha para intervenção | Não |
 | Falha de escrita JSONL, inclusive no registro complementar | Receptor falha | Não |
 
 O registro complementar usa `event_type: rfid_persistence`, `status`, `reason`,
@@ -152,10 +153,11 @@ arquivo e banco. Se o processo cair depois do commit e antes do ACK, uma reentre
 do mesmo evento será duplicata. JSONL continua append-only e pode conter várias
 entregas da mesma mensagem. Flush não equivale a garantia de durabilidade com fsync.
 
-Falha de banco encerra explicitamente o receptor com código 1 e impede processar
-callbacks posteriores. Falha no envio do ACK também é fatal. ACK manual evita
-confirmação prematura; **sessão persistente, reconexão e recuperação completas são
-da ISS-007**. Esta entrega não garante recuperação de mensagens após restart.
+Desde a ISS-007, falha temporária de banco pausa o consumo: o receptor desconecta
+sem ACK, testa a volta do PostgreSQL com backoff e então reconecta ao MQTT para a
+reentrega. Erro permanente de autenticação/configuração e falha no envio do ACK
+continuam fatais. A sessão MQTT 3.1.1 é persistente e o `event_id` torna segura a
+repetição lógica; os limites estão no [guia da ISS-007](../infrastructure/iss-007-ingestor-resilience.md).
 
 ## Configuração e operação
 
@@ -236,7 +238,7 @@ e índices; não foram estimados bytes por linha. O [ADR MQTT](../decisions/0002
 pode orientar cenários de contagem de publicações, sem equivalência automática
 com armazenamento PostgreSQL.
 
-Permanecem fora desta entrega: ISS-007 (retry/backoff/recuperação), ISS-014
+Permanecem fora da ISS-006: ISS-014
 (debounce), ISS-015 (passagens/direção), atualização de zonas, histórico de
 movimentações, CRUD e cadastro automático. A investigação física EZ700
 MQTTS/timestamps da **#42** permanece separada e não foi resolvida aqui.

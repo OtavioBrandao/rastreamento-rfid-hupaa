@@ -19,6 +19,6 @@ def create_app_engine(environ=None) -> Engine:
         url = make_url(raw)
         if url.get_backend_name() != "postgresql":
             raise ValueError
-        return create_engine(url, hide_parameters=True, echo=False)
+        return create_engine(url, hide_parameters=True, echo=False, pool_pre_ping=True)
     except Exception:
         raise DatabaseConfigurationError("APP_DATABASE_URL inválida para PostgreSQL") from None

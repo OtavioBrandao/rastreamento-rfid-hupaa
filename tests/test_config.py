@@ -14,7 +14,11 @@ class SettingsTests(unittest.TestCase):
             with self.subTest(template=name):
                 source = read_environment(name)
                 self.assertTrue({"MQTT_MAX_PAYLOAD_BYTES", "RFID_DEFAULT_ADAPTER",
-                                 "RFID_READER_ADAPTERS", "EZ700_TIMESTAMP_FORMAT"} <= source.keys())
+                                 "RFID_READER_ADAPTERS", "EZ700_TIMESTAMP_FORMAT",
+                                 "MQTT_RECONNECT_INITIAL_DELAY", "MQTT_RECONNECT_MAX_DELAY",
+                                 "MQTT_RECONNECT_MULTIPLIER", "MQTT_RECONNECT_JITTER",
+                                 "DB_RETRY_INITIAL_DELAY", "DB_RETRY_MAX_DELAY",
+                                 "DB_RETRY_MULTIPLIER", "DB_RETRY_JITTER"} <= source.keys())
                 if source["MQTT_MODE"] == "cloud":
                     source.update(MQTT_USERNAME="synthetic-user", MQTT_PASSWORD="synthetic-password")
                 settings = Settings.from_env(source)
@@ -35,6 +39,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.mqtt_topic, "easy/+/+/+/+/readings")
         self.assertEqual(settings.events_file, Path("data/raw_events.jsonl"))
         self.assertEqual(settings.log_level, "INFO")
+        self.assertEqual(settings.mqtt_reconnect_initial_delay, 1)
+        self.assertEqual(settings.mqtt_reconnect_max_delay, 30)
+        self.assertEqual(settings.db_retry_jitter, 0.2)
 
     def test_all_settings_can_come_from_environment(self) -> None:
         settings = Settings.from_env(
@@ -48,6 +55,14 @@ class SettingsTests(unittest.TestCase):
                 "MQTT_QOS": "1",
                 "EVENTS_FILE": "tmp/events.jsonl",
                 "LOG_LEVEL": "debug",
+                "MQTT_RECONNECT_INITIAL_DELAY": "0.5",
+                "MQTT_RECONNECT_MAX_DELAY": "12",
+                "MQTT_RECONNECT_MULTIPLIER": "1.5",
+                "MQTT_RECONNECT_JITTER": "0.1",
+                "DB_RETRY_INITIAL_DELAY": "2",
+                "DB_RETRY_MAX_DELAY": "20",
+                "DB_RETRY_MULTIPLIER": "3",
+                "DB_RETRY_JITTER": "0.4",
             }
         )
 
@@ -60,6 +75,14 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.mqtt_qos, 1)
         self.assertEqual(settings.events_file, Path("tmp/events.jsonl"))
         self.assertEqual(settings.log_level, "DEBUG")
+        self.assertEqual(settings.mqtt_reconnect_initial_delay, 0.5)
+        self.assertEqual(settings.mqtt_reconnect_max_delay, 12)
+        self.assertEqual(settings.mqtt_reconnect_multiplier, 1.5)
+        self.assertEqual(settings.mqtt_reconnect_jitter, 0.1)
+        self.assertEqual(settings.db_retry_initial_delay, 2)
+        self.assertEqual(settings.db_retry_max_delay, 20)
+        self.assertEqual(settings.db_retry_multiplier, 3)
+        self.assertEqual(settings.db_retry_jitter, 0.4)
         self.assertNotIn("valor-nao-real", repr(settings))
 
     def test_invalid_values_are_rejected(self) -> None:
@@ -70,6 +93,11 @@ class SettingsTests(unittest.TestCase):
             {"MQTT_QOS": "3"},
             {"EVENTS_FILE": ""},
             {"LOG_LEVEL": "VERBOSE"},
+            {"MQTT_RECONNECT_INITIAL_DELAY": "0"},
+            {"MQTT_RECONNECT_MAX_DELAY": "0.5"},
+            {"MQTT_RECONNECT_MULTIPLIER": "0.9"},
+            {"MQTT_RECONNECT_JITTER": "1.1"},
+            {"DB_RETRY_JITTER": "nan"},
         )
 
         for environment in invalid_environments:

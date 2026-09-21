@@ -4,7 +4,7 @@ MVP experimental para rastreabilidade aproximada por zonas de equipamentos
 hospitalares do HUPAA/UFAL usando RFID UHF passivo. A posição será inferida
 pela última passagem confirmada em uma zona, não por posicionamento contínuo.
 
-## Fase atual — ISS-006: persistência idempotente de leituras
+## Fase atual — ISS-007: resiliência e recuperação do ingestor
 
 **HiveMQ Cloud Serverless é o broker principal escolhido para o MVP.** O código
 suporta modo externo com TLS e modo local com Mosquitto, usando o mesmo ingestor,
@@ -46,13 +46,14 @@ make simulator-local
 tail -n 3 data/raw_events.jsonl
 ```
 
-Para parar sem apagar o banco: `make stop-local`. O reset exige confirmação e
-remove somente o volume PostgreSQL local:
+Para parar sem apagar o estado: `make stop-local`. O reset exige confirmação e
+remove somente os volumes PostgreSQL e Mosquitto do projeto local:
 `CONFIRM_RESET_LOCAL=APAGAR make reset-local`.
 
 ```bash
 make tests
 make smoke
+make smoke-resilience
 ```
 
 O smoke executa um broker isolado em loopback:18884 e dois simuladores,
@@ -112,6 +113,10 @@ canônicos no PostgreSQL com idempotência por `event_id` e ACK manual após
 processamento. Leitor lógico e antena precisam estar cadastrados explicitamente;
 leitores desconhecidos são rejeitados e auditados. Não há debounce ou inferência
 de passagem. Veja [persistência, configuração e validação](docs/database/raw-readings-persistence.md).
+Falhas temporárias de MQTT e PostgreSQL são recuperadas com backoff exponencial e
+jitter. O ingestor usa sessão MQTT 3.1.1 persistente, reassina após reconectar e
+mantém mensagens sem ACK quando o banco está indisponível. Veja o [guia de
+resiliência da ISS-007](docs/infrastructure/iss-007-ingestor-resilience.md).
 
 O transporte antigo `rfid/<reader-id>/tags` foi substituído explicitamente.
 As configurações dos leitores precisam migrar antes da próxima coleta.
@@ -121,6 +126,7 @@ JSONLs históricos continuam preservados; não se assinam os dois padrões em si
 
 - [Operação local/cloud, cluster, ACL, simuladores e rotação](docs/mqtt-ingestion.md).
 - [Persistência idempotente, ACK e testes da ISS-006](docs/database/raw-readings-persistence.md).
+- [Reconexão, backoff e recuperação da ISS-007](docs/infrastructure/iss-007-ingestor-resilience.md).
 - [Contrato canônico, adapters e validação sintética da ISS-005](docs/rfid-normalization.md).
 - [Relatório de entrega e testes da ISS-005](docs/evidence/iss005/README.md).
 - [Comparação HiveMQ × EMQX e estimativas de volume](docs/decisions/0002-managed-mqtt.md).

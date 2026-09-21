@@ -5,7 +5,9 @@ set -Eeuo pipefail
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 PROJECT_NAME=${COMPOSE_PROJECT_NAME:-rfid-hospital-local}
 
-if [[ "$PROJECT_NAME" != "rfid-hospital-local" && "$PROJECT_NAME" != rfid-iss003-smoke-* ]]; then
+if [[ "$PROJECT_NAME" != "rfid-hospital-local" \
+    && "$PROJECT_NAME" != rfid-iss003-smoke-* \
+    && "$PROJECT_NAME" != rfid-iss007-smoke-* ]]; then
     printf 'ERRO: projeto recusado pelo reset local: %s\n' "$PROJECT_NAME" >&2
     exit 2
 fi
@@ -18,5 +20,5 @@ fi
 cd -- "$ROOT_DIR"
 docker compose --project-name "$PROJECT_NAME" --profile local \
     down --volumes --remove-orphans
-printf 'Estado Docker local removido: projeto=%s, incluindo o volume PostgreSQL local.\n' \
+printf 'Estado Docker local removido: projeto=%s, incluindo volumes PostgreSQL/Mosquitto.\n' \
     "$PROJECT_NAME"

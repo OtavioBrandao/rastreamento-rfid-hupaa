@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import math
 import os
 import re
 from dataclasses import dataclass, field
@@ -18,6 +19,10 @@ DEFAULT_MQTT_QOS = 1
 DEFAULT_EVENTS_FILE = Path("data/raw_events.jsonl")
 DEFAULT_LOG_LEVEL = "INFO"
 DEFAULT_MAX_PAYLOAD_BYTES = 65536
+DEFAULT_RETRY_INITIAL_DELAY = 1.0
+DEFAULT_RETRY_MAX_DELAY = 30.0
+DEFAULT_RETRY_MULTIPLIER = 2.0
+DEFAULT_RETRY_JITTER = 0.2
 VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 LOCAL_MQTT_HOSTNAMES = frozenset({"localhost", "mosquitto"})
 
@@ -38,6 +43,18 @@ def _integer_value(
       return int(raw_value)
   except ValueError as error:
       raise ValueError(f"{name} deve ser um número inteiro") from error
+
+
+def _float_value(
+    source: Mapping[str, str], name: str, default: float
+) -> float:
+    raw_value = source.get(name)
+    if raw_value is None or not raw_value.strip():
+        return default
+    try:
+        return float(raw_value)
+    except ValueError as error:
+        raise ValueError(f"{name} deve ser um número") from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +78,14 @@ class Settings:
   normalization_adapter: str = "ez700"
   reader_adapters: dict[str, str] = field(default_factory=dict)
   ez700_timestamp_format: str = "rfc3339"
+  mqtt_reconnect_initial_delay: float = DEFAULT_RETRY_INITIAL_DELAY
+  mqtt_reconnect_max_delay: float = DEFAULT_RETRY_MAX_DELAY
+  mqtt_reconnect_multiplier: float = DEFAULT_RETRY_MULTIPLIER
+  mqtt_reconnect_jitter: float = DEFAULT_RETRY_JITTER
+  db_retry_initial_delay: float = DEFAULT_RETRY_INITIAL_DELAY
+  db_retry_max_delay: float = DEFAULT_RETRY_MAX_DELAY
+  db_retry_multiplier: float = DEFAULT_RETRY_MULTIPLIER
+  db_retry_jitter: float = DEFAULT_RETRY_JITTER
 
   @classmethod
   def from_env(cls, environ: Mapping[str, str] | None = None) -> "Settings":
@@ -98,6 +123,30 @@ class Settings:
           normalization_adapter=source.get("RFID_DEFAULT_ADAPTER", "ez700"),
           reader_adapters=json.loads(source.get("RFID_READER_ADAPTERS", "{}")),
           ez700_timestamp_format=source.get("EZ700_TIMESTAMP_FORMAT", "rfc3339"),
+          mqtt_reconnect_initial_delay=_float_value(
+              source, "MQTT_RECONNECT_INITIAL_DELAY", DEFAULT_RETRY_INITIAL_DELAY
+          ),
+          mqtt_reconnect_max_delay=_float_value(
+              source, "MQTT_RECONNECT_MAX_DELAY", DEFAULT_RETRY_MAX_DELAY
+          ),
+          mqtt_reconnect_multiplier=_float_value(
+              source, "MQTT_RECONNECT_MULTIPLIER", DEFAULT_RETRY_MULTIPLIER
+          ),
+          mqtt_reconnect_jitter=_float_value(
+              source, "MQTT_RECONNECT_JITTER", DEFAULT_RETRY_JITTER
+          ),
+          db_retry_initial_delay=_float_value(
+              source, "DB_RETRY_INITIAL_DELAY", DEFAULT_RETRY_INITIAL_DELAY
+          ),
+          db_retry_max_delay=_float_value(
+              source, "DB_RETRY_MAX_DELAY", DEFAULT_RETRY_MAX_DELAY
+          ),
+          db_retry_multiplier=_float_value(
+              source, "DB_RETRY_MULTIPLIER", DEFAULT_RETRY_MULTIPLIER
+          ),
+          db_retry_jitter=_float_value(
+              source, "DB_RETRY_JITTER", DEFAULT_RETRY_JITTER
+          ),
       )
       settings.validate()
       return settings
@@ -153,3 +202,37 @@ class Settings:
           raise ValueError("MQTT_QOS deve ser 1 neste contrato")
       if self.log_level not in VALID_LOG_LEVELS:
           raise ValueError("LOG_LEVEL inválido")
+      self._validate_backoff(
+          "MQTT_RECONNECT",
+          self.mqtt_reconnect_initial_delay,
+          self.mqtt_reconnect_max_delay,
+          self.mqtt_reconnect_multiplier,
+          self.mqtt_reconnect_jitter,
+      )
+      self._validate_backoff(
+          "DB_RETRY",
+          self.db_retry_initial_delay,
+          self.db_retry_max_delay,
+          self.db_retry_multiplier,
+          self.db_retry_jitter,
+      )
+
+  @staticmethod
+  def _validate_backoff(
+      prefix: str,
+      initial_delay: float,
+      max_delay: float,
+      multiplier: float,
+      jitter: float,
+  ) -> None:
+      values = (initial_delay, max_delay, multiplier, jitter)
+      if not all(math.isfinite(value) for value in values):
+          raise ValueError(f"{prefix} exige valores finitos")
+      if initial_delay <= 0 or max_delay < initial_delay:
+          raise ValueError(
+              f"{prefix} exige atraso inicial positivo e máximo não menor"
+          )
+      if multiplier < 1:
+          raise ValueError(f"{prefix}_MULTIPLIER deve ser pelo menos 1")
+      if not 0 <= jitter <= 1:
+          raise ValueError(f"{prefix}_JITTER deve estar entre 0 e 1")
