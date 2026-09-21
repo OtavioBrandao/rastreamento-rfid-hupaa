@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from api.normalizacao import normalizar_nome
 from api.service_tipos_equipamento import (
     NomeDuplicado,
     TipoEquipamentoEmUso,
@@ -24,10 +25,16 @@ from db.models import Equipamento
 
 
 def _criar_equipamento(session, tipo_id: int, identificador: str = "EQ-001") -> Equipamento:
+    # Cria a linha direto pelo model, sem passar por
+    # `api.service_equipamento` — de propósito, para não acoplar este
+    # teste de `tipos_equipamento` ao serviço de outra issue.
+    # `identificador_interno_normalizado` é NOT NULL (ISS-008), então
+    # precisa ser preenchido aqui igual o serviço faria.
     equipamento = Equipamento(
         nome="Maca do 3o andar",
         tipo_id=tipo_id,
         identificador_interno=identificador,
+        identificador_interno_normalizado=normalizar_nome(identificador),
     )
     session.add(equipamento)
     session.commit()

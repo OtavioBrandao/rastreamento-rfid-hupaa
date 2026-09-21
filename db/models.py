@@ -74,12 +74,29 @@ class TipoEquipamento(Base):
 
 
 class Equipamento(Base):
+    """
+    ISS-008. `identificador_interno` é a etiqueta física do ativo (nº de
+    patrimônio) — imutável depois de criado, o schema de update nem aceita
+    o campo. `identificador_interno_normalizado` é a chave real de
+    unicidade, mesmo padrão de `TipoEquipamento.nome_normalizado`.
+
+    Baixa é sempre LÓGICA (`status = 'inativo'`), nunca DELETE — mesmo
+    critério de `TipoEquipamento`, mas aqui sem bloqueio de "em uso":
+    inativar um equipamento não quebra integridade de nada.
+
+    A CHECK de `status` restringe às duas transições que esta issue cobre.
+    Se um status novo (ex.: "manutenção") virar necessário, é uma
+    migration própria que altera a CHECK — não um valor livre.
+    """
+
     __tablename__ = "equipamentos"
 
     id = Column(BigInteger, primary_key=True)
     nome = Column(String, nullable=False)
     tipo_id = Column(BigInteger, ForeignKey("tipos_equipamento.id"), nullable=False)
     identificador_interno = Column(String, nullable=False, unique=True)
+    identificador_interno_normalizado = Column(String, nullable=False)
+    descricao = Column(Text, nullable=True)
     status = Column(String, nullable=False, server_default="ativo")
 
     # RF-012: última localização conhecida vive como colunas no próprio
@@ -108,6 +125,13 @@ class Equipamento(Base):
     __table_args__ = (
         Index("ix_equipamentos_ultima_zona_id", "ultima_zona_id"),
         Index("ix_equipamentos_status", "status"),
+        UniqueConstraint(
+            "identificador_interno_normalizado",
+            name="uq_equipamentos_identificador_interno_normalizado",
+        ),
+        CheckConstraint(
+            "status IN ('ativo', 'inativo')", name="ck_equipamento_status_valido"
+        ),
     )
 
 
