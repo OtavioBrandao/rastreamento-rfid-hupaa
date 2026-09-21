@@ -34,13 +34,43 @@ from db.base import Base
 
 
 class TipoEquipamento(Base):
+    """
+    ISS-009. `nome` guarda o texto como o usuário digitou (é o que aparece
+    na tela); `nome_normalizado` é a chave real de unicidade — sem acento,
+    sem espaço sobrando e em minúsculas (ver `api/normalizacao.py`). Sem
+    ela, "Cadeira de Rodas" e "cadeira  de rodas" entrariam como dois
+    tipos diferentes.
+
+    Baixa é sempre LÓGICA (`ativo = false`), nunca DELETE: `equipamentos`
+    tem FK obrigatória para cá (ISS-008) e o histórico precisa continuar
+    resolvendo o tipo de um equipamento mesmo depois de ele sair de uso.
+
+    A UniqueConstraint é declarada com nome explícito (em vez de
+    `unique=True` na coluna) porque o `unique=True` gera uma constraint
+    anônima, cujo nome o Postgres escolhe — e aí o `downgrade` da
+    migration não tem como derrubá-la de forma determinística.
+    """
+
     __tablename__ = "tipos_equipamento"
 
     id = Column(BigInteger, primary_key=True)
     nome = Column(String, nullable=False, unique=True)
+    nome_normalizado = Column(String, nullable=False)
     descricao = Column(Text, nullable=True)
+    ativo = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    # Mesma ressalva do `updated_at` de `equipamentos`: `onupdate` só
+    # dispara em UPDATE feito via SQLAlchemy, não em SQL cru.
+    updated_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
     equipamentos = relationship("Equipamento", back_populates="tipo")
+
+    __table_args__ = (
+        UniqueConstraint("nome_normalizado", name="uq_tipos_equipamento_nome_normalizado"),
+        Index("ix_tipos_equipamento_ativo", "ativo"),
+    )
 
 
 class Equipamento(Base):
