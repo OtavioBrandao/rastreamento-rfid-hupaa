@@ -198,14 +198,16 @@ PUBACK MQTT 3.1.1 isolado não prova entrega: conferir sempre o JSONL do ingesto
 ## Testes e comando de aceite
 
 ```bash
-python -m unittest discover -s tests -v
+python -m pytest -q
 bash tests/reader-connectivity/mqtt/smoke-test.sh
 ```
 
 O smoke usa Compose isolado, loopback e porta 18884, testa dois publicadores,
-40 mensagens válidas e 2 inválidas, verifica JSONL e encerra seu contêiner.
-Para broker local já iniciado: `RUN_MQTT_INTEGRATION=1 python -m unittest discover -s tests -v`.
-`TEST_MQTT_PORT` altera a porta da integração. Testes sem broker pulam somente a integração.
+40 mensagens válidas e 2 inválidas, verifica JSONL/PostgreSQL e limpa seus recursos descartáveis.
+Para broker local já iniciado: `RUN_MQTT_INTEGRATION=1 python -m pytest -q`.
+`TEST_MQTT_PORT` altera a porta MQTT. Informe TEST_DATABASE_URL de banco descartável
+para testes PostgreSQL; sem essa variável eles são pulados. O smoke configura
+esses serviços automaticamente. Consulte a [ISS-006](database/raw-readings-persistence.md).
 Os três testes de handshake TLS usam OpenSSL (certificado efêmero em diretório
 temporário); se o executável não estiver instalado, são explicitamente pulados.
 Eles validam o transporte TLS local, não o serviço HiveMQ.
@@ -215,7 +217,8 @@ Para repetir a verificação com simuladores, configure explicitamente
 no exemplo). `verification` lê esse arquivo e gera marcador numérico em
 milissegundos para seus publicadores EZ700 sintéticos; não infere formato do
 leitor nem altera Settings automaticamente. Pare qualquer ingestor com o mesmo
-Client ID e execute:
+Client ID, configure APP_DATABASE_URL nesse perfil e cadastre explicitamente os
+leitores/antenas no banco antes de executar:
 
 ```bash
 python -m rfid_ingestion.verification \
