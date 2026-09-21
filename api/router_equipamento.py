@@ -7,10 +7,11 @@ Nenhuma regra de negócio mora aqui — mesmo padrão de
 `api/router_tipos_equipamento.py`.
 
 Mapeamento de erro:
-- `EquipamentoNaoEncontrado`  -> 404
-- `IdentificadorDuplicado`    -> 409
-- `TipoEquipamentoInvalido`   -> 422 (tipo_id inexistente ou inativo)
-- payload inválido            -> 422, direto pelo Pydantic
+- `EquipamentoNaoEncontrado`                 -> 404
+- `EquipamentoNaoEncontradoPorIdentificador` -> 404
+- `IdentificadorDuplicado`                   -> 409
+- `TipoEquipamentoInvalido`                  -> 422 (tipo_id inexistente ou inativo)
+- payload inválido                           -> 422, direto pelo Pydantic
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -94,6 +95,25 @@ def listar_equipamentos(
         total=pagina.total,
         pages=pagina.pages,
     )
+
+
+@router.get(
+    "/por-identificador/{identificador_interno}",
+    response_model=EquipamentoResposta,
+    summary="Buscar equipamento por identificador",
+)
+def buscar_equipamento_por_identificador(
+    identificador_interno: str,
+    db: Session = Depends(get_db),
+) -> EquipamentoResposta:
+    try:
+        equipamento = service.buscar_por_identificador(db, identificador_interno)
+    except (
+        service.EquipamentoNaoEncontrado,
+        service.EquipamentoNaoEncontradoPorIdentificador,
+    ) as erro:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
+    return _para_resposta(equipamento)
 
 
 @router.get(

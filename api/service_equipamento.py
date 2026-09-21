@@ -37,6 +37,17 @@ class EquipamentoNaoEncontrado(ErroEquipamento):
         super().__init__(f"Equipamento {equipamento_id} não encontrado.")
 
 
+class EquipamentoNaoEncontradoPorIdentificador(EquipamentoNaoEncontrado):
+    def __init__(self, identificador_interno: str) -> None:
+        self.identificador_interno = identificador_interno
+        self.identificador_normalizado = normalizar_nome(identificador_interno)
+        self.equipamento_id = None
+        ErroEquipamento.__init__(
+            self,
+            f"Equipamento com identificador interno {identificador_interno!r} não encontrado.",
+        )
+
+
 class IdentificadorDuplicado(ErroEquipamento):
     def __init__(self, identificador_interno: str) -> None:
         self.identificador_interno = identificador_interno
@@ -146,6 +157,22 @@ def buscar_por_id(session: Session, equipamento_id: int) -> Equipamento:
     )
     if equipamento is None:
         raise EquipamentoNaoEncontrado(equipamento_id)
+    return equipamento
+
+
+def buscar_por_identificador(session: Session, identificador_interno: str) -> Equipamento:
+    """
+    Busca por identificador interno (normalizado), inclusive inativos,
+    com `tipo` carregado via `joinedload` — mesmo padrão de `buscar_por_id`.
+    """
+    normalizado = normalizar_nome(identificador_interno)
+    equipamento = session.scalar(
+        select(Equipamento)
+        .options(joinedload(Equipamento.tipo))
+        .where(Equipamento.identificador_interno_normalizado == normalizado)
+    )
+    if equipamento is None:
+        raise EquipamentoNaoEncontradoPorIdentificador(identificador_interno)
     return equipamento
 
 
