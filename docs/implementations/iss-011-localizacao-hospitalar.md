@@ -7,27 +7,30 @@ Este documento detalha a implementação do subsistema de localização física 
 ## 1. Objetivo e Problema Resolvido
 
 ### Problema
-Para inferir a posição de ativos hospitalares no HUPAA/UFAL, o sistema necessita de uma representação hierárquica e coerente do espaço físico. Antes desta issue:
+Para rastrear ativos hospitalares por zonas de presença, o sistema necessita de uma representação hierárquica e coerente do espaço físico. Antes desta issue:
 1. As tabelas `andares`, `setores` e `zonas` existiam no banco de dados, mas não havia endpoints nem serviços para gerenciá-las.
 2. Não havia garantias lógicas para impedir inconsistências estruturais (por exemplo, inativar um andar enquanto seus setores e zonas permaneciam cadastrados como ativos).
-3. Não havia mecanismo estruturado para consultar a árvore física completa de um prédio hospitalar.
+3. Não havia mecanismo estruturado para consultar a árvore física completa do ambiente.
 
 ### Objetivo
-Disponibilizar uma API REST completa em FastAPI para gerenciamento do espaço hospitalar com:
+Disponibilizar uma API REST completa em FastAPI para gerenciamento do espaço físico hospitalar com:
 - Hierarquia estrita de 3 níveis: **Andar $\rightarrow$ Setor $\rightarrow$ Zona**.
 - *Guards* de integridade referencial e ciclo de vida (bloqueio de inativação com filhos ativos e bloqueio de reativação com pai inativo).
-- Proteção contra desativação de zonas vinculadas a portais de leitura.
-- Consulta da árvore hierárquica aninhada em uma única chamada otimizada.
-- Script de *seed* piloto com a estrutura física real de pavimentos do HUPAA.
+- Proteção contra desativação de zonas referenciadas no sistema (equipamentos, portais, antenas ou histórico).
+- Consulta da árvore hierárquica aninhada em chamadas otimizadas (`/localizacoes/arvore` e `/andares/{andar_id}/arvore`).
+- Script de *seed* piloto com estrutura configurável para testes de carga e validação.
 
 ---
 
 ## 2. Estrutura Hierárquica e Relacionamentos
 
+A hierarquia física persistida inicia em **Andar**, contendo **Setores**, que por sua vez contêm **Zonas**:
+
 ```mermaid
 graph TD
-    H[Hospital HUPAA] --> A1[Andar: 1º Pavimento]
-    H --> A2[Andar: 2º Pavimento]
+    %% Exemplo ilustrativo de topologia para testes (não representa taxonomia hospitalar validada)
+    A1["Andar: 1º Pavimento (Exemplo Ilustrativo)"]
+    A2["Andar: 2º Pavimento (Exemplo Ilustrativo)"]
 
     A1 --> S1[Setor: UTI Adulto]
     A1 --> S2[Setor: Centro Cirúrgico]
@@ -40,13 +43,16 @@ graph TD
     S2 --> Z5[Zona: Recuperação Pós-Anestésica]
 ```
 
+> [!NOTE]
+> O diagrama acima e os valores default de `api/seed_localizacao_piloto.py` constituem um **exemplo ilustrativo e configurável para testes**, e não uma taxonomia física homologada do HUPAA. Os dados reais de pavimentos serão definidos e inseridos durante a implantação física no hospital.
+
 ### Regras de Domínio:
 1. **Unicidade de Nomenclatura por Escopo:**
-   - O nome do andar é único no hospital.
+   - O nome do andar é único globalmente (`UniqueConstraint("nome_normalizado")`).
    - O nome do setor é único dentro de seu respectivo andar: `UNIQUE (andar_id, nome)`.
    - O nome da zona é único dentro de seu respectivo setor: `UNIQUE (setor_id, nome)`.
 2. **Zona Morta não é uma Entidade:**
-   - Áreas com sombra de radiofrequência ou sem cobertura de antenas não são modeladas como entidades à parte. A caracterização de zona morta é documentada textualmente no campo `zonas.observacoes`.
+   - Áreas com sombra de radiofrequência ou sem cobertura de antenas não são modeladas como entidades à parte. A caracterização de zona morta é documentada textualmente no campo opcional `zonas.observacoes`.
 
 ---
 
@@ -65,7 +71,7 @@ flowchart TD
         QS -->|Sim| E_FILHOS_S[409 Conflict: TemFilhosAtivos]
         QS -->|Não| OK_IS[Inativa Setor]
 
-        IZ[Inativar Zona] --> QZ{Vinculada a Portal ativo?}
+        IZ[Inativar Zona] --> QZ{Referenciada em equipamentos, portais, antenas ou histórico?}
         QZ -->|Sim| E_USO_Z[409 Conflict: ZonaEmUso]
         QZ -->|Não| OK_IZ[Inativa Zona]
     end
@@ -81,6 +87,15 @@ flowchart TD
     end
 ```
 
+### Detalhamento da Inativação de Zona:
+A inativação de uma zona (`POST /zonas/{zona_id}/inativar`) é bloqueada se ela for referenciada por **qualquer** entidade do sistema, independentemente de estarem ativas ou inativas:
+- `Equipamento.ultima_zona_id`: Ativo atualmente associado a esta zona;
+- `Portal.zona_a_id` ou `Portal.zona_b_id`: Qualquer portal existente ligando a esta zona (ativos ou inativos);
+- `Antena.zona_associada_id`: Qualquer antena cadastrada cuja cobertura aponte para esta zona;
+- `HistoricoMovimentacao.zona_origem_id` ou `zona_destino_id`: Registros históricos de movimentação de ativos.
+
+Se qualquer uma dessas referências existir, o serviço levanta `ZonaEmUso` e a API retorna HTTP `409 Conflict`.
+
 ---
 
 ## 4. Principais Arquivos e Endpoints
@@ -89,13 +104,18 @@ flowchart TD
 - `api/router_localizacao.py`: Tradução HTTP, parâmetros de rota e mapeamento de exceções.
 - `api/service_localizacao.py`: Lógica de domínio, validação dos *guards* e transações SQLAlchemy.
 - `api/schemas_localizacao.py`: Contratos Pydantic de entrada, saída, paginação e árvore aninhada (`AndarArvore`).
-- `api/seed_localizacao_piloto.py`: Carga idempotente de andares, setores e zonas de exemplo do HUPAA.
+- `api/seed_localizacao_piloto.py`: Carga idempotente e configurável de estrutura piloto para testes de andares, setores e zonas (placeholders sobrescrevíveis via CLI).
 
-### Principais Rotas HTTP:
-- `GET /andares/arvore`: Retorna a árvore completa (Andar $\rightarrow$ Setores $\rightarrow$ Zonas) em uma resposta JSON aninhada.
-- `POST /andares`, `GET /andares`, `PUT /andares/{id}`, `POST /andares/{id}/inativar`, `POST /andares/{id}/reativar`.
-- `POST /setores`, `GET /setores`, `PUT /setores/{id}`, `POST /setores/{id}/inativar`, `POST /setores/{id}/reativar`.
-- `POST /zonas`, `GET /zonas`, `PUT /zonas/{id}`, `POST /zonas/{id}/inativar`, `POST /zonas/{id}/reativar`.
+### Rotas HTTP Implementadas:
+- **Consultas em Árvore:**
+  - `GET /localizacoes/arvore`: Retorna a árvore completa (Andares $\rightarrow$ Setores $\rightarrow$ Zonas) em uma estrutura aninhada.
+  - `GET /andares/{andar_id}/arvore`: Retorna a árvore aninhada de um andar específico.
+- **Andares:**
+  - `POST /andares`, `GET /andares`, `GET /andares/{andar_id}`, `PATCH /andares/{andar_id}`, `POST /andares/{andar_id}/inativar`, `POST /andares/{andar_id}/reativar`.
+- **Setores:**
+  - `POST /setores`, `GET /setores`, `GET /setores/{setor_id}`, `PATCH /setores/{setor_id}`, `POST /setores/{setor_id}/inativar`, `POST /setores/{setor_id}/reativar`.
+- **Zonas:**
+  - `POST /zonas`, `GET /zonas`, `GET /zonas/{zona_id}`, `PATCH /zonas/{zona_id}`, `POST /zonas/{zona_id}/inativar`, `POST /zonas/{zona_id}/reativar`.
 
 ---
 
