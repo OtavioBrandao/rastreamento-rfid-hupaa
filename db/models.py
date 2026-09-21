@@ -211,40 +211,100 @@ class AssociacaoTagEquipamento(Base):
 
 
 class Andar(Base):
+    """
+    Nível 1 da hierarquia física (andar -> setor -> zona), ISS-011 (RF-004).
+    `nome_normalizado` é único GLOBALMENTE. Ver `TipoEquipamento` para a
+    lógica de `nome`/`nome_normalizado`/`ativo`: baixa sempre LÓGICA, nunca
+    DELETE, porque portais/antenas/histórico/equipamentos referenciam a
+    hierarquia.
+    """
+
     __tablename__ = "andares"
 
     id = Column(BigInteger, primary_key=True)
     nome = Column(String, nullable=False, unique=True)
+    nome_normalizado = Column(String, nullable=False)
+    descricao = Column(Text, nullable=True)
+    referencia_planta = Column(String, nullable=True)
+    ativo = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
     setores = relationship("Setor", back_populates="andar")
 
+    __table_args__ = (
+        UniqueConstraint("nome_normalizado", name="uq_andares_nome_normalizado"),
+    )
+
 
 class Setor(Base):
+    """
+    Nível 2. `nome_normalizado` é único DENTRO do andar (o mesmo nome em
+    andares diferentes é permitido — ex.: "Enfermaria" no 3º e no 4º).
+    """
+
     __tablename__ = "setores"
 
     id = Column(BigInteger, primary_key=True)
     andar_id = Column(BigInteger, ForeignKey("andares.id"), nullable=False)
     nome = Column(String, nullable=False)
+    nome_normalizado = Column(String, nullable=False)
+    descricao = Column(Text, nullable=True)
+    referencia_planta = Column(String, nullable=True)
+    ativo = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
     andar = relationship("Andar", back_populates="setores")
     zonas = relationship("Zona", back_populates="setor")
 
-    __table_args__ = (UniqueConstraint("andar_id", "nome", name="uq_setor_nome_por_andar"),)
+    __table_args__ = (
+        UniqueConstraint("andar_id", "nome", name="uq_setor_nome_por_andar"),
+        UniqueConstraint(
+            "andar_id", "nome_normalizado", name="uq_setor_nome_normalizado_por_andar"
+        ),
+    )
 
 
 class Zona(Base):
+    """
+    Nível 3. `nome_normalizado` é único DENTRO do setor.
+
+    `observacoes` (zona morta) é semanticamente diferente de `descricao`:
+    é a anotação textual de zona morta descrita em "Termos e definições".
+    Só a zona tem esse campo, e o CRUD da ISS-011 o expõe (criar, PATCH e
+    resposta) como qualquer outro campo opcional.
+    """
+
     __tablename__ = "zonas"
 
     id = Column(BigInteger, primary_key=True)
     setor_id = Column(BigInteger, ForeignKey("setores.id"), nullable=False)
     nome = Column(String, nullable=False)
+    nome_normalizado = Column(String, nullable=False)
+    descricao = Column(Text, nullable=True)
+    referencia_planta = Column(String, nullable=True)
     # Zona morta não é entidade própria: é só uma observação textual
     # sobre uma zona já existente (ver "Termos e definições").
     observacoes = Column(Text, nullable=True)
+    ativo = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
     setor = relationship("Setor", back_populates="zonas")
 
-    __table_args__ = (UniqueConstraint("setor_id", "nome", name="uq_zona_nome_por_setor"),)
+    __table_args__ = (
+        UniqueConstraint("setor_id", "nome", name="uq_zona_nome_por_setor"),
+        UniqueConstraint(
+            "setor_id", "nome_normalizado", name="uq_zona_nome_normalizado_por_setor"
+        ),
+    )
 
 
 class Portal(Base):
