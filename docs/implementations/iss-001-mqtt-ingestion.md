@@ -211,9 +211,9 @@ O smoke usa Compose isolado, loopback e porta 18884, testa dois publicadores,
 Para broker local já iniciado: `RUN_MQTT_INTEGRATION=1 python -m pytest -q`.
 `TEST_MQTT_PORT` altera a porta MQTT. Informe TEST_DATABASE_URL de banco descartável
 para testes PostgreSQL; sem essa variável eles são pulados. O smoke configura
-esses serviços automaticamente. Consulte a [ISS-006](database/raw-readings-persistence.md).
+esses serviços automaticamente. Consulte a [ISS-006](iss-006-raw-readings-persistence.md).
 O terceiro comando interrompe e restaura broker/banco descartáveis e está
-detalhado no [guia da ISS-007](infrastructure/iss-007-ingestor-resilience.md).
+detalhado no [guia da ISS-007](iss-007-ingestor-resilience.md).
 Os três testes de handshake TLS usam OpenSSL (certificado efêmero em diretório
 temporário); se o executável não estiver instalado, são explicitamente pulados.
 Eles validam o transporte TLS local, não o serviço HiveMQ.
@@ -253,8 +253,8 @@ o Client ID do publicador ao assinante; hardware exige conferência no leitor/pa
 Logs não incluem payload, senha, username ou tracebacks de erros operacionais.
 JSONL bruto continua preservando dados de origem; nunca publique segredos no payload.
 
-Veja [visita curta e duas redes](experiments/iss001-managed-validation.md) e
-[matriz de evidências](evidence/iss001/README.md).
+Veja [visita curta e duas redes](../experiments/mqtt/iss001-managed-validation.md) e
+[matriz de evidências](../experiments/mqtt/iss001-evidence-local.md).
 
 ## Rotação e contingência
 
