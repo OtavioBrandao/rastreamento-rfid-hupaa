@@ -76,11 +76,35 @@ flowchart TD
 
 ### Arquivos Principais:
 - `api/main.py`: Ponto de montagem dos routers FastAPI e tratamento global de exceções.
-- `api/router_tipos_equipamento.py` & `api/service_tipos_equipamento.py`: Endpoints e regras de negócio para categorias (bomba de infusão, cadeira de rodas, monitor, etc.).
+- `api/router_tipos_equipamento.py` & `api/service_tipos_equipamento.py`: Endpoints e regras de negócio para categorias de equipamentos.
 - `api/router_equipamento.py` & `api/service_equipamento.py`: Endpoints e regras para equipamentos.
 - `api/router_associacao.py` & `api/service_associacao.py`: Operações de vínculo tag-ativo.
 - `api/epc.py`: Validação de EPCs RFID UHF (hexadecimal de 24 a 64 caracteres, sem caracteres especiais).
 - `api/normalizacao.py`: Sanitização e normalização de textos e identificadores.
+
+### Rotas HTTP Implementadas:
+- **Tipos de Equipamento (`/tipos-equipamento`):**
+  - `POST /tipos-equipamento`: Cadastrar tipo de equipamento.
+  - `GET /tipos-equipamento`: Listar tipos de equipamento (paginado).
+  - `GET /tipos-equipamento/{tipo_id}`: Detalhar tipo.
+  - `PATCH /tipos-equipamento/{tipo_id}`: Atualização parcial de tipo.
+  - `POST /tipos-equipamento/{tipo_id}/inativar`: Inativação lógica (bloqueia se em uso).
+  - `POST /tipos-equipamento/{tipo_id}/reativar`: Reativação de tipo.
+- **Equipamentos (`/equipamentos`):**
+  - `POST /equipamentos`: Cadastrar equipamento.
+  - `GET /equipamentos`: Listar equipamentos (paginado).
+  - `GET /equipamentos/por-identificador/{identificador_interno}`: Busca por patrimônio/identificador normalizado.
+  - `GET /equipamentos/{equipamento_id}`: Detalhar equipamento.
+  - `PATCH /equipamentos/{equipamento_id}`: Atualização parcial.
+  - `POST /equipamentos/{equipamento_id}/inativar`: Inativação lógica.
+  - `POST /equipamentos/{equipamento_id}/reativar`: Reativação de equipamento.
+- **Associação e Ciclo de Vida de Tags (EPC):**
+  - `POST /equipamentos/{equipamento_id}/tag`: Associar tag EPC a equipamento.
+  - `PUT /equipamentos/{equipamento_id}/tag`: Substituir tag ativa por novo EPC.
+  - `GET /equipamentos/{equipamento_id}/tag`: Consultar vínculo ativo.
+  - `DELETE /equipamentos/{equipamento_id}/tag`: Encerrar vínculo ativo.
+  - `GET /equipamentos/{equipamento_id}/tag/historico`: Histórico de vínculos do equipamento.
+  - `GET /tags/{epc}`: Resolver qual equipamento está associado atualmente ao EPC.
 
 ---
 
@@ -96,7 +120,7 @@ sequenceDiagram
     participant Service as service_associacao
     participant DB as PostgreSQL
 
-    Operador->>Router: POST /equipamentos/{id}/tag/substituir (novo EPC)
+    Operador->>Router: PUT /equipamentos/{equipamento_id}/tag (novo EPC)
     Router->>Service: substituir(equipamento_id, novo_epc)
     Note over Service: Valida formato do EPC (Hexadecimal)
     Service->>DB: Inicia Transação (BEGIN)
@@ -134,7 +158,7 @@ Isso garante que uma leitura antiga feita antes da troca da tag continue atribu�
    CREATE UNIQUE INDEX uq_equipamento_tag_ativa ON associacoes_tag_equipamento (equipamento_id) WHERE fim IS NULL;
    ```
 3. **Inativação Lógica vs. Exclusão:** Equipamentos com histórico de leituras nunca são deletados (`DELETE`); são marcados como `status = 'inativo'`, preservando a integridade referencial.
-4. **Seed Piloto:** Scripts dedicados (`api/seed_tipos_equipamento.py`) populam os tipos hospitalares padrão do HUPAA para agilizar testes e homologação local.
+4. **Seed Piloto:** Scripts dedicados (`api/seed_tipos_equipamento.py`) fornecem tipos de exemplo para testes (`Maca`, `Cadeira de rodas`, `Carrinho de emergência`). Trata-se de valores de carga inicial para homologação e testes de desenvolvimento, e não de uma taxonomia hospitalar oficial validada.
 
 ---
 
