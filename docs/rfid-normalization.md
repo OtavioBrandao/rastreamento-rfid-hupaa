@@ -4,8 +4,9 @@
 
 O mesmo cliente Paho/Settings da ISS-001 recebe em local ou cloud, preserva o
 envelope bruto, valida tamanho/UTF-8/JSON, resolve contexto e adapter, normaliza
-e grava JSONL append-only. Não há segundo cliente de ingestão, banco, debounce,
-inferência de passagem ou alteração de reconexão/ACL. O notebook não é hotspot.
+e grava JSONL append-only. A [ISS-006](database/raw-readings-persistence.md) acrescenta
+PostgreSQL e ACK manual ao mesmo consumidor. Não há debounce, inferência de
+passagem ou alteração de ACL. O notebook não é hotspot.
 
 O tópico exclusivo continua `easy/<environment>/<site_id>/<portal_id>/<reader_id>/readings`.
 Não foi criado alias legado. JSONLs históricos continuam legíveis; chamar o
@@ -113,8 +114,8 @@ Tópico completo evita colisão lógica entre ambientes, sites e portais.
 campos, extras ou representação numérica diferentes alteram o ID. Duas leituras
 legítimas de bytes idênticos no mesmo tópico também terão ID igual. Futuramente
 sequência/ID confiável de origem pode demandar nova versão desse contrato.
-Não há garantia exactly-once. ISS-006 decide persistência idempotente e ISS-014
-decide debounce. Alterar semântica de adapter exige versionar seu nome/contrato
+Não há garantia exactly-once. A ISS-006 persiste esse ID com idempotência;
+a ISS-014 continua responsável pelo debounce. Alterar semântica de adapter exige versionar seu nome/contrato
 e revisar replay histórico.
 
 ## Rejeição e auditoria
@@ -141,14 +142,15 @@ como na ISS-001; mensagens inválidas não interrompem o consumidor.
 ## Reprodução local (Ubuntu 24.04)
 
 ```bash
-python -m unittest discover -s tests -v
+python -m pytest -q
 bash tests/reader-connectivity/mqtt/smoke-test.sh
 # Com Mosquitto local já iniciado:
-RUN_MQTT_INTEGRATION=1 python -m unittest discover -s tests -v
+RUN_MQTT_INTEGRATION=1 python -m pytest -q
 ```
 
-O smoke inicia Compose isolado em loopback:18884, roda a suíte e limpa seu
-contêiner. A integração anterior conserva 40 mensagens válidas e duas inválidas;
+O smoke inicia Mosquitto/PostgreSQL em Compose isolado, roda a suíte e limpa
+seus recursos descartáveis. A execução direta exige TEST_DATABASE_URL para banco
+de teste e RUN_MQTT_INTEGRATION=1 para broker. Nenhuma topologia é criada em runtime. A integração anterior conserva 40 mensagens válidas e duas inválidas;
 a nova integração publica EZ700 e simulator simultaneamente, reapresenta bytes,
 compara campos relevantes e confirma IDs distintos por leitor e estáveis no replay.
 Testes unitários comparam também equivalência mantendo o mesmo reader_id.
