@@ -55,8 +55,10 @@ Foram resolvidos 18 arquivos conflitantes entre a antiga branch e a `main` atual
    - Classificação refinada de falhas de conexão MQTT e CONNACK, diferenciando DNS, broker indisponível, rede inalcançável, timeout, erro de rede, autenticação, autorização, client ID, protocolo e falha de certificado TLS.
 3. **`e71fa2e` — `test(iss-007): cover mqtt failure categories`**
    - 15 novos casos de teste em `tests/test_mqtt_recovery.py` cobrindo todas as categorias de falha, parametrização de códigos CONNACK e exceções de socket, verificação de parada do supervisor em falhas permanentes e validação de mascaramento de credenciais e exceções brutas.
-4. **`docs(iss-007): document resilience and final validation`**
+4. **`8a4ec1d` — `docs(iss-007): document resilience and final validation`**
    - Atualização de `docs/infrastructure/iss-007-ingestor-resilience.md` com a taxonomia detalhada e criação deste log de implementação em `docs/evidence/iss007/implementation-log.md`.
+5. **`ac268cb` — `fix(iss-007): restore authoritative leitor model without duplicate reader_id`**
+   - Eliminação de declaração duplicada residual de `reader_id` em `db/models.py` originada na resolução do merge antigo, alinhando `db/models.py` com `origin/main` e resolvendo o drift de schema nos testes de migration do Alembic.
 
 ---
 
