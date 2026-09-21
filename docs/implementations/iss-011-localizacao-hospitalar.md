@@ -28,14 +28,14 @@ Disponibilizar uma API REST completa em FastAPI para gerenciamento do espaço ho
 graph TD
     H[Hospital HUPAA] --> A1[Andar: 1º Pavimento]
     H --> A2[Andar: 2º Pavimento]
-    
+
     A1 --> S1[Setor: UTI Adulto]
     A1 --> S2[Setor: Centro Cirúrgico]
-    
+
     S1 --> Z1[Zona: Leitos UTI 01-10]
     S1 --> Z2[Zona: Posto de Enfermagem UTI]
     S1 --> Z3["Zona: Expurgo (com observações de zona morta)"]
-    
+
     S2 --> Z4[Zona: Sala de Operação 01]
     S2 --> Z5[Zona: Recuperação Pós-Anestésica]
 ```
