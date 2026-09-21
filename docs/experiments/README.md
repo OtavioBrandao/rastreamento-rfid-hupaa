@@ -12,7 +12,7 @@ Para garantir honestidade técnica e precisão metodológica na apresentação a
 |---|---|---|---|
 | **1. Simulador Sintético** | Scripts Python locais (`rfid_ingestion.simulator`) emitindo payloads JSON pré-definidos | Corretude do parser, normalização canônica, hashing determinístico e geração de schema | Comportamento do firmware do leitor real ou variações de sinal RF |
 | **2. Docker Local / Efêmero** | Contêineres Linux de Mosquitto (1883) e PostgreSQL 16 executados em loopback | Idempotência de banco, concorrência, roundtrip de migrations e reconexão básica | Latência de WAN, certificados TLS públicos ou instabilidades de rede externa |
-| **3. HiveMQ Cloud (Gerenciado)** | Cluster Serverless na nuvem com TLS (8883), autenticação SCRAM e ACLs por tópico | Resiliência com transporte criptografado e isolamento de permissões com simuladores | Conexão de leitores físicos no Wi-Fi hospitalar |
+| **3. HiveMQ Cloud (Gerenciado)** | Cluster Serverless na nuvem com TLS (8883), TLS + autenticação por usuário/senha e ACLs por tópico | Resiliência com transporte criptografado e isolamento de permissões com simuladores (validado em 05/09/2026) | Conexão de leitores físicos no Wi-Fi hospitalar |
 | **4. Hardware Físico em Bancada** | Leitores Identix EZ700 conectados via cabo de rede Ethernet ao notebook | Conectividade básica IP, DHCP e emissão de mensagens brutas pelo hardware | Funcionamento na rede Wi-Fi corporativa do hospital ou MQTTS em nuvem |
 | **5. Rede Hospitalar (Campo)** | Operação nas dependências do HUPAA/UFAL sob infraestrutura da TI institucional | Aceite final de produção e viabilidade assistencial | *Status atual: PENDENTE DE VALIDAÇÃO FÍSICA* |
 
@@ -30,7 +30,7 @@ Para garantir honestidade técnica e precisão metodológica na apresentação a
   - **Ambiente:** Mosquitto 2.1.2 em Docker local + scripts de verificação.
   - **Resultado:** 20/20 mensagens entregues por dois simuladores simultâneos; [relatório sanitizado em JSON](mqtt/local-2026-09-05.json).
 - [Roteiro de Validação em Redes Distintas (ISS-001)](mqtt/iss001-managed-validation.md):
-  - **Ambiente:** Procedimento para teste entre duas redes distintas (ex.: 4G móvel e rede cabeada) consumindo HiveMQ Cloud.
+  - **Ambiente:** Procedimento para teste entre duas redes distintas (ex.: 4G móvel e rede cabeada) consumindo cluster HiveMQ Cloud provisionado (validado com simuladores em 05/09/2026; validação física presencial pendente).
 - [Experimento Histórico em Redes Locais](mqtt/mqtt-network-validation.md):
   - **Ambiente:** Experimento inicial com hotspot e Wi-Fi local para diagnóstico de isolamento de clientes.
 - [Relatório Histórico de Bancada — Identix EZ700 (PDF)](mqtt/test1_readers_communication.pdf):
