@@ -216,6 +216,60 @@ def test_get_por_id_inexistente_devolve_404(client):
     assert resposta.status_code == 404
 
 
+def test_get_por_identificador_exato(client):
+    tipo = _criar_tipo(client, "Cadeira de rodas")
+    criado = _criar_equipamento(client, tipo["id"], identificador_interno="PAT-0030")
+
+    resposta = client.get("/equipamentos/por-identificador/PAT-0030")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["id"] == criado["id"]
+    assert corpo["identificador_interno"] == "PAT-0030"
+    assert corpo["identificador_interno_normalizado"] == "pat-0030"
+    assert corpo["tipo_nome"] == "Cadeira de rodas"
+    assert corpo["status"] == "ativo"
+
+
+@pytest.mark.parametrize(
+    "variacao",
+    [
+        "  pat-0031  ",
+        "pat-0031",
+        "PAT-0031",
+        "  PAT-0031  ",
+    ],
+)
+def test_get_por_identificador_com_variacao_normalizada(client, variacao):
+    tipo = _criar_tipo(client)
+    criado = _criar_equipamento(client, tipo["id"], identificador_interno="PAT-0031")
+
+    resposta = client.get(f"/equipamentos/por-identificador/{variacao}")
+
+    assert resposta.status_code == 200
+    assert resposta.json()["id"] == criado["id"]
+
+
+def test_get_por_identificador_inativo_devolve_200(client):
+    tipo = _criar_tipo(client, "Maca")
+    criado = _criar_equipamento(client, tipo["id"], identificador_interno="PAT-0032")
+    client.post(f"/equipamentos/{criado['id']}/inativar")
+
+    resposta = client.get("/equipamentos/por-identificador/PAT-0032")
+
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["id"] == criado["id"]
+    assert corpo["status"] == "inativo"
+    assert corpo["tipo_nome"] == "Maca"
+
+
+def test_get_por_identificador_inexistente_devolve_404(client):
+    resposta = client.get("/equipamentos/por-identificador/INEXISTENTE-999")
+
+    assert resposta.status_code == 404
+
+
 def test_patch_atualiza_nome_e_tipo(client):
     tipo_a = _criar_tipo(client, "Maca")
     tipo_b = _criar_tipo(client, "Cadeira de rodas")

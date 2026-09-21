@@ -11,10 +11,12 @@ import pytest
 
 from api.service_equipamento import (
     EquipamentoNaoEncontrado,
+    EquipamentoNaoEncontradoPorIdentificador,
     IdentificadorDuplicado,
     TipoEquipamentoInvalido,
     atualizar,
     buscar_por_id,
+    buscar_por_identificador,
     criar,
     inativar,
     listar,
@@ -131,6 +133,60 @@ def test_buscar_por_id_traz_o_tipo_carregado(db):
 def test_buscar_por_id_inexistente_levanta_erro_de_dominio(db):
     with pytest.raises(EquipamentoNaoEncontrado):
         buscar_por_id(db, 999_999)
+
+
+def test_buscar_por_identificador_exato_traz_tipo_carregado(db):
+    tipo = _criar_tipo(db, nome="Cadeira de rodas")
+    equipamento = criar(db, nome="Cadeira 1", tipo_id=tipo.id, identificador_interno="PAT-0030")
+
+    encontrado = buscar_por_identificador(db, "PAT-0030")
+
+    assert encontrado.id == equipamento.id
+    assert encontrado.identificador_interno == "PAT-0030"
+    assert encontrado.identificador_interno_normalizado == "pat-0030"
+    assert encontrado.tipo.nome == "Cadeira de rodas"
+
+
+@pytest.mark.parametrize(
+    "variacao",
+    [
+        "pat-0031",
+        "PAT-0031",
+        "  PAT-0031  ",
+        "PAT-0031 ",
+        "  pat-0031  ",
+        "Pát-0031",
+    ],
+)
+def test_buscar_por_identificador_com_variacao_normalizada(db, variacao):
+    tipo = _criar_tipo(db)
+    equipamento = criar(db, nome="Maca", tipo_id=tipo.id, identificador_interno="PAT-0031")
+
+    encontrado = buscar_por_identificador(db, variacao)
+
+    assert encontrado.id == equipamento.id
+    assert encontrado.identificador_interno == "PAT-0031"
+
+
+def test_buscar_por_identificador_inativo_encontra_equipamento(db):
+    tipo = _criar_tipo(db, nome="Maca")
+    equipamento = criar(db, nome="Maca", tipo_id=tipo.id, identificador_interno="PAT-0032")
+    inativar(db, equipamento.id)
+
+    encontrado = buscar_por_identificador(db, "PAT-0032")
+
+    assert encontrado.id == equipamento.id
+    assert encontrado.status == "inativo"
+    assert encontrado.tipo.nome == "Maca"
+
+
+def test_buscar_por_identificador_inexistente_levanta_erro_de_dominio(db):
+    with pytest.raises(EquipamentoNaoEncontradoPorIdentificador) as erro:
+        buscar_por_identificador(db, "INEXISTENTE-999")
+
+    assert erro.value.identificador_interno == "INEXISTENTE-999"
+    assert erro.value.identificador_normalizado == "inexistente-999"
+    assert isinstance(erro.value, EquipamentoNaoEncontrado)
 
 
 def test_atualizar_nome_e_tipo(db):
