@@ -8,6 +8,9 @@ erDiagram
     ZONAS ||--o{ PORTAIS : "lado A"
     ZONAS ||--o{ PORTAIS : "lado B"
     PORTAIS ||--o{ ANTENAS : "agrega (antenas de leitores distintos)"
+    PORTAIS ||--o{ MAPEAMENTOS_ANTENA_PORTAL : "historico topologia"
+    ANTENAS ||--o{ MAPEAMENTOS_ANTENA_PORTAL : "historico alocacao"
+    ZONAS ||--o{ MAPEAMENTOS_ANTENA_PORTAL : "coberta por"
     ZONAS ||--o{ ANTENAS : cobre
     LEITORES ||--o{ ANTENAS : possui
 
@@ -114,6 +117,18 @@ erDiagram
         boolean ativo "UK(leitor,porta) so entre ativas"
         timestamptz created_at
         timestamptz updated_at
+    }
+
+    MAPEAMENTOS_ANTENA_PORTAL {
+        bigint id PK
+        bigint portal_id FK
+        bigint antena_id FK
+        bigint zona_id FK
+        string lado "A, B"
+        string funcao "entrada, saida, auxiliar"
+        timestamptz inicio
+        timestamptz fim "NULL = ativo; uq_mapeamento_antena_ativo; CHECK fim >= inicio"
+        timestamptz created_at
     }
 
     LEITURAS_BRUTAS {

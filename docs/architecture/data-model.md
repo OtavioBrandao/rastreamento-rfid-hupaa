@@ -133,7 +133,33 @@ Um portal agrega antenas via `antenas.portal_id` (associação direta — **as a
 
 `UNIQUE(leitor_id, porta_numero) WHERE ativo` — **índice único parcial** (`uq_antena_ativa_por_porta_leitor`, mesmo padrão de `uq_tag_ativa`): cada porta física do leitor tem no máximo uma antena **ativa**. Inativar uma antena libera a porta para uma antena nova; a linha antiga continua existindo (o histórico de leituras a referencia). Uma porta pode, portanto, ter várias linhas (uma ativa e as demais inativas): quem resolve `(leitor, porta) → antena` — como a ingestão — deve filtrar por `ativo`. Reativar uma antena cuja porta já foi tomada por outra ativa é bloqueado.
 
-> **Pendência não-bloqueante (revisão de código, Otávio):** por regra de negócio, `zona_associada_id` deveria sempre ser uma das duas zonas do portal a que a antena pertence (`portal.zona_a_id` ou `zona_b_id`, via `antenas.portal_id`). Isso não é validado pelo banco nesta migration — fica para a implementação da ISS-013 como validação de aplicação no cadastro.
+> **ISS-013:** A coerência de zonas entre portal e antena foi resolvida com a modelagem da tabela `mapeamentos_antena_portal`, associando antenas aos lados A ou B do portal e às suas zonas correspondentes.
+
+### `mapeamentos_antena_portal` (ISS-013, RF-006)
+Topologia lógica temporal versionada que define o significado operacional de uma antena dentro de um portal (lado A ou B, zona adjacente e função operacional).
+
+| Coluna | Tipo | Regra |
+|---|---|---|
+| id | bigint | PK |
+| antena_id | bigint | FK → antenas, NOT NULL |
+| portal_id | bigint | FK → portais, NOT NULL |
+| lado | varchar | NOT NULL, CHECK IN ('a', 'b') |
+| zona_id | bigint | FK → zonas, NOT NULL |
+| funcao | varchar | NOT NULL, CHECK IN ('entrada', 'saida', 'auxiliar') |
+| inicio | timestamptz | NOT NULL, default now() |
+| fim | timestamptz | NULL (**NULL = mapeamento ativo**) |
+| created_at | timestamptz | NOT NULL, default now() |
+
+**Constraints e Índices:**
+```sql
+CREATE UNIQUE INDEX uq_mapeamento_antena_ativo ON mapeamentos_antena_portal (antena_id) WHERE fim IS NULL;
+ALTER TABLE mapeamentos_antena_portal ADD CONSTRAINT ck_mapeamento_lado_valido CHECK (lado IN ('a', 'b'));
+ALTER TABLE mapeamentos_antena_portal ADD CONSTRAINT ck_mapeamento_funcao_valida CHECK (funcao IN ('entrada', 'saida', 'auxiliar'));
+ALTER TABLE mapeamentos_antena_portal ADD CONSTRAINT ck_mapeamento_periodo_valido CHECK (fim IS NULL OR fim >= inicio);
+```
+
+- **Semântica temporal `[inicio, fim)`:** Reconfigurações fecham a versão anterior (`fim = now()`) e criam uma nova versão (`inicio = now()`), preservando o histórico para reinterpretação retrospectiva de passagens passadas.
+- **Suporte a múltiplas antenas:** Não há unicidade em `(portal_id, lado)`. Múltiplas antenas podem cobrir o mesmo lado do portal simultaneamente.
 
 ### `leituras_brutas` (RF-007, RF-008)
 | Coluna | Tipo | Regra |
