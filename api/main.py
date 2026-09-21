@@ -1,5 +1,5 @@
 """
-Aplicação FastAPI do MVP (ISS-008, ISS-009).
+Aplicação FastAPI do MVP (ISS-008, ISS-009, ISS-010).
 
 Sobe com:
     uvicorn api.main:app --reload
@@ -7,6 +7,7 @@ Sobe com:
 
 from fastapi import FastAPI
 
+from api.router_associacao import router as router_associacao
 from api.router_equipamento import router as router_equipamento
 from api.router_tipos_equipamento import router as router_tipos_equipamento
 
@@ -16,10 +17,13 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# tipos_equipamento antes de equipamentos: equipamentos depende dele
-# (tipo_id precisa apontar para um tipo existente e ativo).
+# tipos_equipamento antes de equipamentos (equipamentos depende dele:
+# tipo_id precisa apontar para um tipo existente e ativo), e associacao
+# depois de equipamento (associar/substituir tag dependem de o
+# equipamento já existir e estar ativo).
 app.include_router(router_tipos_equipamento)
 app.include_router(router_equipamento)
+app.include_router(router_associacao)
 
 
 @app.get("/health", tags=["infra"], summary="Liveness check")
