@@ -94,5 +94,5 @@ Desenvolvimento/offline: `leitor/simulador → Mosquitto → mesmo ingestor → 
 Seleção manual por `MQTT_MODE=local|cloud`; sem fallback automático e sem ponte.
 O notebook nunca cria hotspot. Banco, CRUD, inferência e dashboard ficam fora.
 
-Ver [guia operacional](../mqtt-ingestion.md), [roteiro de campo](../experiments/iss001-managed-validation.md)
-e [evidências reais](../evidence/iss001/README.md).
+Ver [guia operacional](../implementations/iss-001-mqtt-ingestion.md), [roteiro de campo](../experiments/mqtt/iss001-managed-validation.md)
+e [evidências reais](../experiments/mqtt/iss001-evidence-local.md).

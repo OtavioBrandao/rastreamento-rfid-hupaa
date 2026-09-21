@@ -1,6 +1,6 @@
 # Migrations — comandos, convenções e rollback (ISS-002c)
 
-Documento de apoio à ISS-002c (Épico E1, Must, RNF-011, RNF-012, RNF-016). Complementa `docs/decisions/0003-modelagem-dados.md` (decisões de modelagem) e `docs/database/neon-setup.md` (infraestrutura do banco).
+Documento de apoio à ISS-002c (Épico E1, Must, RNF-011, RNF-012, RNF-016). Complementa `docs/decisions/0003-modelagem-dados.md` (decisões de modelagem) e `iss-002b-neon-setup.md` (infraestrutura do banco).
 
 ## 1. Comandos padronizados
 
@@ -55,7 +55,7 @@ python -m alembic upgrade head     # reaplica, já corrigido
    **Antes de rodar isso contra o Neon principal:** avisar a outra pessoa da dupla (evita ela rodar algo no meio do processo), e testar a correção numa **branch de teste do Neon** primeiro (`neonctl branches create --name teste-rollback --parent main`) — nunca testar uma correção de emergência direto em produção.
 
 ### Incidente real documentado (referência)
-A ISS-002b registra um incidente onde a migration antiga foi aplicada por engano no Neon principal (ambiente local desatualizado — `git pull` da `main` mergeada não tinha sido feito). Resolvido com o fluxo do Cenário C, opção 2 (rollback completo, já que o schema errado tinha acabado de ser criado, sem dados reais ainda). Detalhes completos em `docs/database/neon-setup.md`, seção 8. **Lição geral:** sempre conferir `git log --oneline -5` e o ID da migration esperado antes de rodar `upgrade head` contra o banco principal.
+A ISS-002b registra um incidente onde a migration antiga foi aplicada por engano no Neon principal (ambiente local desatualizado — `git pull` da `main` mergeada não tinha sido feito). Resolvido com o fluxo do Cenário C, opção 2 (rollback completo, já que o schema errado tinha acabado de ser criado, sem dados reais ainda). Detalhes completos em `iss-002b-neon-setup.md`, seção 8. **Lição geral:** sempre conferir `git log --oneline -5` e o ID da migration esperado antes de rodar `upgrade head` contra o banco principal.
 
 ## 4. Verificação no CI
 

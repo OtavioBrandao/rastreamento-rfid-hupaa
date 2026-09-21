@@ -98,5 +98,5 @@ usuário/senha e Client ID configurável do EZ700; um e dois leitores simultâne
 taxa real e duas redes quando disponíveis. Não existe ponte nesta entrega.
 
 **Estado da issue:** aberta, não concluída. Nenhum push, PR, comentário remoto
-ou fechamento autorizado nesta entrega. Ver [guia operacional](../../mqtt-ingestion.md)
-e [roteiro de campo](../../experiments/iss001-managed-validation.md).
+ou fechamento autorizado nesta entrega. Ver [guia operacional](../../implementations/iss-001-mqtt-ingestion.md)
+e [roteiro de campo](iss001-managed-validation.md).

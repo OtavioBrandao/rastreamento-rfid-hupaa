@@ -245,7 +245,7 @@ make simulator-local
 
 O target usa um Client ID próprio e publica três mensagens no tópico
 `easy/dev/hupaa/portal-01/reader-01/readings`. Também é possível executar o
-simulador no host conforme `docs/mqtt-ingestion.md`.
+simulador no host conforme [iss-001-mqtt-ingestion.md](iss-001-mqtt-ingestion.md).
 
 ## 20. Validar o pipeline atual
 

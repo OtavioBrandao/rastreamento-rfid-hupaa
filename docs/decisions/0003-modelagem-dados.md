@@ -19,7 +19,7 @@ Decisão de banco (PostgreSQL) e de hospedagem (Neon, gerenciado) já haviam sid
 - **Regra "no máximo uma associação ativa por EPC":** garantida via índice único parcial no Postgres (`WHERE fim IS NULL`), não apenas validação de aplicação — constraint a nível de banco.
 - **Auditoria (RF-023/RNF-006):** tabela genérica (`auditorias`) com `entidade`/`entidade_id`/`acao`/`dados_antes`/`dados_depois` (JSONB), em vez de uma tabela de auditoria por entidade.
 
-O modelo completo (colunas, constraints, índices, cenários de validação) está documentado em `docs/database/modelagem-dados.md`, com diagrama ER em `docs/database/er-diagrama.mermaid`.
+O modelo completo (colunas, constraints, índices, cenários de validação) está documentado em `docs/architecture/data-model.md`, com diagrama ER em `docs/architecture/er-diagrama.mermaid`.
 
 ## Validação realizada
 Antes deste PR, o schema foi criado e testado contra um PostgreSQL 16 real (ambiente local descartável, não o Neon de produção):
