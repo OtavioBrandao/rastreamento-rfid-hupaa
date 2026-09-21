@@ -9,7 +9,7 @@ Este documento descreve a implementação do módulo de topologia de hardware do
 ### Problema
 Para que o serviço de ingestão MQTT persista leituras brutas de forma confiável e para que os futuros algoritmos de passagem funcionem, o sistema precisa conhecer a infraestrutura física de leitura:
 1. **Identidade do Leitor no MQTT:** O identificador físico de fábrica (serial) nem sempre coincide com o identificador lógico atribuído na rede MQTT (`reader_id` no tópico).
-2. **Arranjo de Antenas e Portais:** Na modelagem inicial simplificada, assumia-se que um portal pertencia a um leitor. Na prática de engenharia do HUPAA, um portal de passagem física pode conter antenas conectadas a leitores diferentes (por exemplo, um leitor em cada batente da porta).
+2. **Arranjo de Antenas e Portais:** Na modelagem inicial simplificada, assumia-se que um portal pertencia diretamente a um leitor. Como decisão arquitetural, o modelo passa a permitir que um portal agregue antenas conectadas a leitores diferentes (por exemplo, antenas em lados opostos de uma passagem alimentadas por equipamentos distintos).
 3. **Reconfiguração de Portas sem Perda Histórica:** Se uma antena física falhar na porta 1 de um leitor e for substituída, a antena antiga não pode ser excluída do banco de dados, pois milhares de leituras históricas apontam para ela. No entanto, o banco não podia permitir duas antenas ativas na mesma porta física simultaneamente.
 4. **Proteção contra Vazamento de Segredos:** Parâmetros de ingestão não devem armazenar credenciais ou tokens no banco de dados.
 
@@ -89,7 +89,7 @@ WHERE ativo IS TRUE;
 ### 3.2 Desacoplamento Leitor-Portal
 - A coluna `leitores.portal_id` foi **eliminada** do schema na migration `019782a38ff7`.
 - Um leitor pode ter antenas em portais diferentes (ex.: Porta 1 no Portal A, Porta 2 no Portal B).
-- Um portal pode agregar antenas conectadas a leitores físicos distintos.
+- Como capacidade arquitetural do modelo, um portal pode agregar antenas conectadas a leitores físicos distintos.
 
 ### 3.3 Allowlist e Blindagem em Parâmetros de Ingestão
 - A coluna `leitores.parametros_ingestao` aceita apenas uma *allowlist* fechada de chaves não-secretas:
@@ -109,9 +109,9 @@ WHERE ativo IS TRUE;
 - `api/schemas_hardware.py`: Schemas Pydantic com validação de formato e allowlist de parâmetros.
 
 ### Principais Rotas HTTP:
-- **Leitores:** `POST /leitores`, `GET /leitores`, `GET /leitores/{id}`, `PUT /leitores/{id}`, `POST /leitores/{id}/inativar`, `POST /leitores/{id}/reativar`.
-- **Antenas:** `POST /antenas`, `GET /antenas`, `GET /antenas/{id}`, `PUT /antenas/{id}`, `POST /antenas/{id}/inativar`, `POST /antenas/{id}/reativar`.
-- **Portais:** `POST /portais`, `GET /portais`, `GET /portais/{id}`, `PUT /portais/{id}`, `POST /portais/{id}/inativar`, `POST /portais/{id}/reativar`.
+- **Leitores:** `POST /leitores`, `GET /leitores`, `GET /leitores/{leitor_id}`, `PATCH /leitores/{leitor_id}`, `POST /leitores/{leitor_id}/inativar`, `POST /leitores/{leitor_id}/reativar`.
+- **Antenas:** `POST /antenas`, `GET /antenas`, `GET /antenas/{antena_id}`, `PATCH /antenas/{antena_id}`, `POST /antenas/{antena_id}/inativar`, `POST /antenas/{antena_id}/reativar`.
+- **Portais:** `POST /portais`, `GET /portais`, `GET /portais/{portal_id}`, `PATCH /portais/{portal_id}`, `POST /portais/{portal_id}/inativar`, `POST /portais/{portal_id}/reativar`.
 
 ---
 
