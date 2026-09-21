@@ -1,9 +1,9 @@
 """
 Models SQLAlchemy do MVP de rastreamento RFID (EASY/HUPAA).
 
-Espelha 1:1 o documento "docs/database/modelagem-dados.md" e o diagrama
-"docs/database/er-diagrama.mermaid". Qualquer mudança aqui deve ser
-refletida nos dois artefatos (e vice-versa), para não divergirem.
+Mirrors the canonical schema defined in "docs/architecture/data-model.md" and the
+"docs/architecture/er-diagrama.mermaid" ER diagram. Any schema change must be
+reflected in both artifacts to avoid divergence.
 
 Convenções:
 - Tabelas em português, plural, snake_case.

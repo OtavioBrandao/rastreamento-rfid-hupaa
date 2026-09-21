@@ -9,7 +9,7 @@ A Issue #1 permanece aberta. Validação física deve ser vinculada separadament
 
 ## Preparar antes da visita
 
-- Instalar dependências e executar a suíte e o smoke local do [guia](../mqtt-ingestion.md).
+- Instalar dependências e executar a suíte e o smoke local do [guia](../../implementations/iss-001-mqtt-ingestion.md).
 - Criar HiveMQ e os três perfis/ACLs; executar `verification --security` com simuladores.
 - Levar perfis privados, notebook carregado, acesso à Internet, cabos e duas tags.
 - Combinar com a TI saída TCP 8883, DNS e acesso entre as redes necessárias.
@@ -109,7 +109,7 @@ resultados como físicos quando só houve processos Python.
 | Um leitor / dois simultâneos / JSONL / taxa | Referenciar relatório e resultado |
 | Revisão das ACLs e negativa de senha inválida | Referenciar relatório de probes |
 
-As evidências compartilhadas ficam em `docs/evidence/iss001/` após revisão;
+As evidências compartilhadas ficam em `docs/experiments/mqtt/` após revisão;
 arquivos brutos ficam em `data/`, ignorados. Não copiar `.env`, senhas, tokens,
 chaves privadas ou prints de credenciais. Registrar falhas também, sem traceback
 que possa conter valores privados.

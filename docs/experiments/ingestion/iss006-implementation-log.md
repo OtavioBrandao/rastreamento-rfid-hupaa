@@ -178,5 +178,5 @@ Este documento registra os checkpoints incrementais de implementação da integr
   - Testes focados (`tests/test_repository.py`, `tests/test_migrations.py`, `tests/test_mqtt_persistence.py`, `tests/test_migration_iss012.py`): 42 passed em 53.49s.
   - Suíte completa de testes (`python -m pytest -q`): 632 passed, 2 skipped, 2 warnings, 47 subtests passed em 133.55s.
   - Teste de fumaça de infraestrutura (`tests/infrastructure/compose-smoke-test.sh`): [PASSOU] validando o fluxo crítico completo MQTT -> JSONL -> PostgreSQL, descarte idempotente de duplicatas via `ON CONFLICT DO NOTHING`, rejeição e ausência de ACK em falhas de banco, e integridade do reset local.
-- **Próximo passo (NEXT STEP):**
-  - PR #43 está completamente validado, com histórico linear, fixtures robustas e workflow de CI corrigido. Enviar para revisão final e merge no GitHub.
+- **Status do PR:**
+  - O PR #43 foi completamente validado e mesclado na branch `main` com sucesso (commit `537035c`).

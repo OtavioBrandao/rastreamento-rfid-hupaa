@@ -5,7 +5,7 @@ HiveMQ Cloud Serverless é o broker principal do MVP; Mosquitto é o ambiente
 local/offline de desenvolvimento e contingência manual. A [ISS-001 encerrada](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/1#issuecomment-5553433705)
 registra validação com simuladores no HiveMQ, TLS/autenticação/ACL e duas redes.
 EZ700 físico e infraestrutura do hospital continuam pendentes de validação de campo.
-Veja a [decisão e comparação dos provedores](decisions/0002-managed-mqtt.md).
+Veja a [decisão e comparação dos provedores](../decisions/0002-managed-mqtt.md).
 
 ## Instalação (Ubuntu 24.04)
 
@@ -149,7 +149,7 @@ sintética; a semântica física ainda precisa de confirmação. O padrão aceit
 RFC3339 com fuso explícito. A origem lógica vem do tópico; identidade divergente
 no payload rejeita o evento canônico. Campos extras ficam em metadata, RSSI EZ700
 permanece bruto e o campo canônico em dBm fica nulo. Contrato completo, validações,
-seleção explícita e limites em [normalização RFID](rfid-normalization.md).
+seleção explícita e limites em [normalização RFID](iss-005-rfid-normalization.md).
 
 JSONL mantém `received_at_utc`, `topic`, `qos`, `retain`, `payload_original`,
 `payload_encoding`, `payload_json`, `parse_error`; acrescenta `validation_errors`,
