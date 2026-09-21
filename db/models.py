@@ -371,7 +371,6 @@ class Leitor(Base):
     fabricante = Column(String, nullable=False)
     modelo = Column(String, nullable=False)
     identificador_serial = Column(String, nullable=False, unique=True)
-    reader_id = Column(String, nullable=True, unique=True)
     endereco_rede = Column(String, nullable=True)
     # none_as_null: sem isso, None viraria o literal JSON `null` em vez de SQL NULL.
     parametros_ingestao = Column(JSONB(none_as_null=True), nullable=True)
