@@ -160,13 +160,18 @@ IDs diferentes permanecem distintos mesmo para o mesmo EPC. Isto não é debounc
 
 #### 2.2 — Alinhamento com o contrato canônico (ISS-006)
 
-A migration `da436f7c75b3`, após `44ef89b10f17`, converte UUID para texto com
-`event_id::text`, permite RSSI nulo e adiciona dados_origem e leitores.reader_id.
-Reader_id é independente do serial e não recebe preenchimento automático.
-A antena é resolvida pelo reader_id lógico e porta_numero daquele leitor.
-`lido_em` recebe o timestamp canônico; `recebido_em` recebe received_at_utc.
-Ambos são enviados como datetimes UTC com fuso. RSSI bruto/unidade permanecem
-na metadata em dados_origem, sem divisão por 100 ou escala presumida.
+A migration `da436f7c75b3` sucede `6b3e5f7a91c4`, última revisão da ISS-012,
+e altera somente o contrato de persistência de `leituras_brutas`: converte
+`event_id` de UUID para `VARCHAR(71)`, permite RSSI nulo e adiciona
+`dados_origem` JSONB. O `reader_id` pertence à ISS-012 e permanece
+`NOT NULL` + `UNIQUE`, independente de `identificador_serial`.
+
+Na ingestão, a antena é resolvida pelo `reader_id` lógico e `porta_numero`,
+considerando somente `Antena.ativo = true`; antenas inativas permanecem como
+histórico e podem coexistir com uma substituta ativa na mesma porta.
+`lido_em` recebe o timestamp canônico e `recebido_em` recebe
+`received_at_utc`. RSSI bruto/unidade permanecem na metadata em
+`dados_origem`, sem escala física presumida.
 
 O downgrade é reversível no banco vazio do CI. Após gravar IDs `sha256:*`, é
 necessário migrar ou remover os dados deliberadamente antes de voltar a UUID;
