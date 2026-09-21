@@ -15,3 +15,4 @@ Este diretório documenta as decisões arquiteturais fundamentais tomadas durant
 | [ADR 0005](0005-resiliencia-sem-fila-em-memoria.md) | Resiliência e Recuperação sem Fila em Memória | Aceita | Pausa de consumo, backoff exponencial e retenção durável no broker MQTT durante quedas de banco |
 | [ADR 0006](0006-desacoplamento-leitor-antena-portal.md) | Desacoplamento entre Leitores, Antenas e Portais | Aceita | Remoção de `leitor.portal_id`, agregação de antenas por portais e separação de `reader_id` de serial |
 | [ADR 0007](0007-unicidade-parcial-antena-ativa.md) | Unicidade Parcial de Antena Ativa e Preservação Histórica | Aceita | Índice parcial `WHERE ativo` para portas físicas de leitores e baixa lógica de hardware |
+| [ADR 0008](0008-topologia-logica-versionada-portais.md) | Topologia Lógica Versionada de Portais | Aceita | Mapeamento temporal [inicio, fim), unicidade de antena ativa e separação de hardware vs. inferência |
