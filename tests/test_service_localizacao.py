@@ -88,8 +88,12 @@ def _portal(db, zona_a_id, zona_b_id):
 
 
 def _antena(db, zona_id):
+    numero = next(_CONTADOR)
     leitor = Leitor(
-        fabricante="Identix", modelo="EZ700", identificador_serial=f"SN-{next(_CONTADOR):04d}"
+        reader_id=f"reader-{numero:04d}",  # NOT NULL desde a ISS-012
+        fabricante="Identix",
+        modelo="EZ700",
+        identificador_serial=f"SN-{numero:04d}",
     )
     db.add(leitor)
     db.flush()
