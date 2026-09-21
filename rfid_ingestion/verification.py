@@ -17,11 +17,14 @@ from threading import Event
 
 import paho.mqtt.client as mqtt
 
+from db.runtime import create_app_engine
+
 from .config import Settings
 from .connection import create_client, tls_context
 from .logging_config import configure_logging
 from .mqtt_client import MqttReceiver
 from .persistence import JsonlEventStore
+from .repository import RawReadingRepository
 
 
 def read_environment(path: str) -> dict[str, str]:
@@ -115,6 +118,7 @@ def main(argv=None) -> int:
               "steps": {}, "physical_validation": "pendente", "different_networks": "pendente"}
     steps = report["steps"]
     receiver = None
+    engine = None
     secrets = []
     stage = "configuration"
     try:
@@ -160,8 +164,10 @@ def main(argv=None) -> int:
         # Arquivo novo por execução: não confundir evidências de sessões anteriores.
         output = Path("data") / f"verification-{uuid.uuid4().hex}.jsonl"
         report["events_file"] = str(output)
+        stage = "database_configuration"
+        engine = create_app_engine(sources[0])
         stage = "connection_subscription"
-        receiver = MqttReceiver(settings, JsonlEventStore(output))
+        receiver = MqttReceiver(settings, JsonlEventStore(output), RawReadingRepository(engine))
         receiver.start()
         steps[stage] = "validado"
         started = time.monotonic()
@@ -176,7 +182,7 @@ def main(argv=None) -> int:
             deadline = time.monotonic() + args.seconds
             while time.monotonic() < deadline:
                 events = [json.loads(line) for line in output.read_text().splitlines()] if output.exists() else []
-                if all(sum(e["topic"] == p.mqtt_topic and isinstance(e["payload_json"], dict)
+                if all(sum(e.get("topic") == p.mqtt_topic and isinstance(e.get("payload_json"), dict)
                            and e["payload_json"].get("timestamp") == marker for e in events) >= args.count for p in publishers):
                     break
                 time.sleep(0.1)
@@ -187,6 +193,9 @@ def main(argv=None) -> int:
         if receiver.failed.is_set():
             raise RuntimeError("Ingestor falhou")
         events = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()] if output.exists() else []
+        steps["persistence"] = "falhou" if any(e.get("event_type") == "rfid_persistence"
+                                                     and e.get("status") == "rejected" for e in events) else "validado"
+        events = [e for e in events if "payload_original" in e]
         valid = [e for e in events if not e["parse_error"] and not e["validation_errors"]
                  and e["qos"] == 1 and not e["retain"]]
         passed = bool(valid) and (not publishers or all(
@@ -221,6 +230,8 @@ def main(argv=None) -> int:
     finally:
         if receiver:
             receiver.stop()
+        if engine is not None:
+            engine.dispose()
         def sanitize(value):
             if isinstance(value, dict):
                 return {key: sanitize(item) for key, item in value.items()}
