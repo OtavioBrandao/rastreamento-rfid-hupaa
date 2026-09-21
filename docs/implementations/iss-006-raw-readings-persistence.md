@@ -37,20 +37,47 @@ O ACK manual deixa essa confirmação para depois do resultado do banco ou de um
 rejeição permanente auditada. Assim, uma falha de banco não é apresentada ao
 broker como processamento concluído.
 
-## Objetivo e fluxo
+## Objetivo e fluxo detalhado
 
-A ISS-006 acrescenta PostgreSQL ao ingestor existente, após a ISS-005 / PR #37
-integrada em `884722214ae886706ad776d25ef41bb411058ef3`.
+A ISS-006 acrescenta persistência no PostgreSQL ao ingestor existente, integrando o contrato canônico da ISS-005 à infraestrutura de hardware da ISS-012.
 
-```text
-MQTT → parsing → evento canônico → auditoria JSONL → PostgreSQL → ACK
+```mermaid
+flowchart TD
+    M["1. Mensagem MQTT (QoS 1)"] --> P["2. Parse & Validação de Payload"]
+    P --> C["3. Evento Canônico (event_id determinístico)"]
+    C --> J["4. Auditoria JSONL (data/raw_events.jsonl)"]
+    J --> R["5. Resolver reader_id + Antena Ativa"]
+    R --> T["6. Transação PostgreSQL"]
+    T --> I["7. INSERT com event_id canônico<br/>ON CONFLICT (event_id) DO NOTHING"]
+    I --> CM["8. Commit da Transação"]
+    CM --> ACK["9. ACK Manual (PUBACK)"]
 ```
 
-O tópico continua `easy/<environment>/<site_id>/<portal_id>/<reader_id>/readings`.
-Adapters e contrato canônico permanecem os da [ISS-005](../rfid-normalization.md).
-`JsonlEventStore` preserva o envelope completo de cada entrega, inclusive inválidas
-e duplicadas. `RawReadingRepository` usa SQLAlchemy 2.x e uma transação por evento,
-sem conhecer o transporte MQTT. Não existe cadastro automático de topologia.
+```text
+MQTT message
+    ↓
+parse / normalize
+    ↓
+canonical event
+    ↓
+JSONL audit
+    ↓
+resolve reader + active antenna
+    ↓
+PostgreSQL transaction
+    ↓
+INSERT using canonical event_id
+    ↓
+commit
+    ↓
+ACK
+```
+
+O tópico exclusivo permanece `easy/<environment>/<site_id>/<portal_id>/<reader_id>/readings`.
+Adapters e contrato canônico permanecem os da [ISS-005](iss-005-rfid-normalization.md).
+`JsonlEventStore` preserva o envelope completo de cada entrega, inclusive mensagens inválidas
+e duplicadas. `RawReadingRepository` usa SQLAlchemy 2.x e uma transação atômica por evento,
+sem conhecer os detalhes do transporte MQTT. Não existe cadastro automático de topologia.
 
 ## Contrato e schema
 
@@ -157,7 +184,7 @@ Desde a ISS-007, falha temporária de banco pausa o consumo: o receptor desconec
 sem ACK, testa a volta do PostgreSQL com backoff e então reconecta ao MQTT para a
 reentrega. Erro permanente de autenticação/configuração e falha no envio do ACK
 continuam fatais. A sessão MQTT 3.1.1 é persistente e o `event_id` torna segura a
-repetição lógica; os limites estão no [guia da ISS-007](../infrastructure/iss-007-ingestor-resilience.md).
+repetição lógica; os limites estão no [guia da ISS-007](iss-007-ingestor-resilience.md).
 
 ## Configuração e operação
 
@@ -171,7 +198,7 @@ repetição lógica; os limites estão no [guia da ISS-007](../infrastructure/is
 - O notebook continua apenas broker/receptor, sem hotspot.
 
 O role de aplicação precisa dos privilégios DML e de sequences documentados no
-[guia Neon](neon-setup.md). O repositório não cria tabelas, schemas ou fixtures.
+[guia Neon](iss-002b-neon-setup.md). O repositório não cria tabelas, schemas ou fixtures.
 
 ## Principais arquivos implementados
 
