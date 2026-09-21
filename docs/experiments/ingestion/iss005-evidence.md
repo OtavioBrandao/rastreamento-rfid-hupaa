@@ -63,7 +63,7 @@ tipo, leitor, adapter, resultado, motivo e ID sem registrar payload completo.
 Falha de persistência continua fatal, conforme ISS-001.
 
 Tipos, exemplos, algoritmo do ID, extensão, restrições e comandos completos:
-[contrato canônico e adapters](../../rfid-normalization.md).
+[contrato canônico e adapters](../../implementations/iss-005-rfid-normalization.md).
 
 ## Arquivos criados/alterados
 

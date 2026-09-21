@@ -4,7 +4,7 @@
 
 O mesmo cliente Paho/Settings da ISS-001 recebe em local ou cloud, preserva o
 envelope bruto, valida tamanho/UTF-8/JSON, resolve contexto e adapter, normaliza
-e grava JSONL append-only. A [ISS-006](database/raw-readings-persistence.md) acrescenta
+e grava JSONL append-only. A [ISS-006](iss-006-raw-readings-persistence.md) acrescenta
 PostgreSQL e ACK manual ao mesmo consumidor. Não há debounce, inferência de
 passagem ou alteração de ACL. O notebook não é hotspot.
 

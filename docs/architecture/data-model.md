@@ -1,6 +1,6 @@
 # Modelagem de Dados — MVP Rastreamento RFID (EASY/HUPAA)
 
-Documento de apoio à issue de modelagem (Épico E1, Must, RF-001 a RF-023, RNF-006/011/015). Complementa o diagrama `docs/database/er-diagrama.mermaid` — abra em [mermaid.live](https://mermaid.live) para editar visualmente ou exportar como imagem, mas o `.mermaid` já é o artefato versionável (texto puro, diffável no Git).
+Documento de apoio à issue de modelagem (Épico E1, Must, RF-001 a RF-023, RNF-006/011/015). Complementa o diagrama [er-diagrama.mermaid](er-diagrama.mermaid) — abra em [mermaid.live](https://mermaid.live) para editar visualmente ou exportar como imagem, mas o `.mermaid` já é o artefato versionável (texto puro, diffável no Git).
 
 ## 1. Convenções adotadas
 

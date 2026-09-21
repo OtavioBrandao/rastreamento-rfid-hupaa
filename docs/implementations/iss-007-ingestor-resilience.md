@@ -47,6 +47,28 @@ flowchart TD
     DB -->|event_id já existe| ACK
 ```
 
+```text
+PostgreSQL failure
+    ↓
+NO ACK
+    ↓
+disconnect/pause MQTT consumption
+    ↓
+backoff
+    ↓
+database probe
+    ↓
+database recovered
+    ↓
+MQTT reconnect
+    ↓
+redelivery
+    ↓
+same event_id
+    ↓
+idempotent persistence
+```
+
 Não existe fila nova na memória nem outro serviço de mensageria. O broker mantém
 o trabalho MQTT pendente; o PostgreSQL continua usando a idempotência canônica da
 ISS-005/006.
