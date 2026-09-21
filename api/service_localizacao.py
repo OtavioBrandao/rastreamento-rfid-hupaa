@@ -43,7 +43,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.normalizacao import normalizar_nome
-from db.models import Andar, Antena, Equipamento, HistoricoMovimentacao, Portal, Setor, Zona
+from db.models import (
+    Andar,
+    Antena,
+    Equipamento,
+    HistoricoMovimentacao,
+    MapeamentoAntenaPortal,
+    Portal,
+    Setor,
+    Zona,
+)
 
 TAMANHO_PAGINA_PADRAO = 20
 TAMANHO_PAGINA_MAXIMO = 100
@@ -516,6 +525,11 @@ def _primeira_referencia_a_zona(session: Session, zona_id: int) -> tuple[str, in
             or_(Portal.zona_a_id == zona_id, Portal.zona_b_id == zona_id),
         ),
         ("antenas (zona_associada_id)", Antena, Antena.zona_associada_id == zona_id),
+        (
+            "mapeamentos_antena_portal (zona_id)",
+            MapeamentoAntenaPortal,
+            MapeamentoAntenaPortal.zona_id == zona_id,
+        ),
         (
             "historico_movimentacoes (zona_origem_id/zona_destino_id)",
             HistoricoMovimentacao,

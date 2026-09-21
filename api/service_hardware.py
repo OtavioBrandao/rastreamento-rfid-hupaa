@@ -44,7 +44,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.service_localizacao import TAMANHO_PAGINA_MAXIMO, TAMANHO_PAGINA_PADRAO, Pagina
-from db.models import Antena, Leitor, Portal, Zona
+from db.models import Antena, Leitor, MapeamentoAntenaPortal, Portal, Zona
 
 # SQLSTATEs do Postgres.
 _UNIQUE_VIOLATION = "23505"
@@ -176,6 +176,37 @@ class ZonaInvalidaParaPortal(ErroHardware):
         self.lado = lado
         self.motivo = motivo
         super().__init__(f"{lado} {zona_id} inválida: {motivo}.")
+
+
+class PortalComMapeamentosAtivos(ErroHardware):
+    """
+    ISS-013 guard: portal cannot change zona_a_id or zona_b_id while active
+    logical mappings exist to prevent mutating topology interpretation underneath them.
+    """
+
+    def __init__(self, portal_id: int, total_mapeamentos: int) -> None:
+        self.portal_id = portal_id
+        self.total_mapeamentos = total_mapeamentos
+        super().__init__(
+            f"Portal {portal_id} possui {total_mapeamentos} mapeamento(s) lógico(s) ativo(s). "
+            "Inative ou reconfigure os mapeamentos antes de alterar as zonas do portal."
+        )
+
+
+class AntenaComMapeamentoAtivo(ErroHardware):
+    """
+    ISS-013 guard: antenna cannot change portal_id or zona_associada_id while
+    it has an active logical mapping.
+    """
+
+    def __init__(self, antena_id: int, portal_id: int, motivo: str) -> None:
+        self.antena_id = antena_id
+        self.portal_id = portal_id
+        self.motivo = motivo
+        super().__init__(
+            f"Antena {antena_id} possui mapeamento lógico ativo no portal {portal_id}: {motivo}. "
+            "Inative o mapeamento antes de alterar a configuração de hardware."
+        )
 
 
 # --- helpers internos ------------------------------------------------------------
@@ -416,6 +447,22 @@ def listar_portais(
 def atualizar_portal(session: Session, portal_id: int, campos: Mapping[str, Any]) -> Portal:
     portal = buscar_portal_por_id(session, portal_id)
     _validar_campos(campos, CAMPOS_EDITAVEIS_PORTAL, "portal")
+
+    # ISS-013 guard: prevent mutating portal zones while active logical mappings exist
+    muda_zona_a = campos.get("zona_a_id") is not None and campos["zona_a_id"] != portal.zona_a_id
+    muda_zona_b = campos.get("zona_b_id") is not None and campos["zona_b_id"] != portal.zona_b_id
+    if muda_zona_a or muda_zona_b:
+        total_ativos = session.scalar(
+            select(func.count())
+            .select_from(MapeamentoAntenaPortal)
+            .where(
+                MapeamentoAntenaPortal.portal_id == portal_id,
+                MapeamentoAntenaPortal.fim.is_(None),
+            )
+        ) or 0
+        if total_ativos > 0:
+            raise PortalComMapeamentosAtivos(portal_id, total_ativos)
+
     for lado in ("zona_a_id", "zona_b_id"):
         if campos.get(lado) is not None:
             _exigir_zona_ativa_para_portal(session, campos[lado], lado)
@@ -514,6 +561,29 @@ def listar_antenas(
 def atualizar_antena(session: Session, antena_id: int, campos: Mapping[str, Any]) -> Antena:
     antena = buscar_antena_por_id(session, antena_id)
     _validar_campos(campos, CAMPOS_EDITAVEIS_ANTENA, "antena")
+
+    # ISS-013 guard: if antenna currently has an active logical mapping,
+    # mutating portal_id or changing zona_associada_id to an incompatible zone is blocked.
+    mapeamento_ativo = session.scalar(
+        select(MapeamentoAntenaPortal).where(
+            MapeamentoAntenaPortal.antena_id == antena_id,
+            MapeamentoAntenaPortal.fim.is_(None),
+        )
+    )
+    if mapeamento_ativo is not None:
+        if "portal_id" in campos and campos["portal_id"] != antena.portal_id:
+            raise AntenaComMapeamentoAtivo(
+                antena_id,
+                mapeamento_ativo.portal_id,
+                f"não é possível alterar ou remover portal_id enquanto houver mapeamento ativo no portal {mapeamento_ativo.portal_id}",
+            )
+        if "zona_associada_id" in campos and campos["zona_associada_id"] != mapeamento_ativo.zona_id:
+            raise AntenaComMapeamentoAtivo(
+                antena_id,
+                mapeamento_ativo.portal_id,
+                f"não é possível alterar zona_associada_id para {campos['zona_associada_id']}, pois o mapeamento ativo no portal {mapeamento_ativo.portal_id} está vinculado à zona {mapeamento_ativo.zona_id}",
+            )
+
     if campos.get("zona_associada_id") is not None:
         _exigir_zona_ativa_para_antena(session, campos["zona_associada_id"])
     if campos.get("portal_id") is not None:
