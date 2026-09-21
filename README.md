@@ -84,6 +84,14 @@ descartável: aplica duas vezes, reverte, reaplica e confere o schema. Os comand
 locais e a interpretação das falhas estão no [guia da
 ISS-004](docs/infrastructure/iss-004-ci.md).
 
+Os testes de `tipos_equipamento` (ISS-009) exigem a variável de ambiente
+`TEST_DATABASE_URL` (ver `.env.local.example`) apontando para um Postgres local
+descartável com as migrations aplicadas. **Sem ela, esses testes são PULADOS em
+silêncio** — nenhum erro, só menos testes rodando; não confunda com a suíte
+passando de verdade. A suíte faz `TRUNCATE` nas tabelas do CRUD no banco
+apontado por essa URL, então ela nunca deve apontar para um banco com dado
+real.
+
 ## Contrato atual
 
 Tópico: `easy/<environment>/<site_id>/<portal_id>/<reader_id>/readings`.
