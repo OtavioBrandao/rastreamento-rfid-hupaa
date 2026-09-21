@@ -73,19 +73,13 @@ flowchart TD
 
 ## 3. Topologia de Domínio e Hardware
 
-A modelagem de entidades reflete com fidelidade a realidade física do ambiente hospitalar (HUPAA/UFAL) e o arranjo dos equipamentos de leitura:
+A modelagem de entidades representa a hierarquia física suportada pelo modelo atual do MVP e o arranjo dos equipamentos de leitura:
 
 ```mermaid
 classDiagram
-    class Hospital {
-        +String nome
-        +String codigo
-    }
-
     class Andar {
         +BigInt id
         +String nome
-        +Int numero
         +Boolean ativo
     }
 
@@ -100,7 +94,6 @@ classDiagram
         +BigInt id
         +BigInt setor_id
         +String nome
-        +String tipo
         +String observacoes
         +Boolean ativo
     }
@@ -154,7 +147,6 @@ classDiagram
         +DateTime fim
     }
 
-    Hospital "1" *-- "many" Andar
     Andar "1" *-- "many" Setor
     Setor "1" *-- "many" Zona
     Zona "1" <-- "1" Portal : zona_a
