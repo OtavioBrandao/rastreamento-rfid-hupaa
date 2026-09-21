@@ -3,9 +3,9 @@
 O mesmo ingestor, simulador, payload e tópicos funcionam nos dois modos.
 HiveMQ Cloud Serverless é o broker principal do MVP; Mosquitto é o ambiente
 local/offline de desenvolvimento e contingência manual. A [ISS-001 encerrada](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/1#issuecomment-5553433705)
-registra validação com simuladores no HiveMQ, TLS/autenticação/ACL e duas redes.
+registra validação com simuladores no HiveMQ (TLS + autenticação por usuário/senha e ACLs por tópico) e duas redes.
 EZ700 físico e infraestrutura do hospital continuam pendentes de validação de campo.
-Veja a [decisão e comparação dos provedores](decisions/0002-managed-mqtt.md).
+Veja a [decisão e comparação dos provedores](../decisions/0002-managed-mqtt.md).
 
 ## Instalação (Ubuntu 24.04)
 
@@ -149,7 +149,7 @@ sintética; a semântica física ainda precisa de confirmação. O padrão aceit
 RFC3339 com fuso explícito. A origem lógica vem do tópico; identidade divergente
 no payload rejeita o evento canônico. Campos extras ficam em metadata, RSSI EZ700
 permanece bruto e o campo canônico em dBm fica nulo. Contrato completo, validações,
-seleção explícita e limites em [normalização RFID](rfid-normalization.md).
+seleção explícita e limites em [normalização RFID](iss-005-rfid-normalization.md).
 
 JSONL mantém `received_at_utc`, `topic`, `qos`, `retain`, `payload_original`,
 `payload_encoding`, `payload_json`, `parse_error`; acrescenta `validation_errors`,
@@ -211,9 +211,9 @@ O smoke usa Compose isolado, loopback e porta 18884, testa dois publicadores,
 Para broker local já iniciado: `RUN_MQTT_INTEGRATION=1 python -m pytest -q`.
 `TEST_MQTT_PORT` altera a porta MQTT. Informe TEST_DATABASE_URL de banco descartável
 para testes PostgreSQL; sem essa variável eles são pulados. O smoke configura
-esses serviços automaticamente. Consulte a [ISS-006](database/raw-readings-persistence.md).
+esses serviços automaticamente. Consulte a [ISS-006](iss-006-raw-readings-persistence.md).
 O terceiro comando interrompe e restaura broker/banco descartáveis e está
-detalhado no [guia da ISS-007](infrastructure/iss-007-ingestor-resilience.md).
+detalhado no [guia da ISS-007](iss-007-ingestor-resilience.md).
 Os três testes de handshake TLS usam OpenSSL (certificado efêmero em diretório
 temporário); se o executável não estiver instalado, são explicitamente pulados.
 Eles validam o transporte TLS local, não o serviço HiveMQ.
@@ -253,8 +253,8 @@ o Client ID do publicador ao assinante; hardware exige conferência no leitor/pa
 Logs não incluem payload, senha, username ou tracebacks de erros operacionais.
 JSONL bruto continua preservando dados de origem; nunca publique segredos no payload.
 
-Veja [visita curta e duas redes](experiments/iss001-managed-validation.md) e
-[matriz de evidências](evidence/iss001/README.md).
+Veja [visita curta e duas redes](../experiments/mqtt/iss001-managed-validation.md) e
+[matriz de evidências](../experiments/mqtt/iss001-evidence-local.md).
 
 ## Rotação e contingência
 

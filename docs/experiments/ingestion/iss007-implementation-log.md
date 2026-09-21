@@ -143,6 +143,6 @@ pytest -q
 
 ---
 
-## 10. Próximo Passo (NEXT STEP)
+## 10. Status Final
 
-O PR #44 está sincronizado com a `main`, possui histórico limpo de commits atômicos, cobertura de testes completa para todas as categorias de falha e documentação atualizada. O PR está pronto para revisão final e merge no branch `main`.
+O PR #44 foi aprovado e mesclado com sucesso na branch `main` (commit `8bdde7f`). A suíte completa de testes e resiliência encontra-se verde.

@@ -1,8 +1,9 @@
 # ADR 0002 — HiveMQ principal e Mosquitto para desenvolvimento
 
 Data da decisão e consulta: **2026-09-05**. Implementação da ISS-001;
-**aceite externo pendente**, issue permanece aberta. Atualiza a ADR 0001 para
-o MVP; preserva seu ambiente de desenvolvimento e os registros históricos.
+o cluster HiveMQ Cloud Serverless foi provisionado e a camada de software validada com simuladores
+(TLS + autenticação por usuário/senha e ACLs por tópico). A validação física presencial no hospital
+permanece pendente. Atualiza a ADR 0001 para o MVP; preserva seu ambiente de desenvolvimento e os registros históricos.
 
 ## Diagnóstico anterior
 
@@ -94,5 +95,5 @@ Desenvolvimento/offline: `leitor/simulador → Mosquitto → mesmo ingestor → 
 Seleção manual por `MQTT_MODE=local|cloud`; sem fallback automático e sem ponte.
 O notebook nunca cria hotspot. Banco, CRUD, inferência e dashboard ficam fora.
 
-Ver [guia operacional](../mqtt-ingestion.md), [roteiro de campo](../experiments/iss001-managed-validation.md)
-e [evidências reais](../evidence/iss001/README.md).
+Ver [guia operacional](../implementations/iss-001-mqtt-ingestion.md), [roteiro de campo](../experiments/mqtt/iss001-managed-validation.md)
+e [evidências reais](../experiments/mqtt/iss001-evidence-local.md).

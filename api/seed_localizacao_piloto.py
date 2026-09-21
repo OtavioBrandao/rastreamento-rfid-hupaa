@@ -8,7 +8,7 @@ Uso:
 
 Os nomes DEFAULT de `ConfigLocalizacaoPiloto` são PLACEHOLDERS: a
 nomenclatura oficial do hospital ainda é uma pergunta em aberto
-(`docs/database/modelagem-dados.md`, "Nomenclatura oficial de
+(`docs/architecture/data-model.md`, "Nomenclatura oficial de
 andares/setores"). Por isso a config é sobrescrevível — pela dataclass, em
 código, ou pela linha de comando.
 
