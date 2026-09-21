@@ -9,7 +9,7 @@ O Neon cria automaticamente um role dono do banco (`neondb_owner`) com a permiss
 | Role | Uso | Como foi criado | Privilégios |
 |---|---|---|---|
 | `neondb_owner` | **Migrations** (Alembic) | Automático do Neon | `neon_superuser` — DDL completo (CREATE/ALTER/DROP) |
-| `rfid_app` | **Aplicação** (futuro backend, ISS-008+) | Via SQL (`CREATE ROLE`), **não** pelo Console | Só DML: `SELECT`/`INSERT`/`UPDATE`/`DELETE`; sem `CREATE` no schema |
+| `rfid_app` | **Aplicação** (ingestor ISS-006 e futuro backend) | Via SQL (`CREATE ROLE`), **não** pelo Console | Só DML: `SELECT`/`INSERT`/`UPDATE`/`DELETE`; sem `CREATE` no schema |
 
 Confirmado por consulta direta que `rfid_app` não é superuser nem pode criar role/database/tabela:
 ```sql
@@ -56,7 +56,7 @@ O Neon expõe duas connection strings pro mesmo banco, diferindo só por `-poole
 | **Motivo** | PgBouncer (modo transaction) devolve a conexão ao pool a cada transação, quebrando recursos de sessão que ferramentas de migration podem precisar | Suporta até 10.000 conexões concorrentes — essencial pra apps com muitas requisições curtas |
 | **Recomendação oficial do Neon** | "usar conexão direta ao rodar migrations" (guia deles de SQLAlchemy+Alembic) | Padrão pra apps serverless/alta concorrência |
 
-**Decisão do projeto:** `DATABASE_URL` (usada pelo `alembic/env.py`) = **direct**. `APP_DATABASE_URL` (reservada pro backend, ainda não usada por nenhum código) = **pooled**.
+**Decisão do projeto:** `DATABASE_URL` (usada pelo `alembic/env.py`) = **direct**. `APP_DATABASE_URL` (usada pelo ingestor desde a ISS-006) = **pooled**.
 
 ## 4. Variáveis de ambiente
 

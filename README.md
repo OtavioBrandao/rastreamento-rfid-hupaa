@@ -4,7 +4,7 @@ MVP experimental para rastreabilidade aproximada por zonas de equipamentos
 hospitalares do HUPAA/UFAL usando RFID UHF passivo. A posição será inferida
 pela última passagem confirmada em uma zona, não por posicionamento contínuo.
 
-## Fase atual — ISS-005 sobre a infraestrutura da ISS-001
+## Fase atual — ISS-006: persistência idempotente de leituras
 
 **HiveMQ Cloud Serverless é o broker principal escolhido para o MVP.** O código
 suporta modo externo com TLS e modo local com Mosquitto, usando o mesmo ingestor,
@@ -16,9 +16,9 @@ preservam o estado anterior dessa data; o aceite com EZ700 físico e a rede do
 hospital permanece **PENDENTE DE VALIDAÇÃO FÍSICA**.
 
 ```text
-leitor ou simulador → HiveMQ com TLS → ingestor Python/Paho → data/raw_events.jsonl
+leitor ou simulador → HiveMQ com TLS → ingestor Python/Paho → JSONL + PostgreSQL
                     ou, por seleção manual de desenvolvimento:
-leitor ou simulador → Mosquitto local → mesmo ingestor → JSONL
+leitor ou simulador → Mosquitto local → mesmo ingestor → JSONL + PostgreSQL
 ```
 
 Não há fallback automático nem ponte entre brokers. O notebook executa o ingestor
@@ -38,7 +38,8 @@ make status-local
 ```
 
 Isso inicia PostgreSQL, Mosquitto, aplica as migrations atuais e só então inicia o
-ingestor. O perfil é totalmente local/offline. Para publicar três eventos:
+ingestor. Antes de persistir leituras, cadastre a topologia real com reader_id
+lógico e porta da antena; não há cadastro automático. O perfil é totalmente local/offline. Para publicar três eventos:
 
 ```bash
 make simulator-local
@@ -60,7 +61,7 @@ documenta separadamente TLS, autenticação e ACL no HiveMQ com simuladores.
 O modo gerenciado usa `.env.cloud` e `make managed-up`; não inicia Postgres nem
 Mosquitto locais. Ele consome as convenções `DATABASE_URL`/`APP_DATABASE_URL` da
 ISS-002b e o Alembic da ISS-002c. Credenciais reais permanecem fora do Git; a
-persistência de eventos em banco pertence à ISS-006.
+persistência de eventos usa `APP_DATABASE_URL`, conforme a [ISS-006](docs/database/raw-readings-persistence.md).
 
 Veja o [guia completo da ISS-003](docs/infrastructure/iss-003-docker-compose.md)
 para arquitetura, variáveis, comandos equivalentes sem Make, evidências, reset,
@@ -106,8 +107,11 @@ QoS 1, retain falso. O ingestor preserva payload original, JSON, metadados e
 erros no JSONL; acrescenta `canonical_event` (nulo quando rejeitado).
 O RSSI EZ700 mantém a unidade pendente e o valor bruto em metadata; timestamp
 numérico exige configuração explícita. Veja o [contrato e adapters](docs/rfid-normalization.md).
-JSON inválido e bytes não UTF-8 continuam preservados. Não há deduplicação,
-banco, inferência de passagem ou dashboard nesta issue.
+JSON inválido e bytes não UTF-8 continuam preservados. A ISS-006 grava eventos
+canônicos no PostgreSQL com idempotência por `event_id` e ACK manual após
+processamento. Leitor lógico e antena precisam estar cadastrados explicitamente;
+leitores desconhecidos são rejeitados e auditados. Não há debounce ou inferência
+de passagem. Veja [persistência, configuração e validação](docs/database/raw-readings-persistence.md).
 
 O transporte antigo `rfid/<reader-id>/tags` foi substituído explicitamente.
 As configurações dos leitores precisam migrar antes da próxima coleta.
@@ -116,6 +120,7 @@ JSONLs históricos continuam preservados; não se assinam os dois padrões em si
 ## Guias e evidências
 
 - [Operação local/cloud, cluster, ACL, simuladores e rotação](docs/mqtt-ingestion.md).
+- [Persistência idempotente, ACK e testes da ISS-006](docs/database/raw-readings-persistence.md).
 - [Contrato canônico, adapters e validação sintética da ISS-005](docs/rfid-normalization.md).
 - [Relatório de entrega e testes da ISS-005](docs/evidence/iss005/README.md).
 - [Comparação HiveMQ × EMQX e estimativas de volume](docs/decisions/0002-managed-mqtt.md).
@@ -138,8 +143,8 @@ sub-redes, regras da TI, estabilidade prolongada e validação do firmware para
 TLS, certificado, 8883, usuário/senha e Client ID configurável.
 Essas pendências de hardware/campo não impedem o desenvolvimento do software.
 
-O ingestor é permanente na arquitetura e poderá futuramente alimentar banco,
-backend e dashboard. JSONL permite auditoria e reprodução; não substitui o banco
+O ingestor é permanente na arquitetura, já alimenta o banco e poderá futuramente
+alimentar backend e dashboard. JSONL permite auditoria e reprodução; não substitui o banco
 nem garante entrega offline ou exatamente uma vez.
 
 ## Materiais do projeto
