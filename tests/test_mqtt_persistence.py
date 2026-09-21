@@ -46,11 +46,10 @@ def test_database_failure_no_ack_and_no_secrets(tmp_path, caplog):
         receiver = MqttReceiver(Settings(), JsonlEventStore(tmp_path / "audit.jsonl"), repository)
         receiver._on_message(factory.return_value, None, message())
         factory.return_value.ack.assert_not_called()
-        assert receiver.failed.is_set()
-        assert receiver.failure == "persistência PostgreSQL"
+        assert receiver.database_unavailable.is_set()
+        assert not receiver.failed.is_set()
         assert "PRIVATE" not in caplog.text
-        with patch.object(receiver, "start"), patch.object(receiver, "stop"):
-            assert receiver.run() == 1
+        factory.return_value.disconnect.assert_called_once()
 
 
 @pytest.mark.parametrize("kind,reason", [

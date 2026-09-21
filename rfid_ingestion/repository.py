@@ -4,12 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DBAPIError, DisconnectionError, OperationalError, SQLAlchemyError
 
 from db.models import Antena, Leitor, LeituraBruta
+from rfid_ingestion.resilience import FailureCategory
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +23,50 @@ class PersistenceResult:
 class PersistenceError(RuntimeError):
     """Falha de banco: não confirmar processamento nem divulgar parâmetros."""
 
+    def __init__(
+        self,
+        message: str,
+        category: FailureCategory = FailureCategory.TEMPORARY_DATABASE,
+    ) -> None:
+        super().__init__(message)
+        self.category = category
+
+
+def _database_failure_category(error: SQLAlchemyError) -> FailureCategory:
+    original = getattr(error, "orig", None)
+    sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+    if isinstance(sqlstate, str):
+        if sqlstate.startswith("08") or sqlstate in {
+            "53300",  # too_many_connections
+            "53400",  # configuration_limit_exceeded
+            "57P01",  # admin_shutdown
+            "57P02",  # crash_shutdown
+            "57P03",  # cannot_connect_now
+        }:
+            return FailureCategory.TEMPORARY_DATABASE
+        return FailureCategory.PERMANENT_CONFIGURATION
+    message = str(original).lower()
+    if any(
+        marker in message
+        for marker in (
+            "password authentication failed",
+            "authentication method",
+            "no password supplied",
+            "pg_hba.conf rejects connection",
+            "does not exist",
+            "certificate verify failed",
+        )
+    ):
+        return FailureCategory.PERMANENT_CONFIGURATION
+    if isinstance(error, (OperationalError, DisconnectionError)):
+        return FailureCategory.TEMPORARY_DATABASE
+    if isinstance(error, DBAPIError) and error.connection_invalidated:
+        return FailureCategory.TEMPORARY_DATABASE
+    return FailureCategory.PERMANENT_CONFIGURATION
+
+
+def _safe_persistence_error(error: SQLAlchemyError) -> PersistenceError:
+    return PersistenceError("falha PostgreSQL", _database_failure_category(error))
 
 def _utc(value: str) -> datetime:
     instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -65,5 +110,14 @@ class RawReadingRepository:
                 reading_id = connection.execute(statement).scalar_one_or_none()
             # Só devolver sucesso após a confirmação da transação.
             return PersistenceResult("inserted", reading_id) if reading_id is not None else PersistenceResult("duplicate")
-        except SQLAlchemyError:
-            raise PersistenceError("falha PostgreSQL") from None
+        except SQLAlchemyError as error:
+            raise _safe_persistence_error(error) from None
+
+    def check_available(self) -> None:
+        """Executa uma sonda mínima; nunca inclui a URL ou parâmetros no erro."""
+
+        try:
+            with self.engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+        except SQLAlchemyError as error:
+            raise _safe_persistence_error(error) from None

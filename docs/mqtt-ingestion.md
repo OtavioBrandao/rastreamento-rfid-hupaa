@@ -32,6 +32,8 @@ O ingestor não contém lógica específica de firmware.
 | `MQTT_TOPIC` | Filtro do ingestor ou tópico exato do simulador; perfis separados |
 | `MQTT_CA_CERT` | Opcional: caminho para CA pública PEM; vazio usa autoridades confiáveis do sistema |
 | `MQTT_KEEPALIVE` | 60 s por padrão; entre 1 e 65535 |
+| `MQTT_RECONNECT_INITIAL_DELAY`, `MQTT_RECONNECT_MAX_DELAY` | Espera MQTT começa em 1 s e fica limitada a 30 s |
+| `MQTT_RECONNECT_MULTIPLIER`, `MQTT_RECONNECT_JITTER` | Crescimento 2× e variação aleatória de 20% |
 | `MQTT_QOS` | 1, fixado pelo contrato |
 | `EVENTS_FILE` | `data/raw_events.jsonl` por padrão |
 | `LOG_LEVEL` | INFO por padrão; DEBUG, WARNING, ERROR e CRITICAL também aceitos |
@@ -41,10 +43,10 @@ O ingestor não contém lógica específica de firmware.
 | `EZ700_TIMESTAMP_FORMAT` | `rfc3339` por padrão; `epoch_ms` somente por seleção explícita |
 
 TLS valida certificado **e hostname**, mínimo TLS 1.2. Não há opção insegura.
-Erros de rede, TLS, autenticação ou assinatura inicial encerram com código não
-zero; não disparam conexão a outro broker. Reconexão após queda usa somente o
-endpoint configurado. SUBACK deve conceder QoS 1. Falha de persistência encerra
-com erro em vez de continuar dando aparência de coleta bem-sucedida.
+Erros temporários de rede usam reconexão controlada no mesmo endpoint. Negativa
+de autenticação, configuração inválida ou SUBACK sem QoS 1 encerram com código
+não zero: repetir não corrigiria esses casos. O ingestor usa sessão persistente
+MQTT 3.1.1 (`clean_session=false`) e reassina após toda conexão bem-sucedida.
 
 A aplicação lê variáveis exportadas. `.env.example` é o exemplo local;
 `.env.local.example` e `.env.cloud.example` são os perfis explícitos. Arquivos
@@ -153,8 +155,9 @@ JSONL mantém `received_at_utc`, `topic`, `qos`, `retain`, `payload_original`,
 `payload_encoding`, `payload_json`, `parse_error`; acrescenta `validation_errors`,
 `canonical_event`, `reader_id` e `adapter`.
 Mensagens incompletas também são gravadas, com erros de validação, sem derrubar
-o ingestor. Bytes inválidos continuam em base64. QoS 1 permite duplicação; não
-há deduplicação nem garantia de exatamente uma vez, nem fila durável offline.
+o ingestor. Bytes inválidos continuam em base64. QoS 1 permite duplicação; o
+JSONL registra cada entrega e o PostgreSQL deduplica `event_id`. Não há garantia
+de exatamente uma vez nem fila durável dentro da aplicação.
 `retain=false` é usado em toda publicação do simulador.
 
 ## Simulador único
@@ -200,6 +203,7 @@ PUBACK MQTT 3.1.1 isolado não prova entrega: conferir sempre o JSONL do ingesto
 ```bash
 python -m pytest -q
 bash tests/reader-connectivity/mqtt/smoke-test.sh
+bash tests/infrastructure/resilience-smoke-test.sh
 ```
 
 O smoke usa Compose isolado, loopback e porta 18884, testa dois publicadores,
@@ -208,6 +212,8 @@ Para broker local já iniciado: `RUN_MQTT_INTEGRATION=1 python -m pytest -q`.
 `TEST_MQTT_PORT` altera a porta MQTT. Informe TEST_DATABASE_URL de banco descartável
 para testes PostgreSQL; sem essa variável eles são pulados. O smoke configura
 esses serviços automaticamente. Consulte a [ISS-006](database/raw-readings-persistence.md).
+O terceiro comando interrompe e restaura broker/banco descartáveis e está
+detalhado no [guia da ISS-007](infrastructure/iss-007-ingestor-resilience.md).
 Os três testes de handshake TLS usam OpenSSL (certificado efêmero em diretório
 temporário); se o executável não estiver instalado, são explicitamente pulados.
 Eles validam o transporte TLS local, não o serviço HiveMQ.
