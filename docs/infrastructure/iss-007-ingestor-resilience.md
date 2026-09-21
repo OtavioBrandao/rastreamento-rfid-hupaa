@@ -122,13 +122,38 @@ cancelável: shutdown não precisa aguardar os 30 segundos completos.
 
 ## Falhas e decisões
 
-| Categoria | Exemplos | Comportamento |
-|---|---|---|
-| Configuração/permanente | variável inválida, autenticação MQTT recusada, SUBACK sem QoS 1, autenticação PostgreSQL, schema/SQL incompatível | falha rápida e ação do operador |
-| MQTT temporária | broker parado, TCP resetado, DNS/rede temporariamente indisponível | reconexão com backoff |
-| PostgreSQL temporária | conexão recusada/resetada, shutdown do servidor, limite temporário de conexões | sonda com backoff, sem ACK |
-| Mensagem RFID inválida | JSON/payload inválido ou topologia desconhecida | auditoria/rejeição definitiva e ACK; não repete para sempre |
-| Shutdown do operador | SIGINT, SIGTERM ou parada normal | cancela espera, desconecta e encerra recursos |
+A resiliência do ingestor classifica falhas em duas grandes categorias (`FailureCategory`):
+- `PERMANENT_CONFIGURATION` (`permanent_configuration`): falhas que exigem intervenção manual do operador (credenciais, autenticação, autorização, certificados ou violações de protocolo). O supervisor encerra a execução imediatamente (`fail fast`), evitando loops infinitos de reconexão inútil.
+- `TEMPORARY_MQTT` (`temporary_mqtt`) e `TEMPORARY_DATABASE` (`temporary_database`): falhas transitórias de infraestrutura (broker fora do ar, oscilações de rede, timeouts, quedas do banco de dados). O supervisor aciona reconexão automática com backoff exponencial truncado e jitter.
+
+Os motivos estruturados (`reason`) diferenciam com precisão a causa raiz sem vazar dados sensíveis ou mensagens brutas de exceções nos logs:
+
+| Categoria | Motivo estruturado (`reason`) | Gatilhos e Códigos | Comportamento |
+|---|---|---|---|
+| Permanente | `authentication_failure` | CONNACK 4 ou 134, `MQTT_ERR_AUTH` | Encerra supervisor sem retentativas |
+| Permanente | `authorization_failure` | CONNACK 5 ou 135, `MQTT_ERR_ACL_DENIED` | Encerra supervisor sem retentativas |
+| Permanente | `protocol_rejected` | CONNACK 1 ou 132 | Encerra supervisor sem retentativas |
+| Permanente | `client_id_rejected` | CONNACK 2 ou 133 | Encerra supervisor sem retentativas |
+| Permanente | `tls_certificate_failure` | `SSLCertVerificationError`, `MQTT_ERR_TLS` | Encerra supervisor sem retentativas |
+| Permanente | `configuration_error` | Port/host inválido, `ValueError` de parâmetros | Falha rápida na inicialização |
+| Temporária | `dns_failure` | `socket.gaierror` (falha na resolução de DNS) | Reconexão com backoff e jitter |
+| Temporária | `broker_unavailable` | `ConnectionRefusedError` (`ECONNREFUSED`), CONNACK 3 ou 136 | Reconexão com backoff e jitter |
+| Temporária | `network_unreachable` | `ENETUNREACH`, `EHOSTUNREACH`, `ENETDOWN` (POSIX e Windows WSA) | Reconexão com backoff e jitter |
+| Temporária | `network_timeout` | `TimeoutError`, `socket.timeout` | Reconexão com backoff e jitter |
+| Temporária | `network_error` | `ECONNRESET`, `EPIPE` e outros erros de rede de nível de socket | Reconexão com backoff e jitter |
+| Temporária | `temporary_database` | Queda do PostgreSQL, conexão recusada, shutdown do servidor | Desconecta do MQTT sem ACK, aciona sonda com backoff |
+| Permanente | `permanent_configuration` (DB) | Credenciais PostgreSQL inválidas, schema ausente | Encerra ingestor para intervenção |
+| Mensagem inválida | `invalid_input` / `unknown_reader` / `unknown_antenna` | Payload JSON inválido, reader_id ou antena desconhecida | Rejeição definitiva, auditoria JSONL e ACK ao broker |
+| Operador | `shutdown_requested` | SIGINT, SIGTERM ou parada controlada | Cancela espera, desconecta e encerra ordenadamente |
+
+### Proteção de dados sensíveis e mascaramento de exceções
+
+As exceções brutas do Python (`Exception`, `OSError`, `SSLCertVerificationError`, `SQLAlchemyError`) podem carregar mensagens de erro internas contendo caminhos de arquivos, nomes de hosts internos, detalhes de certificados e parâmetros confidenciais.
+Por projeto:
+1. **Nenhuma mensagem de exceção bruta é registrada nos logs estruturados**.
+2. Apenas a taxonomia pré-definida (`failure_category`, `reason`, `reason_code`) é serializada no JSON de log.
+3. Não há vazamento de credenciais (`APP_DATABASE_URL`, senhas MQTT, tokens ou strings de conexão).
+
 
 ## Configuração
 
