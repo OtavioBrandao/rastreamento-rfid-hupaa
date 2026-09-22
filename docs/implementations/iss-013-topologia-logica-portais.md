@@ -147,7 +147,7 @@ classDiagram
 
 A camada de serviço (`api/service_topologia_portal.py`) e os guards em hardware implementam as seguintes proteções:
 
-1. **Validação de Existência e Ciclo de Vida:** A antena e o portal precisam existir e estar com `ativo = true` para receber um novo mapeamento ativo.
+1. **Validação de Existência e Ciclo de Vida:** A antena, o leitor ao qual ela pertence e o portal precisam existir e estar com `ativo = true` para receber um novo mapeamento ativo. Se o leitor estiver inativo no cadastro, a operação é rejeitada (`LeitorInativo`, HTTP 422). O status de conectividade do leitor (`status`, ex.: "online"/"offline") não interfere no ciclo de vida cadastral.
 2. **Vínculo Físico Prévio:** A antena deve estar associada ao portal na configuração física (`antena.portal_id == portal.id`).
 3. **Coerência Estrita de Lado e Zona:**
    - Se `lado == 'a'`, a zona obrigatoriamente deve ser igual a `portal.zona_a_id`.
@@ -158,12 +158,14 @@ A camada de serviço (`api/service_topologia_portal.py`) e os guards em hardware
      - `antigo.fim = now()`
      - `novo.inicio = now()`, `novo.fim = NULL`
    - Ambas as operações ocorrem na mesma transação atômica. O registro antigo torna-se imutável e permanece consultável.
-5. **Guard no Portal (`atualizar_portal`):**
-   - Se o portal possuir mapeamentos lógicos ativos (`fim IS NULL`), qualquer tentativa de alterar `zona_a_id` ou `zona_b_id` é **bloqueada** (`PortalComMapeamentosAtivos`, HTTP 409). O operador deve encerrar os mapeamentos antes de alterar as zonas físicas do portal.
-6. **Guard na Antena (`atualizar_antena`):**
-   - Se a antena possuir mapeamento lógico ativo, tentativas de alterar ou remover seu `portal_id` ou alterar sua `zona_associada_id` são **bloqueadas** (`AntenaComMapeamentoAtivo`, HTTP 409).
-7. **Guard na Zona (`inativar_zona`):**
-   - A verificação de uso da zona impede a inativação de qualquer zona que possua registros em `mapeamentos_antena_portal` (`ZonaEmUso`, HTTP 409).
+5. **Guards no Portal (`atualizar_portal` e `inativar_portal`):**
+   - Se o portal possuir mapeamentos lógicos ativos (`fim IS NULL`), a alteração de `zona_a_id`/`zona_b_id` ou a sua inativação lógica é **bloqueada** (`PortalComMapeamentosAtivos`, HTTP 409). Mapeamentos históricos não bloqueiam a inativação.
+6. **Guards na Antena (`atualizar_antena` e `inativar_antena`):**
+   - Se a antena possuir mapeamento lógico ativo, tentativas de alterar ou remover seu `portal_id`, alterar sua `zona_associada_id` ou inativá-la são **bloqueadas** (`AntenaComMapeamentoAtivo`, HTTP 409). Mapeamentos históricos não bloqueiam.
+7. **Guard no Leitor (`inativar_leitor`):**
+   - Se qualquer antena do leitor possuir mapeamento lógico ativo, a inativação do leitor é **bloqueada** (`LeitorComMapeamentosAtivos`, HTTP 409). Mapeamentos históricos não bloqueiam.
+8. **Guard na Zona (`inativar_zona`):**
+   - A verificação de uso da zona impede a inativação de qualquer zona que possua registros (mesmo históricos) em `mapeamentos_antena_portal` (`ZonaEmUso`, HTTP 409).
 
 ---
 

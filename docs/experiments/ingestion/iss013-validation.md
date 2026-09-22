@@ -45,24 +45,26 @@ Conforme a matriz metodológica descrita em [`docs/experiments/README.md`](../RE
   - **R1:** Portal inexistente ou inativo rejeitado (`PortalNaoEncontrado` / `PortalInativo`).
   - **R2:** Zonas inválidas, inativas ou idênticas rejeitadas (`ZonaInvalidaParaPortal`).
   - **R3:** Antena inexistente ou inativa rejeitada (`AntenaNaoEncontrada` / `AntenaInativa`).
-  - **R4:** Antena pertence ao leitor esperado.
-  - **R5:** Lado rejeitado se diferente de `'A'` ou `'B'`.
-  - **R6:** Tentativa de mapear lado 'A' com ID da zona B (ou vice-versa) rejeitada (`ZonaIncompativelComLadoPortal`).
+  - **R4:** Antena pertence ao leitor cadastrado, que deve estar ativo no cadastro (`LeitorInativo`).
+  - **R5:** Lado rejeitado se diferente de `'a'` ou `'b'`.
+  - **R6:** Tentativa de mapear lado 'a' com ID da zona B (ou vice-versa) rejeitada (`ZonaIncompativelComLado`).
   - **R7:** Função rejeitada se diferente de `'entrada'`, `'saida'` ou `'auxiliar'` (função `'indefinido'` rejeitada no portal).
-  - **R8:** Antena com mapeamento ativo em outro portal bloqueada (`AntenaJaMapeadaEmOutroPortal`).
+  - **R8:** Antena com mapeamento ativo em outro portal bloqueada (`MapeamentoAtivoExistente` / `uq_mapeamento_antena_ativo`).
   - **R9:** Múltiplas antenas permitidas no mesmo lado e portal (ex.: duas antenas cobrindo lado A).
   - **R10:** Reconfiguração fecha mapeamento anterior com timestamp e abre novo registro ativo (`fim IS NULL`).
-  - **Proteção:** Bloqueio de exclusão (`PortalComMapeamentosAtivos`) ou desativação de portal/antena com mapeamento ativo.
+  - **Proteção:** Bloqueio de mutação ou inativação de portal (`PortalComMapeamentosAtivos`), antena (`AntenaComMapeamentoAtivo`) e leitor (`LeitorComMapeamentosAtivos`) com mapeamento ativo.
 
 ### Cenário 3: Endpoints REST FastAPI (`tests/test_api_topologia_portal.py`)
 - **Objetivo:** Validar as rotas HTTP, validação de payload Pydantic e códigos de status.
 - **Verificações:**
-  - `POST /api/v1/portais/{portal_id}/topologia`: Configuração atômica em lote (201 Created).
-  - `GET /api/v1/portais/{portal_id}/topologia`: Consulta consolidada em join único (200 OK).
-  - `POST /api/v1/portais/{portal_id}/antenas/{antena_id}/mapeamento`: Associação unitária (201 Created).
-  - `DELETE /api/v1/portais/{portal_id}/antenas/{antena_id}/mapeamento`: Desativação lógica com timestamp `fim` (200 OK).
-  - `GET /api/v1/portais/{portal_id}/topologia/historico`: Consulta de histórico com filtros de período e `apenas_ativos` (200 OK).
-  - Erros 400, 404, 409 e 422 retornados com detalhamento sem expor stack traces.
+  - `POST /portais/{portal_id}/mapeamentos`: Criação de mapeamento lógico ativo (201 Created).
+  - `GET /portais/{portal_id}/mapeamentos`: Listagem de mapeamentos do portal com suporte a `?incluir_historico=true` (200 OK).
+  - `GET /portais/{portal_id}/topologia`: Consulta consolidada em join único para inferência (200 OK).
+  - `GET /mapeamentos-antena/{mapeamento_id}`: Detalhamento de um mapeamento (200 OK).
+  - `PATCH /mapeamentos-antena/{mapeamento_id}`: Atualização temporal com encerramento de versão anterior e abertura de nova (200 OK).
+  - `POST /mapeamentos-antena/{mapeamento_id}/inativar`: Desativação lógica com timestamp `fim` (200 OK).
+  - `GET /antenas/{antena_id}/mapeamentos`: Histórico cronológico de mapeamentos de uma antena (200 OK).
+  - Erros 404 (não encontrado), 409 (conflito / guards de hardware) e 422 (incompatibilidade / entidade inativa) retornados com detalhamento padronizado.
 
 ---
 
@@ -98,11 +100,11 @@ python -m pytest -q
 | VAL-013-01 | Modelagem da tabela `mapeamentos_antena_portal` | Campos `portal_id`, `antena_id`, `zona_id`, `lado`, `funcao`, `inicio`, `fim` | Modelo SQLAlchemy e DDL criados conforme especificação | APROVADO |
 | VAL-013-02 | Unicidade parcial por antena ativa | No máximo um registro ativo (`fim IS NULL`) por antena | Constraint `uq_mapeamento_antena_ativo` aplicada com sucesso | APROVADO |
 | VAL-013-03 | Imutabilidade do histórico | Mapeamento antigo recebe `fim = now()`, novo registro criado | Teste temporal confirma existência do histórico e encerramento de vínculo | APROVADO |
-| VAL-013-04 | Validação de Lado vs Zona (R6) | Rejeitar lado A com zona_b ou lado B com zona_a | Exceção de domínio tratada com HTTP 400 | APROVADO |
-| VAL-013-05 | Validação de Funções Permitidas (R7) | Aceitar apenas `entrada`, `saida`, `auxiliar` | Rejeição de valores arbitrários ou `indefinido` com HTTP 400 | APROVADO |
+| VAL-013-04 | Validação de Lado vs Zona (R6) | Rejeitar lado A com zona_b ou lado B com zona_a | Exceção de domínio tratada com HTTP 422 | APROVADO |
+| VAL-013-05 | Validação de Funções Permitidas (R7) | Aceitar apenas `entrada`, `saida`, `auxiliar` | Rejeição de valores arbitrários ou `indefinido` com HTTP 422 | APROVADO |
 | VAL-013-06 | Multi-antenas por lado (R9) | Permitir 2+ antenas no mesmo lado e portal | Suportado sem colisão de constraints | APROVADO |
-| VAL-013-07 | Endpoint consolidado de topologia | Retornar portal, zonas A/B e antenas em query única | Endpoint `/topologia` retorna DTO consolidado com dados de hardware e lógica | APROVADO |
-| VAL-013-08 | Guard de integridade cruzada | Bloquear inativação/exclusão de hardware com mapeamento ativo | Erro `PortalComMapeamentosAtivos` / `AntenaComMapeamentoAtivo` com HTTP 409 | APROVADO |
+| VAL-013-07 | Endpoint consolidado de topologia | Retornar portal, zonas A/B e antenas em query única | Endpoint `/portais/{id}/topologia` retorna DTO consolidado com dados de hardware e lógica | APROVADO |
+| VAL-013-08 | Guard de integridade cruzada | Bloquear mutação/inativação de hardware com mapeamento ativo | Erros `PortalComMapeamentosAtivos`, `AntenaComMapeamentoAtivo` e `LeitorComMapeamentosAtivos` com HTTP 409 | APROVADO |
 | VAL-013-09 | Validação física de bancada | Teste com leitores físicos Identix EZ700 | Aguardando infraestrutura de TI do HUPAA | PENDENTE DE HARDWARE |
 
 ---
