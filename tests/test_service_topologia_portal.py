@@ -582,8 +582,14 @@ def test_guard_atualizar_antena_bloqueado_com_mapeamento_ativo(db):
 
 
 def test_inativar_zona_bloqueada_por_mapeamento_antena_portal(db):
-    """A zone referenced in mapeamentos_antena_portal cannot be inactivated."""
-    _, _, zona_a, _, _, leitor, portal = _cenario_base(db)
+    """
+    A zone referenced only in historical rows of mapeamentos_antena_portal
+    cannot be inactivated, even when portal and antenna have already been
+    reconfigured to other zones.
+    """
+    _, _, zona_a, zona_b, zona_c, leitor, portal = _cenario_base(db)
+
+    # 1. Antena ligada à zona_a no portal
     antena = criar_antena(
         db,
         leitor_id=leitor.id,
@@ -592,9 +598,23 @@ def test_inativar_zona_bloqueada_por_mapeamento_antena_portal(db):
         funcao="entrada",
         portal_id=portal.id,
     )
-    criar_mapeamento(db, portal.id, antena.id, lado="a", funcao="entrada")
 
+    # 2. Mapeamento lógico ativo ligando portal à zona_a
+    map_obj = criar_mapeamento(db, portal.id, antena.id, lado="a", funcao="entrada")
+
+    # 3. Encerra/inativa o mapeamento lógico (fim preenchido, torna-se histórico)
+    inativar_mapeamento(db, map_obj.id)
+    assert map_obj.fim is not None
+
+    # 4. Reconfigura o portal para apontar para zona_c em vez de zona_a
+    atualizar_portal(db, portal.id, {"zona_a_id": zona_c.id})
+
+    # 5. Reconfigura a antena para apontar para zona_c em vez de zona_a
+    atualizar_antena(db, antena.id, {"zona_associada_id": zona_c.id})
+
+    # 6. Tenta inativar a zona_a antiga: apenas o mapeamento histórico a referencia
     with pytest.raises(ZonaEmUso) as exc:
         inativar_zona(db, zona_a.id)
+
     assert f"Zona {zona_a.id} não pode ser inativada" in str(exc.value)
-    assert "mapeamentos_antena_portal" in str(exc.value)
+    assert "mapeamentos_antena_portal (zona_id)" in str(exc.value)
