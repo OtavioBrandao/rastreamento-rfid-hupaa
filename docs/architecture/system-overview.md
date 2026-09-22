@@ -46,7 +46,7 @@ flowchart TD
     subgraph Processamento["Processamento de Inferência"]
         DEBOUNCE["Debounce Temporal Implementado (ISS-014)"]
         INFERENCE["Detecção de Passagem Implementada (ISS-015)"]
-        DIRECTION["Inferência de Direção (ISS-016)"]
+        DIRECTION["Inferência de Direção Implementada (ISS-016)"]
         UPDATE_LOC["Atualização da Última Zona (ISS-017)"]
         HISTORY["Histórico de Movimentações (ISS-018)"]
     end
@@ -65,12 +65,12 @@ flowchart TD
 
     INSERT -->|Somente inserted, após commit| DEBOUNCE
     DEBOUNCE --> INFERENCE
-    INFERENCE -.-> DIRECTION
+    INFERENCE --> DIRECTION
     DIRECTION -.-> UPDATE_LOC
     UPDATE_LOC -.-> HISTORY
 
     classDef future fill:#f9f,stroke:#333,stroke-dasharray: 5 5;
-    class DIRECTION,UPDATE_LOC,HISTORY future;
+    class UPDATE_LOC,HISTORY future;
 ```
 
 ---
@@ -207,14 +207,14 @@ classDiagram
 
 ## 4. Estado do processamento de inferência
 
-Para fins de avaliação e clareza do escopo do MVP, debounce e detecção de
-passagem estão disponíveis. Direção e localização permanecem etapas futuras:
+Para fins de avaliação e clareza do escopo do MVP, debounce, passagem e direção
+estão disponíveis. Atualização de localização e histórico permanecem etapas futuras:
 
 | Recurso | Status Atual | Issue Prevista | Descrição |
 |---|---|---|---|
 | **Debounce Temporal** | Implementado | **ISS-014** | Consolidação por `(EPC, antena_id)` usando event time, tolerância a reordenação e preservação integral das leituras brutas. |
 | **Detecção de Passagem** | Implementado | **ISS-015** | Correlação temporal por `(EPC, portal_id)` entre lados opostos, topologia histórica e persistência idempotente com `direcao=NULL`. |
-| **Inferência de Direção** | Pendente | **ISS-016** | Determinação do vetor de movimento da passagem. |
+| **Inferência de Direção** | Implementado | **ISS-016** | A→B/B→A e zonas via topologia histórica; empate/próximos geram `ambiguous`, inconsistência gera `unknown`. |
 | **Última Zona do Ativo** | Pendente | **ISS-017** | Atualização automática dos campos `ultima_zona_id`, `ultima_deteccao_em` e `ultima_passagem_id` em `equipamentos`. |
 | **Histórico de Movimentações** | Pendente | **ISS-018** | Preenchimento automático de `historico_movimentacoes` a partir de passagens confirmadas. |
 
@@ -230,3 +230,4 @@ passagem estão disponíveis. Direção e localização permanecem etapas futura
 - [Topologia Lógica de Portais (ISS-013)](../implementations/iss-013-topologia-logica-portais.md)
 - [Debounce Temporal de Leituras (ISS-014)](../implementations/iss-014-debounce-leituras.md)
 - [Detecção de Passagem (ISS-015)](../implementations/iss-015-deteccao-passagem.md)
+- [Inferência de Direção (ISS-016)](../implementations/iss-016-inferencia-direcao.md)
