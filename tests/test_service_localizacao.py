@@ -111,6 +111,8 @@ def _historico(db, zona_origem_id, zona_destino_id):
         zona_origem_id=zona_origem_id,
         zona_destino_id=zona_destino_id,
         origem_registro="correcao_manual",
+        movimentada_em=datetime.now(timezone.utc) - timedelta(days=400),
+        justificativa="correção histórica para testar referência à zona",
         registrado_em=datetime.now(timezone.utc) - timedelta(days=400),
     )
     db.add(registro)
