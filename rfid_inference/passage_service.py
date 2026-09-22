@@ -33,11 +33,13 @@ class PassageInferenceService:
         repository: PassageRepository,
         *,
         monotonic_clock: Callable[[], float] = time.monotonic,
+        passage_persisted: Callable[[], None] | None = None,
     ) -> None:
         self.detector = detector
         self.repository = repository
         self.monotonic_clock = monotonic_clock
         self.counters = ServiceCounters()
+        self.passage_persisted = passage_persisted
 
     def handle_observation(self, observation: ConsolidatedObservation) -> None:
         try:
@@ -70,6 +72,12 @@ class PassageInferenceService:
                    epc=passage.epc, portal_id=passage.portal_id)
             return
         self.detector.mark_persisted(passage, duplicate=not inserted)
+        if self.passage_persisted is not None:
+            try:
+                self.passage_persisted()
+            except Exception:
+                _event(logging.ERROR, "rfid_direction_retry",
+                       epc=passage.epc, portal_id=passage.portal_id)
 
     def retry_pending(self) -> None:
         for proposal in self.detector.pending():

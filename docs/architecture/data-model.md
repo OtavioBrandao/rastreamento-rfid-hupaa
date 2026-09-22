@@ -224,12 +224,16 @@ monotônico usado para perceber silêncio não substitui `lido_em` no agrupament
 | portal_id | bigint | FK → portais, NOT NULL |
 | antena_origem_id | bigint | FK → antenas, NOT NULL |
 | antena_destino_id | bigint | FK → antenas, NULL no schema; ISS-015 preenche com a segunda evidência, ainda sem significado de zona de destino |
-| direcao | varchar | NULL, CHECK IN ('entrada','saida','indeterminada') |
+| direcao | varchar | NULL até ISS-016; depois `a_para_b`, `b_para_a` ou `indeterminada` |
+| direcao_status | varchar(20) | NULL pendente; depois `confirmed`, `ambiguous` ou `unknown` |
+| direcao_regra | varchar(40) | NULL pendente; regra categórica auditável após ISS-016 |
+| zona_origem_id | bigint | FK → zonas, NULL para passagem pendente, ambígua ou desconhecida |
+| zona_destino_id | bigint | FK → zonas, NULL para passagem pendente, ambígua ou desconhecida |
 | leitura_origem_id | bigint | FK → leituras_brutas, NOT NULL |
 | leitura_destino_id | bigint | FK → leituras_brutas, NULL no schema; ISS-015 preenche com `first_reading_id` da segunda observação |
 | detectada_em | timestamptz | NOT NULL; maior `last_seen_at` das evidências |
 
-**Índices:** `(epc, detectada_em)`, `(portal_id, detectada_em)` e UNIQUE `(leitura_origem_id, leitura_destino_id)` para idempotência. Na ISS-015, `antena_origem_id` corresponde à primeira observação ordenada e `leitura_origem_id` ao seu `last_reading_id`. `direcao` fica `NULL`; interpretação semântica é posterior. Veja a [documentação da ISS-015](../implementations/iss-015-deteccao-passagem.md).
+**Índices:** `(epc, detectada_em)`, `(portal_id, detectada_em)` e UNIQUE `(leitura_origem_id, leitura_destino_id)` para idempotência. Na ISS-015, `antena_origem_id` corresponde à primeira observação ordenada e `leitura_origem_id` ao seu `last_reading_id`; `direcao` fica `NULL` até a ISS-016. A inferência posterior usa `lido_em` das duas leituras e mapeamentos históricos `[inicio, fim)` para preencher sentido, status, regra e zonas na mesma linha. `confirmed` exige duas zonas distintas; `ambiguous` e `unknown` não armazenam zonas. Veja [ISS-015](../implementations/iss-015-deteccao-passagem.md) e [ISS-016](../implementations/iss-016-inferencia-direcao.md).
 
 ### `historico_movimentacoes` (RF-013)
 | Coluna | Tipo | Regra |
@@ -288,7 +292,7 @@ Uma leitura de EPC não cadastrado (sem nenhuma linha em `associacoes_tag_equipa
 ## 4. Cenários de validação cruzada (para revisão da dupla)
 
 1. **Cadastro:** `tipos_equipamento` → `equipamentos` → `tags` → `associacoes_tag_equipamento` (ativa).
-2. **Inferência:** `leituras_brutas` → observações por antena (ISS-014) → `passagens` com `direcao=NULL` (ISS-015 implementada). Direção (ISS-016), `equipamentos.ultima_zona_id/ultima_deteccao_em` (ISS-017) e `historico_movimentacoes` (ISS-018) são etapas futuras.
+2. **Inferência:** `leituras_brutas` → observações por antena (ISS-014) → `passagens` com `direcao=NULL` (ISS-015) → direção e zonas na própria passagem (ISS-016). `equipamentos.ultima_zona_id/ultima_deteccao_em/ultima_passagem_id` (ISS-017) e `historico_movimentacoes` (ISS-018) são etapas futuras.
 3. **Troca de tag:** associação ativa antiga recebe `fim = now()`; nova linha criada para a nova tag no mesmo equipamento — o equipamento mantém histórico completo de EPCs já usados, sem perder o histórico de movimentação anterior (que referencia o equipamento, não a tag).
 4. **Correção manual:** admin altera `equipamentos.ultima_zona_id` diretamente → `historico_movimentacoes` recebe linha com `passagem_id = NULL` e `origem_registro='correcao_manual'` → `auditorias` recebe entrada com `dados_antes`/`dados_depois` e `usuario_id` preenchido.
 

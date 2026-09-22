@@ -22,9 +22,9 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Topologia Lógica de Portais (ISS-013):** Mapeamentos temporais de antenas para lados A/B, zonas e funções operacionais, preservando histórico de configuração.
 - **Debounce Temporal (ISS-014):** Consolidação em memória por `(EPC, antena_id)` usando event time, tolerância configurável a reordenação e estatísticas de RSSI, sem remover leituras brutas.
 - **Detecção de Passagem (ISS-015):** Correlação temporal de observações em lados opostos do mesmo portal, com evidências rastreáveis e `direcao=NULL`.
+- **Inferência de Direção (ISS-016):** Interpretação da ordem temporal A→B/B→A com topologia histórica, zonas de origem/destino e estados `confirmed`, `ambiguous` e `unknown`. Tolerância temporal inicial configurável de 100 ms, ainda sem validação física.
 
 ### ⏳ Próximos Passos (Backlog Imediato):
-- **ISS-016:** Inferência de direção da passagem.
 - **ISS-017:** Atualização da última zona do equipamento.
 - **ISS-018:** Histórico de movimentações.
 
@@ -45,6 +45,8 @@ flowchart LR
     INGESTOR --> DEBOUNCE["Debounce (observação consolidada)"]
     DEBOUNCE --> PASSAGEM["Detecção de passagem (direcao=NULL)"]
     PASSAGEM --> POSTGRES
+    POSTGRES --> DIRECAO["ISS-016: direção e zonas na passagem"]
+    DIRECAO --> POSTGRES
     INGESTOR -->|Manual ACK| BROKER
     FASTAPI["FastAPI API REST<br/>(Equipamentos, Zonas, Hardware)"] --> POSTGRES
 ```
@@ -131,6 +133,7 @@ A documentação detalhada foi reorganizada segundo a **[Issue #51](docs/impleme
   - [ISS-013: Topologia Lógica de Portais](docs/implementations/iss-013-topologia-logica-portais.md)
   - [ISS-014: Debounce Temporal de Leituras](docs/implementations/iss-014-debounce-leituras.md)
   - [ISS-015: Detecção de Passagem](docs/implementations/iss-015-deteccao-passagem.md)
+  - [ISS-016: Inferência de Direção](docs/implementations/iss-016-inferencia-direcao.md)
 - **Experimentos e Evidências:**
   - [Índice de Evidências e Matriz de Testes](docs/experiments/README.md)
   - [Evidências MQTT e Rede](docs/experiments/mqtt/)

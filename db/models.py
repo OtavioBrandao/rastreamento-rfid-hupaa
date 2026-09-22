@@ -537,10 +537,7 @@ class LeituraBruta(Base):
 
 
 class Passagem(Base):
-    """ISS-015: antenas origem/destino são evidências ordenadas, não zonas.
-
-    A direção permanece NULL até a futura interpretação semântica.
-    """
+    """ISS-015 guarda evidências temporais; ISS-016 interpreta lados e zonas."""
 
     __tablename__ = "passagens"
 
@@ -549,7 +546,11 @@ class Passagem(Base):
     portal_id = Column(BigInteger, ForeignKey("portais.id"), nullable=False)
     antena_origem_id = Column(BigInteger, ForeignKey("antenas.id"), nullable=False)
     antena_destino_id = Column(BigInteger, ForeignKey("antenas.id"), nullable=True)
-    direcao = Column(String, nullable=True)  # 'entrada' | 'saida' | 'indeterminada'
+    direcao = Column(String, nullable=True)  # a_para_b | b_para_a | indeterminada
+    direcao_status = Column(String(20), nullable=True)
+    direcao_regra = Column(String(40), nullable=True)
+    zona_origem_id = Column(BigInteger, ForeignKey("zonas.id"), nullable=True)
+    zona_destino_id = Column(BigInteger, ForeignKey("zonas.id"), nullable=True)
     leitura_origem_id = Column(BigInteger, ForeignKey("leituras_brutas.id"), nullable=False)
     leitura_destino_id = Column(BigInteger, ForeignKey("leituras_brutas.id"), nullable=True)
     detectada_em = Column(TIMESTAMP(timezone=True), nullable=False)
@@ -559,14 +560,27 @@ class Passagem(Base):
     antena_destino = relationship("Antena", foreign_keys=[antena_destino_id])
     leitura_origem = relationship("LeituraBruta", foreign_keys=[leitura_origem_id])
     leitura_destino = relationship("LeituraBruta", foreign_keys=[leitura_destino_id])
+    zona_origem = relationship("Zona", foreign_keys=[zona_origem_id])
+    zona_destino = relationship("Zona", foreign_keys=[zona_destino_id])
 
     __table_args__ = (
         Index("uq_passagem_evidencias", "leitura_origem_id", "leitura_destino_id", unique=True),
         Index("ix_passagens_epc_detectada_em", "epc", "detectada_em"),
         Index("ix_passagens_portal_detectada_em", "portal_id", "detectada_em"),
         CheckConstraint(
-            "direcao IS NULL OR direcao IN ('entrada', 'saida', 'indeterminada')",
+            "direcao IS NULL OR direcao IN ('a_para_b', 'b_para_a', 'indeterminada')",
             name="ck_passagem_direcao_valida",
+        ),
+        CheckConstraint(
+            "((direcao_status IS NULL AND direcao IS NULL AND direcao_regra IS NULL "
+            "AND zona_origem_id IS NULL AND zona_destino_id IS NULL) OR "
+            "(direcao_status = 'confirmed' AND direcao IN ('a_para_b', 'b_para_a') "
+            "AND direcao_regra IS NOT NULL AND zona_origem_id IS NOT NULL "
+            "AND zona_destino_id IS NOT NULL AND zona_origem_id <> zona_destino_id) OR "
+            "(direcao_status IN ('ambiguous', 'unknown') AND direcao = 'indeterminada' "
+            "AND direcao_regra IS NOT NULL AND zona_origem_id IS NULL "
+            "AND zona_destino_id IS NULL)) IS TRUE",
+            name="ck_passagem_direcao_estado",
         ),
     )
 

@@ -7,6 +7,8 @@ from datetime import timedelta
 
 from db.runtime import DatabaseConfigurationError, create_app_engine
 from rfid_inference.debounce import DebounceProcessor
+from rfid_inference.direction_repository import DirectionRepository
+from rfid_inference.direction_service import DirectionInferenceService
 from rfid_inference.passage import PassageDetector
 from rfid_inference.passage_repository import PassageRepository
 from rfid_inference.passage_service import PassageInferenceService
@@ -35,6 +37,10 @@ def main() -> int:
             settings.rfid_debounce_window_ms,
             settings.rfid_out_of_order_tolerance_ms,
         )
+        direction_service = DirectionInferenceService(
+            DirectionRepository(engine), settings.rfid_direction_ambiguity_ms
+        )
+        direction_service.process_pending()
         passage_service = PassageInferenceService(
             PassageDetector(
                 timedelta(milliseconds=settings.rfid_passage_max_interval_ms),
@@ -44,14 +50,19 @@ def main() -> int:
                 )),
             ),
             PassageRepository(engine),
+            passage_persisted=direction_service.process_pending,
         )
+        def inference_tick(now_monotonic: float) -> None:
+            passage_service.tick(now_monotonic)
+            direction_service.tick(now_monotonic)
+
         receiver = MqttReceiver(
             settings,
             store,
             RawReadingRepository(engine),
             debouncer=debouncer,
             observation_handler=passage_service.handle_observation,
-            observation_tick_handler=passage_service.tick,
+            observation_tick_handler=inference_tick,
         )
         return receiver.run()
     except DatabaseConfigurationError as error:
