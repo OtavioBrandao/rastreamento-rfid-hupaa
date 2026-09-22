@@ -56,6 +56,7 @@ class MqttReceiver:
         random_source: Callable[[], float] | None = None,
         debouncer: DebounceProcessor | None = None,
         observation_handler: Callable[[ConsolidatedObservation], None] | None = None,
+        monotonic_clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.settings = settings
         self.store = store
@@ -65,6 +66,7 @@ class MqttReceiver:
             settings.rfid_out_of_order_tolerance_ms,
         )
         self.observation_handler = observation_handler
+        self._monotonic_clock = monotonic_clock
         self.ready = Event()
         self.failed = Event()
         self.shutdown = Event()
@@ -368,7 +370,8 @@ class MqttReceiver:
                     antenna_id=result.antenna_id,
                     observed_at=observed_at,
                     rssi=canonical["rssi"],
-                )
+                ),
+                received_at_monotonic=self._monotonic_clock(),
             )
         except Exception:
             _log(
@@ -442,6 +445,29 @@ class MqttReceiver:
         )
         return observations
 
+    def _poll_debounce(self) -> None:
+        try:
+            observations = self.debouncer.advance_time(self._monotonic_clock())
+        except Exception:
+            _log(
+                logging.ERROR,
+                "rfid_debounce_failed",
+                reason="automatic_finalization_failed",
+            )
+            return
+        if observations:
+            self._emit_observations(observations)
+            counters = self.debouncer.counters
+            _log(
+                logging.INFO,
+                "rfid_debounce_automatic_finalization",
+                finalized_in_poll=len(observations),
+                readings_received=counters.readings_received,
+                readings_incorporated=counters.readings_incorporated,
+                observations_finalized=counters.observations_finalized,
+                late_events=counters.late_events,
+            )
+
     def _network_session(self) -> None:
         self._mqtt_attempt += 1
         _log(
@@ -501,6 +527,7 @@ class MqttReceiver:
         self.disconnected.clear()
         while not self.shutdown.is_set() and not self.failed.is_set():
             result = self.client.loop(timeout=0.2)
+            self._poll_debounce()
             if (
                 result != mqtt.MQTT_ERR_SUCCESS
                 or self.disconnected.is_set()

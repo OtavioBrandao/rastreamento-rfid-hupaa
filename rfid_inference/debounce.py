@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from threading import Lock
@@ -62,6 +63,7 @@ class DebounceResult:
 class _KeyState:
     readings: list[DebounceReading]
     max_seen_at: datetime
+    last_received_at_monotonic: float
     finalized_until: datetime | None = None
 
 
@@ -98,15 +100,19 @@ class DebounceProcessor:
         with self._lock:
             return self._counters
 
-    def add(self, reading: DebounceReading) -> DebounceResult:
+    def add(
+        self, reading: DebounceReading, *, received_at_monotonic: float | None = None
+    ) -> DebounceResult:
         """Adiciona uma leitura e devolve observações que ficaram estáveis."""
 
+        if received_at_monotonic is None:
+            received_at_monotonic = time.monotonic()
         key = (reading.epc, reading.antenna_id)
         with self._lock:
             self._increment(readings_received=1)
             state = self._states.get(key)
             if state is None:
-                state = _KeyState([], reading.observed_at)
+                state = _KeyState([], reading.observed_at, received_at_monotonic)
                 self._states[key] = state
             else:
                 watermark = state.max_seen_at - self.out_of_order_tolerance
@@ -117,6 +123,7 @@ class DebounceProcessor:
                     self._increment(late_events=1)
                     return DebounceResult(False, False, True)
                 state.max_seen_at = max(state.max_seen_at, reading.observed_at)
+                state.last_received_at_monotonic = received_at_monotonic
 
             state.readings.append(reading)
             state.readings.sort(key=lambda item: (item.observed_at, item.event_id))
@@ -134,37 +141,25 @@ class DebounceProcessor:
                     break
                 finalized_groups.append(group)
 
-            finalized = tuple(self._observation(group) for group in finalized_groups)
-            if finalized_groups:
-                finalized_ids = {
-                    item.event_id for group in finalized_groups for item in group
-                }
-                state.readings = [
-                    item for item in state.readings if item.event_id not in finalized_ids
-                ]
-                state.finalized_until = max(
-                    observation.last_seen_at + self.window
-                    for observation in finalized
-                )
-                self._increment(observations_finalized=len(finalized))
+            finalized = self._finalize(state, finalized_groups)
             return DebounceResult(True, incorporated, False, finalized)
 
-    def flush(self) -> tuple[ConsolidatedObservation, ...]:
-        """Finaliza deterministicamente todas as observações ainda pendentes."""
+    def advance_time(self, now_monotonic: float) -> tuple[ConsolidatedObservation, ...]:
+        """Finaliza chaves silenciosas sem exigir outra leitura da mesma antena.
+
+        O relógio monotônico mede apenas o silêncio desde a última chegada.
+        Timestamps das leituras continuam determinando grupos e referências.
+        """
 
         with self._lock:
             finalized: list[ConsolidatedObservation] = []
-            for key in sorted(self._states):
-                state = self._states[key]
-                groups = self._group(state.readings)
-                observations = [self._observation(group) for group in groups]
-                finalized.extend(observations)
-                if observations:
-                    state.finalized_until = max(
-                        observation.last_seen_at + self.window
-                        for observation in observations
-                    )
-                state.readings.clear()
+            silence_seconds = (self.window + self.out_of_order_tolerance).total_seconds()
+            for state in self._states.values():
+                if (
+                    state.readings
+                    and now_monotonic - state.last_received_at_monotonic > silence_seconds
+                ):
+                    finalized.extend(self._finalize(state, self._group(state.readings)))
             finalized.sort(
                 key=lambda item: (
                     item.first_seen_at,
@@ -173,8 +168,40 @@ class DebounceProcessor:
                     item.first_event_id,
                 )
             )
-            self._increment(observations_finalized=len(finalized))
             return tuple(finalized)
+
+    def flush(self) -> tuple[ConsolidatedObservation, ...]:
+        """Finaliza deterministicamente todas as observações ainda pendentes."""
+
+        with self._lock:
+            finalized: list[ConsolidatedObservation] = []
+            for key in sorted(self._states):
+                state = self._states[key]
+                finalized.extend(self._finalize(state, self._group(state.readings)))
+            finalized.sort(
+                key=lambda item: (
+                    item.first_seen_at,
+                    item.epc,
+                    item.antenna_id,
+                    item.first_event_id,
+                )
+            )
+            return tuple(finalized)
+
+    def _finalize(
+        self, state: _KeyState, groups: list[list[DebounceReading]]
+    ) -> tuple[ConsolidatedObservation, ...]:
+        observations = tuple(self._observation(group) for group in groups)
+        if observations:
+            finalized_ids = {item.event_id for group in groups for item in group}
+            state.readings = [
+                item for item in state.readings if item.event_id not in finalized_ids
+            ]
+            state.finalized_until = max(
+                observation.last_seen_at + self.window for observation in observations
+            )
+            self._increment(observations_finalized=len(observations))
+        return observations
 
     def _group(
         self, readings: list[DebounceReading]

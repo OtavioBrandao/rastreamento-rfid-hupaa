@@ -45,8 +45,10 @@ flowchart TD
 
     subgraph Processamento["Processamento de Inferência"]
         DEBOUNCE["Debounce Temporal Implementado (ISS-014)"]
-        INFERENCE["Inferência de Passagem e Direção (ISS-015)"]
-        UPDATE_LOC["Atualização de Zona do Ativo (ISS-016)"]
+        INFERENCE["Detecção de Passagem (ISS-015)"]
+        DIRECTION["Inferência de Direção (ISS-016)"]
+        UPDATE_LOC["Atualização da Última Zona (ISS-017)"]
+        HISTORY["Histórico de Movimentações (ISS-018)"]
     end
 
     LEITOR -->|Publica Payload JSON| BROKER
@@ -63,10 +65,12 @@ flowchart TD
 
     INSERT -->|Somente inserted, após commit| DEBOUNCE
     DEBOUNCE -.-> INFERENCE
-    INFERENCE -.-> UPDATE_LOC
+    INFERENCE -.-> DIRECTION
+    DIRECTION -.-> UPDATE_LOC
+    UPDATE_LOC -.-> HISTORY
 
     classDef future fill:#f9f,stroke:#333,stroke-dasharray: 5 5;
-    class INFERENCE,UPDATE_LOC future;
+    class INFERENCE,DIRECTION,UPDATE_LOC,HISTORY future;
 ```
 
 ---
@@ -209,10 +213,10 @@ enquanto passagem, direção e localização permanecem etapas futuras:
 | Recurso | Status Atual | Issue Prevista | Descrição |
 |---|---|---|---|
 | **Debounce Temporal** | Implementado | **ISS-014** | Consolidação por `(EPC, antena_id)` usando event time, tolerância a reordenação e preservação integral das leituras brutas. |
-| **Motor de Inferência de Passagem** | Pendente | **ISS-015** | Criação de registros na tabela `passagens` a partir da correlação de leituras entre antenas de entrada/saída de um portal. |
-| **Inferência de Direção** | Pendente | **ISS-015** | Determinação do vetor de movimento (`entrada` ou `saida`) comparando timestamps de detecção em antenas distintas de um portal. |
-| **Localização Dinâmica de Ativos** | Pendente | **ISS-016** | Atualização automática dos campos `ultima_zona_id`, `ultima_deteccao_em` e `ultima_passagem_id` em `equipamentos`. |
-| **Histórico de Movimentações** | Pendente | **ISS-016** | Preenchimento automático de `historico_movimentacoes` a partir de passagens confirmadas. |
+| **Detecção de Passagem** | Pendente | **ISS-015** | Correlação de observações entre antenas distintas de um portal e criação de registros em `passagens`. |
+| **Inferência de Direção** | Pendente | **ISS-016** | Determinação do vetor de movimento da passagem. |
+| **Última Zona do Ativo** | Pendente | **ISS-017** | Atualização automática dos campos `ultima_zona_id`, `ultima_deteccao_em` e `ultima_passagem_id` em `equipamentos`. |
+| **Histórico de Movimentações** | Pendente | **ISS-018** | Preenchimento automático de `historico_movimentacoes` a partir de passagens confirmadas. |
 
 ---
 

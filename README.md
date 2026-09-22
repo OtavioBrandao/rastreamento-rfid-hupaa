@@ -23,8 +23,10 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Debounce Temporal (ISS-014):** Consolidação em memória por `(EPC, antena_id)` usando event time, tolerância configurável a reordenação e estatísticas de RSSI, sem remover leituras brutas.
 
 ### ⏳ Próximos Passos (Backlog Imediato):
-- **ISS-015:** Motor de inferência de passagens e vetor de direção em portais.
-- **ISS-016:** Atualização automática de localização dos equipamentos e histórico de movimentações.
+- **ISS-015:** Detecção de passagem entre antenas de um portal.
+- **ISS-016:** Inferência de direção da passagem.
+- **ISS-017:** Atualização da última zona do equipamento.
+- **ISS-018:** Histórico de movimentações.
 
 > [!NOTE]
 > O aceite final com **leitores físicos Identix EZ700 e na rede Wi-Fi hospitalar** permanece como **PENDENTE DE VALIDAÇÃO FÍSICA**, aguardando infraestrutura de TI do HUPAA. Os testes atuais comprovam o pipeline lógico via simuladores e contêineres Docker.

@@ -213,7 +213,8 @@ verdade. Depois do commit, somente resultados `inserted` alimentam o debounce;
 última leitura bruta, conserva timestamps e quantidade e agrega mínimo, máximo
 e média apenas dos RSSIs não nulos. Consulte a
 [documentação da ISS-014](../implementations/iss-014-debounce-leituras.md) para
-watermark, tolerância de reordenação, flush e limitações.
+watermark, finalização automática por silêncio, flush e limitações. O relógio
+monotônico usado para perceber silêncio não substitui `lido_em` no agrupamento.
 
 ### `passagens` (RF-009 a RF-011)
 | Coluna | Tipo | Regra |
@@ -222,7 +223,7 @@ watermark, tolerância de reordenação, flush e limitações.
 | epc | varchar | NOT NULL |
 | portal_id | bigint | FK → portais, NOT NULL |
 | antena_origem_id | bigint | FK → antenas, NOT NULL |
-| antena_destino_id | bigint | FK → antenas, NULL — **NULL enquanto a inferência de direção (RF-011, Should) não estiver implementada** |
+| antena_destino_id | bigint | FK → antenas, NULL — preenchimento conforme a detecção de passagem da ISS-015; a direção é escopo da ISS-016 |
 | direcao | varchar | NULL, CHECK IN ('entrada','saida','indeterminada') |
 | leitura_origem_id | bigint | FK → leituras_brutas, NOT NULL |
 | leitura_destino_id | bigint | FK → leituras_brutas, NULL |
@@ -287,7 +288,7 @@ Uma leitura de EPC não cadastrado (sem nenhuma linha em `associacoes_tag_equipa
 ## 4. Cenários de validação cruzada (para revisão da dupla)
 
 1. **Cadastro:** `tipos_equipamento` → `equipamentos` → `tags` → `associacoes_tag_equipamento` (ativa).
-2. **Passagem entre duas zonas:** duas `leituras_brutas` (antenas distintas do mesmo portal) dentro da janela de debounce → gera 1 `passagens` (origem + destino se direção inferida) → atualiza `equipamentos.ultima_zona_id/ultima_deteccao_em` → insere 1 linha em `historico_movimentacoes` com `origem_registro='passagem_automatica'`.
+2. **Passagem entre duas zonas (fluxo futuro):** `leituras_brutas` → observações por antena (ISS-014) → detecção de `passagens` (ISS-015) → direção (ISS-016) → `equipamentos.ultima_zona_id/ultima_deteccao_em` (ISS-017) → `historico_movimentacoes` (ISS-018).
 3. **Troca de tag:** associação ativa antiga recebe `fim = now()`; nova linha criada para a nova tag no mesmo equipamento — o equipamento mantém histórico completo de EPCs já usados, sem perder o histórico de movimentação anterior (que referencia o equipamento, não a tag).
 4. **Correção manual:** admin altera `equipamentos.ultima_zona_id` diretamente → `historico_movimentacoes` recebe linha com `passagem_id = NULL` e `origem_registro='correcao_manual'` → `auditorias` recebe entrada com `dados_antes`/`dados_depois` e `usuario_id` preenchido.
 
