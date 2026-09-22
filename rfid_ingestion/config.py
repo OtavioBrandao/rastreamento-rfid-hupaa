@@ -23,6 +23,8 @@ DEFAULT_RETRY_INITIAL_DELAY = 1.0
 DEFAULT_RETRY_MAX_DELAY = 30.0
 DEFAULT_RETRY_MULTIPLIER = 2.0
 DEFAULT_RETRY_JITTER = 0.2
+DEFAULT_RFID_DEBOUNCE_WINDOW_MS = 250
+DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS = 1000
 VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 LOCAL_MQTT_HOSTNAMES = frozenset({"localhost", "mosquitto"})
 
@@ -86,6 +88,8 @@ class Settings:
   db_retry_max_delay: float = DEFAULT_RETRY_MAX_DELAY
   db_retry_multiplier: float = DEFAULT_RETRY_MULTIPLIER
   db_retry_jitter: float = DEFAULT_RETRY_JITTER
+  rfid_debounce_window_ms: int = DEFAULT_RFID_DEBOUNCE_WINDOW_MS
+  rfid_out_of_order_tolerance_ms: int = DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS
 
   @classmethod
   def from_env(cls, environ: Mapping[str, str] | None = None) -> "Settings":
@@ -147,6 +151,14 @@ class Settings:
           db_retry_jitter=_float_value(
               source, "DB_RETRY_JITTER", DEFAULT_RETRY_JITTER
           ),
+          rfid_debounce_window_ms=_integer_value(
+              source, "RFID_DEBOUNCE_WINDOW_MS", DEFAULT_RFID_DEBOUNCE_WINDOW_MS
+          ),
+          rfid_out_of_order_tolerance_ms=_integer_value(
+              source,
+              "RFID_OUT_OF_ORDER_TOLERANCE_MS",
+              DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS,
+          ),
       )
       settings.validate()
       return settings
@@ -163,6 +175,15 @@ class Settings:
           for k, v in self.reader_adapters.items()
       ):
           raise ValueError("RFID_READER_ADAPTERS deve mapear reader_id para nome de adapter")
+      if type(self.rfid_debounce_window_ms) is not int or self.rfid_debounce_window_ms < 1:
+          raise ValueError("RFID_DEBOUNCE_WINDOW_MS deve ser inteiro positivo")
+      if (
+          type(self.rfid_out_of_order_tolerance_ms) is not int
+          or self.rfid_out_of_order_tolerance_ms < 0
+      ):
+          raise ValueError(
+              "RFID_OUT_OF_ORDER_TOLERANCE_MS deve ser inteiro não negativo"
+          )
       if self.mqtt_mode not in ("local", "cloud"):
           raise ValueError("MQTT_MODE deve ser local ou cloud")
       if not re.fullmatch(r"[A-Za-z0-9.:-]+", self.mqtt_host):

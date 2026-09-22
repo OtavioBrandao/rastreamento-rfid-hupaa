@@ -7,10 +7,17 @@ import logging
 import signal
 import ssl
 import time
+from datetime import datetime, timezone
 from threading import Event, Thread, current_thread, main_thread
 from typing import Any, Callable
 
 import paho.mqtt.client as mqtt
+
+from rfid_inference.debounce import (
+    ConsolidatedObservation,
+    DebounceProcessor,
+    DebounceReading,
+)
 
 from .config import Settings
 from .connection import create_client
@@ -47,10 +54,17 @@ class MqttReceiver:
         repository: RawReadingRepository,
         *,
         random_source: Callable[[], float] | None = None,
+        debouncer: DebounceProcessor | None = None,
+        observation_handler: Callable[[ConsolidatedObservation], None] | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.repository = repository
+        self.debouncer = debouncer or DebounceProcessor.from_milliseconds(
+            settings.rfid_debounce_window_ms,
+            settings.rfid_out_of_order_tolerance_ms,
+        )
+        self.observation_handler = observation_handler
         self.ready = Event()
         self.failed = Event()
         self.shutdown = Event()
@@ -61,6 +75,7 @@ class MqttReceiver:
         self.failure_reason: str | None = None
         self._worker: Thread | None = None
         self._shutdown_complete_logged = False
+        self._debounce_flushed = False
         self._ever_ready = False
         self._recovering = False
         self._recovery_started_at: float | None = None
@@ -295,6 +310,8 @@ class MqttReceiver:
                     }
                 ),
             )
+            if canonical:
+                self._process_debounce(canonical, result)
         except PersistenceError as error:
             if error.category == FailureCategory.TEMPORARY_DATABASE:
                 self.ready.clear()
@@ -321,6 +338,109 @@ class MqttReceiver:
                     self._fail("envio de ACK")
             except Exception:
                 self._fail("envio de ACK")
+
+    def _process_debounce(
+        self, canonical: dict[str, Any], result: PersistenceResult
+    ) -> None:
+        if result.status == "duplicate":
+            _log(
+                logging.INFO,
+                "rfid_debounce_duplicate_ignored",
+                event_id=canonical["event_id"],
+            )
+            return
+        if result.status != "inserted":
+            return
+        if result.reading_id is None or result.antenna_id is None:
+            # Compatibilidade com repositórios injetados por consumidores
+            # anteriores à ISS-014. O repositório de produção sempre fornece
+            # as duas identidades para resultados inserted.
+            return
+        try:
+            observed_at = datetime.fromisoformat(
+                canonical["timestamp"].replace("Z", "+00:00")
+            ).astimezone(timezone.utc)
+            debounce_result = self.debouncer.add(
+                DebounceReading(
+                    event_id=canonical["event_id"],
+                    reading_id=result.reading_id,
+                    epc=canonical["epc"],
+                    antenna_id=result.antenna_id,
+                    observed_at=observed_at,
+                    rssi=canonical["rssi"],
+                )
+            )
+        except Exception:
+            _log(
+                logging.ERROR,
+                "rfid_debounce_failed",
+                event_id=canonical.get("event_id"),
+                reason="invalid_internal_reading",
+            )
+            return
+
+        counters = self.debouncer.counters
+        _log(
+            logging.WARNING if debounce_result.late else logging.INFO,
+            "rfid_debounce_late_event" if debounce_result.late else "rfid_debounce_reading",
+            event_id=canonical["event_id"],
+            antenna_id=result.antenna_id,
+            accepted=debounce_result.accepted,
+            incorporated=debounce_result.incorporated,
+            readings_received=counters.readings_received,
+            readings_incorporated=counters.readings_incorporated,
+            observations_finalized=counters.observations_finalized,
+            late_events=counters.late_events,
+        )
+        self._emit_observations(debounce_result.finalized)
+
+    def _emit_observations(
+        self, observations: tuple[ConsolidatedObservation, ...]
+    ) -> None:
+        for observation in observations:
+            _log(
+                logging.INFO,
+                "rfid_debounce_observation",
+                epc=observation.epc,
+                antenna_id=observation.antenna_id,
+                first_seen_at=observation.first_seen_at.isoformat(),
+                last_seen_at=observation.last_seen_at.isoformat(),
+                reading_count=observation.reading_count,
+                first_reading_id=observation.first_reading_id,
+                last_reading_id=observation.last_reading_id,
+                rssi_min=observation.rssi_min,
+                rssi_max=observation.rssi_max,
+                rssi_mean=observation.rssi_mean,
+            )
+            if self.observation_handler is not None:
+                try:
+                    self.observation_handler(observation)
+                except Exception:
+                    _log(
+                        logging.ERROR,
+                        "rfid_observation_handler_failed",
+                        antenna_id=observation.antenna_id,
+                        first_reading_id=observation.first_reading_id,
+                        last_reading_id=observation.last_reading_id,
+                    )
+
+    def flush_debounce(self) -> tuple[ConsolidatedObservation, ...]:
+        if self._debounce_flushed:
+            return ()
+        observations = self.debouncer.flush()
+        self._emit_observations(observations)
+        self._debounce_flushed = True
+        counters = self.debouncer.counters
+        _log(
+            logging.INFO,
+            "rfid_debounce_flushed",
+            observations_flushed=len(observations),
+            readings_received=counters.readings_received,
+            readings_incorporated=counters.readings_incorporated,
+            observations_finalized=counters.observations_finalized,
+            late_events=counters.late_events,
+        )
+        return observations
 
     def _network_session(self) -> None:
         self._mqtt_attempt += 1
@@ -500,6 +620,7 @@ class MqttReceiver:
         worker = self._worker
         if worker is not None and worker is not current_thread():
             worker.join()
+        self.flush_debounce()
         if not self._shutdown_complete_logged:
             _log(logging.INFO, "shutdown_complete")
             self._shutdown_complete_logged = True
