@@ -41,8 +41,10 @@ O projeto prioriza a confiabilidade da ingestão e da persistência antes da ló
 - **Debounce temporal de leituras (ISS-014):** Consolidação em memória por `(EPC, antena_id)` com event time, limite inclusivo, tolerância a eventos fora de ordem e RSSI agregado, mantendo todas as evidências em `leituras_brutas`.
 
 ### ⏳ O que está PLANEJADO (Próximos passos):
-- **Motor de inferência de passagens e direção (ISS-015):** Algoritmo para correlacionar leituras em antenas consecutivas de um portal, determinando entrada, saída ou indefinição.
-- **Atualização automática da localização de equipamentos (ISS-016):** Atualização da `ultima_zona_id` no cadastro do equipamento a partir de passagens confirmadas.
+- **Detecção de passagem (ISS-015):** Correlação de observações em antenas distintas de um portal.
+- **Inferência de direção (ISS-016):** Determinação do sentido da passagem.
+- **Última zona (ISS-017):** Atualização da zona conhecida do equipamento após passagem confirmada.
+- **Histórico de movimentações (ISS-018):** Registro das movimentações dos equipamentos.
 - **Painel/Dashboard web e relatórios gerenciais:** Interface visual para busca e monitoramento em tempo real.
 
 ---
@@ -183,5 +185,5 @@ docs/
 
 Em conformidade com as boas práticas científicas e as diretrizes do projeto:
 - **Ambiente de Hardware:** O projeto foi exaustivamente validado com simuladores e contêineres Docker reproduzindo os formatos do Identix EZ700. O aceite definitivo com **leitores físicos EZ700 e na rede Wi-Fi hospitalar** permanece como **PENDENTE DE VALIDAÇÃO FÍSICA** (aguardando liberação de infraestrutura de TI do HUPAA).
-- **Sem inferência de passagem ou localização ainda:** A persistência atual é de *leituras brutas*, a topologia lógica versionada está cadastrada (ISS-013) e o debounce temporal produz observações consolidadas (ISS-014). O cálculo de direção e passagem através de portais (ISS-015) e a atualização da localização do ativo (ISS-016) pertencem às próximas etapas.
+- **Sem inferência de passagem ou localização ainda:** A persistência atual é de *leituras brutas*, a topologia lógica versionada está cadastrada (ISS-013) e o debounce temporal produz observações consolidadas em execução normal (ISS-014). A detecção de passagem (ISS-015), a direção (ISS-016), a última zona (ISS-017) e o histórico de movimentações (ISS-018) pertencem às próximas etapas.
 - **Retenção de Leituras:** O expurgo ou particionamento de leituras brutas antigas depende de definição formal de governança com o hospital (RNF-015).

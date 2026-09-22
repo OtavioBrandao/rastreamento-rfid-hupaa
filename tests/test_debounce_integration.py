@@ -1,8 +1,10 @@
 """Integração ISS-014: MQTT -> PostgreSQL -> debounce em memória."""
 
 import json
+import logging
 from unittest.mock import Mock, patch
 
+import paho.mqtt.client as mqtt
 from sqlalchemy import func, select
 
 from db.models import Antena, LeituraBruta
@@ -167,3 +169,58 @@ def test_debounce_failure_does_not_break_post_commit_ack(tmp_path, caplog) -> No
     client.ack.assert_called_once_with(1, 1)
     assert "rfid_debounce_failed" in caplog.text
     assert "PRIVATE" not in caplog.text
+
+
+def test_network_loop_emits_a_then_b_without_shutdown_flush(tmp_path, caplog) -> None:
+    clock = [0.0]
+    repository = Mock()
+    repository.persist.side_effect = [
+        PersistenceResult("inserted", reading_id, antenna_id=antenna_id)
+        for reading_id, antenna_id in ((1, 20), (2, 20), (3, 20), (4, 21), (5, 21))
+    ]
+    observations = []
+    settings = Settings(
+        rfid_debounce_window_ms=250,
+        rfid_out_of_order_tolerance_ms=1000,
+    )
+    deliveries = [
+        (0.0, mqtt_message(1, 1, "2026-09-22T12:00:00.000Z")),
+        (0.05, mqtt_message(2, 1, "2026-09-22T12:00:00.050Z")),
+        (0.1, mqtt_message(3, 1, "2026-09-22T12:00:00.100Z")),
+        (1.351, None),  # A fica pronta durante o silêncio, antes da primeira B.
+        (1.36, mqtt_message(4, 2, "2026-09-22T12:00:01.360Z")),
+        (1.41, mqtt_message(5, 2, "2026-09-22T12:00:01.410Z")),
+        (2.661, None),  # B fica pronta sem nova leitura nessa chave.
+    ]
+
+    with patch("rfid_ingestion.mqtt_client.create_client") as factory:
+        client = factory.return_value
+        client.connect.return_value = mqtt.MQTT_ERR_SUCCESS
+        client.ack.return_value = mqtt.MQTT_ERR_SUCCESS
+        receiver = MqttReceiver(
+            settings,
+            JsonlEventStore(tmp_path / "events.jsonl"),
+            repository,
+            observation_handler=observations.append,
+            monotonic_clock=lambda: clock[0],
+        )
+
+        def loop(*, timeout):
+            if not deliveries:
+                return mqtt.MQTT_ERR_CONN_LOST
+            clock[0], incoming = deliveries.pop(0)
+            if incoming is not None:
+                receiver._on_message(client, None, incoming)
+            return mqtt.MQTT_ERR_SUCCESS
+
+        client.loop.side_effect = loop
+        with caplog.at_level(logging.INFO, logger="rfid_ingestion.mqtt_client"):
+            receiver._network_session()
+
+    assert [item.antenna_id for item in observations] == [20, 21]
+    assert [item.reading_count for item in observations] == [3, 2]
+    assert receiver.debouncer.counters.readings_received == 5
+    assert receiver.debouncer.counters.readings_incorporated == 3
+    assert receiver.debouncer.counters.observations_finalized == 2
+    assert client.ack.call_count == 5
+    assert "rfid_debounce_automatic_finalization" in caplog.text

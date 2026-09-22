@@ -66,9 +66,24 @@ max_seen_at - RFID_OUT_OF_ORDER_TOLERANCE_MS
 ```
 
 Eventos no watermark ou depois dele ainda são aceitos, inseridos no buffer em
-ordem temporal e reagrupados. Uma observação só é finalizada automaticamente
-quando `fim_da_observacao + janela < watermark`; a desigualdade estrita preserva
-o comportamento inclusivo no limite da janela.
+ordem temporal e reagrupados. Uma nova leitura da mesma chave pode finalizar
+grupos anteriores quando `fim_da_observacao + janela < watermark`; a desigualdade
+estrita preserva o comportamento inclusivo no limite da janela.
+
+Para uma chave que ficou silenciosa, `DebounceProcessor.advance_time()` usa um
+segundo critério: o instante monotônico da última **chegada aceita** àquela
+chave. Se o silêncio ultrapassar estritamente `janela + tolerância`, os grupos
+pendentes são finalizados. O receptor chama essa operação a cada iteração do
+loop MQTT, inclusive quando não chega nenhuma mensagem (cadência nominal de
+até 200 ms enquanto conectado). Não é necessária uma nova leitura da mesma
+antena. No limite exato de `janela + tolerância`, o grupo ainda aguarda.
+
+Esses dois relógios têm funções distintas: `observed_at`/`lido_em` determina
+quais leituras se agrupam e a ordem das referências; o relógio monotônico mede
+apenas o tempo de silêncio operacional desde a recepção. `recebido_em` não entra
+na chave nem no cálculo dos gaps. A tolerância é também o período de espera por
+possíveis chegadas fora de ordem; uma chegada posterior à finalização segue a
+regra de evento tardio abaixo.
 
 Uma leitura anterior ao watermark, ou que cair no intervalo de uma observação já
 finalizada, é classificada como tardia. Ela continua em `leituras_brutas`, gera o
@@ -77,8 +92,8 @@ silenciosamente o resultado finalizado. Coleções cuja extensão cabe dentro da
 tolerância produzem o mesmo resultado para qualquer ordem razoável de chegada.
 
 `DebounceProcessor.flush()` finaliza explicitamente tudo que ainda estiver no
-buffer. O receptor o chama no encerramento controlado e também o expõe para
-testes e futuros consumidores.
+buffer durante encerramento controlado e testes. A emissão operacional normal
+usa `advance_time()` no loop MQTT. O polling não cria thread ou timer adicional.
 
 ## 5. Estrutura da observação
 
@@ -128,9 +143,10 @@ está segura em `leituras_brutas` e pode ser reconstruída, enquanto reter o ACK
 causaria apenas uma reentrega que a idempotência classificaria como duplicata.
 
 `MqttReceiver` recebe o `DebounceProcessor` por injeção e oferece um
-`observation_handler`. A ISS-015 poderá conectar seu motor a esse callback sem
-acoplar a regra temporal ao MQTT. Nesta issue o resultado é disponibilizado como
-objeto e logado, sem escrita em `passagens`.
+`observation_handler`. O loop MQTT finaliza rajadas silenciosas em runtime e
+entrega as observações a esse callback. A ISS-015 poderá conectar seu detector
+de passagens ao callback sem acoplar a regra temporal ao MQTT. Nesta issue o
+resultado é disponibilizado como objeto e logado, sem escrita em `passagens`.
 
 Os logs estruturados informam leitura aceita/incorporada, duplicata ignorada,
 evento tardio, observação finalizada e flush. `DebounceCounters` expõe:
@@ -140,8 +156,9 @@ evento tardio, observação finalizada e flush. `DebounceCounters` expõe:
 - `observations_finalized`;
 - `late_events`.
 
-Cada log de observação inclui `reading_count` e referências às leituras, sem
-registrar payload MQTT completo nem credenciais.
+Cada log de observação inclui `reading_count` e referências às leituras. Um poll
+que emite observações também registra `rfid_debounce_automatic_finalization` com
+contagem e totais acumulados, sem payload MQTT completo nem credenciais.
 
 ## 8. Testes realizados
 
@@ -156,13 +173,23 @@ viram uma observação com `reading_count=3`; a mesma tag em outra antena produz
 outra observação; a reentrega do mesmo `event_id` recebe ACK, não cria linha e
 não aumenta a contagem.
 
-Validação local em 22/09/2026:
+Os testes adicionais simulam o relógio monotônico sem `sleep`: três leituras em
+A são emitidas após silêncio, seguidas de duas em B, com
+`observation_handler == [A, B]` durante o loop MQTT e sem `flush()`. Também
+cobrem reordenação dentro da tolerância, limite do silêncio, contadores e evento
+tardio após finalização automática.
 
-- suíte focada da ISS-014 e configuração: **22 passed, 1 skipped, 18 subtests**;
-- suíte completa: **247 passed, 486 skipped, 56 subtests**;
-- Ruff `E4,E7,E9,F,I`: passou sem erros.
+Validação local inicial em 22/09/2026, antes da correção de finalização
+automática: suíte completa com **247 passed, 486 skipped, 56 subtests**. A CI do
+PR original executou **733 passed e 56 subtests**, além de lint e migrations.
 
-O único skip da suíte focada foi o cenário PostgreSQL real, pois o Docker Desktop
+Após a correção, também em 22/09/2026: Ruff `E4,E7,E9,F,I` passou; núcleo
+`tests/test_debounce.py`: **18 passed**; integração
+`tests/test_debounce_integration.py`: **4 passed, 1 skipped**; suíte completa:
+**252 passed, 486 skipped, 56 subtests**. A execução completa com PostgreSQL
+descartável é verificada pela CI do PR #55.
+
+O skip da integração PostgreSQL real no ambiente local ocorreu porque o Docker Desktop
 local não disponibilizou o daemon e o serviço do sistema não pôde ser iniciado
 com a permissão da sessão. Os testes puros e a integração MQTT/repositório
 injetado passaram; o teste PostgreSQL permanece versionado para execução no CI,
@@ -179,6 +206,6 @@ integrações externas) sem suas variáveis/serviços locais.
   atraso; não são anexados retroativamente a observações finalizadas.
 - Os parâmetros ainda precisam de calibração física no HUPAA.
 - Não foi criada tabela de observações consolidadas nem migration.
-- A ISS-015 consumirá `ConsolidatedObservation` para correlacionar antenas e a
-  topologia lógica da ISS-013. Direção A→B/B→A e criação de `passagens` continuam
-  explicitamente fora desta entrega.
+- A ISS-015 consumirá `ConsolidatedObservation` em runtime para detectar
+  passagens entre antenas com apoio da topologia lógica da ISS-013. A inferência
+  de direção pertence à ISS-016, a última zona à ISS-017 e o histórico à ISS-018.

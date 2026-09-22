@@ -158,6 +158,69 @@ def test_flush_is_deterministic_and_does_not_emit_twice() -> None:
     assert debounce.flush() == ()
 
 
+def test_silent_antenna_finalizes_without_another_reading_on_that_key() -> None:
+    debounce = processor(window_ms=250, tolerance_ms=1000)
+    for event_ms, received_at in ((0, 0.0), (50, 0.05), (100, 0.1)):
+        debounce.add(
+            reading(event_ms, antenna_id=1),
+            received_at_monotonic=received_at,
+        )
+
+    assert debounce.advance_time(1.349) == ()
+    first, = debounce.advance_time(1.351)
+    assert (first.antenna_id, first.reading_count) == (1, 3)
+    assert debounce.advance_time(1.352) == ()
+
+    debounce.add(reading(1360, antenna_id=2), received_at_monotonic=1.36)
+    debounce.add(reading(1410, antenna_id=2), received_at_monotonic=1.41)
+    second, = debounce.advance_time(2.661)
+    assert (second.antenna_id, second.reading_count) == (2, 2)
+    assert debounce.flush() == ()
+    assert debounce.counters.readings_received == 5
+    assert debounce.counters.readings_incorporated == 3
+    assert debounce.counters.observations_finalized == 2
+
+
+def test_event_after_automatic_finalization_is_late_and_cannot_reopen() -> None:
+    debounce = processor(window_ms=250, tolerance_ms=1000)
+    debounce.add(reading(0), received_at_monotonic=0.0)
+    debounce.add(reading(100), received_at_monotonic=0.1)
+    finalized, = debounce.advance_time(1.351)
+
+    late = debounce.add(reading(50), received_at_monotonic=1.4)
+    assert late.late is True
+    assert late.finalized == ()
+    assert debounce.advance_time(3.0) == ()
+    assert debounce.flush() == ()
+    assert finalized.reading_count == 2
+    assert debounce.counters.readings_received == 3
+    assert debounce.counters.readings_incorporated == 1
+    assert debounce.counters.observations_finalized == 1
+    assert debounce.counters.late_events == 1
+
+
+def test_silence_deadline_is_strictly_exceeded() -> None:
+    debounce = processor(window_ms=1000, tolerance_ms=1000)
+    debounce.add(reading(0), received_at_monotonic=10.0)
+
+    assert debounce.advance_time(12.0) == ()
+    observation, = debounce.advance_time(12.001)
+    assert observation.reading_count == 1
+
+
+def test_reordered_readings_still_match_when_finalized_by_silence() -> None:
+    def consolidate(order: tuple[int, ...]):
+        debounce = processor(window_ms=100, tolerance_ms=500)
+        for arrival, event_ms in enumerate(order):
+            debounce.add(
+                reading(event_ms, reading_id=event_ms + 1),
+                received_at_monotonic=arrival * 0.01,
+            )
+        return debounce.advance_time(0.7)
+
+    assert consolidate((0, 50, 100)) == consolidate((100, 0, 50))
+
+
 @pytest.mark.parametrize(
     "window,tolerance",
     [(timedelta(0), timedelta(0)), (timedelta(milliseconds=-1), timedelta(0)),
