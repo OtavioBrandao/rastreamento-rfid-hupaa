@@ -23,8 +23,12 @@ def test_empty_upgrade_repeat_downgrade_reupgrade(pg_empty_schema):
     assert str(columns["dados_origem"]["type"]) == "JSONB"
     assert any(c["column_names"] == ["event_id"] for c in inspector.get_unique_constraints("leituras_brutas"))
     assert any(c["column_names"] == ["reader_id"] for c in inspector.get_unique_constraints("leitores"))
+    assert any(
+        index["name"] == "uq_passagem_evidencias" and index["unique"]
+        for index in inspector.get_indexes("passagens")
+    )
     with pg_empty_schema.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "68e5a26c2e17"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "4b751b0e9015"
 
 
 def test_existing_reader_receives_serial_as_initial_reader_id(pg_empty_schema):
@@ -37,3 +41,22 @@ def test_existing_reader_receives_serial_as_initial_reader_id(pg_empty_schema):
     command.upgrade(config, "head")
     with pg_empty_schema.connect() as connection:
         assert connection.execute(text("SELECT reader_id, identificador_serial FROM leitores")).one() == ("reader-01", "reader-01")
+
+
+def test_iss015_unique_index_downgrade_and_reupgrade(pg_empty_schema):
+    config = migration_config()
+    command.upgrade(config, "head")
+    assert any(
+        item["name"] == "uq_passagem_evidencias"
+        for item in inspect(pg_empty_schema).get_indexes("passagens")
+    )
+    command.downgrade(config, "68e5a26c2e17")
+    assert not any(
+        item["name"] == "uq_passagem_evidencias"
+        for item in inspect(pg_empty_schema).get_indexes("passagens")
+    )
+    command.upgrade(config, "head")
+    assert any(
+        item["name"] == "uq_passagem_evidencias"
+        for item in inspect(pg_empty_schema).get_indexes("passagens")
+    )
