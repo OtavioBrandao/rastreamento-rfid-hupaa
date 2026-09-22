@@ -70,6 +70,18 @@ class AntenaInativa(ErroTopologiaPortal):
         super().__init__(f"Antena {antena_id} está inativa.")
 
 
+class LeitorNaoEncontrado(ErroTopologiaPortal):
+    def __init__(self, leitor_id: int) -> None:
+        self.leitor_id = leitor_id
+        super().__init__(f"Leitor {leitor_id} não encontrado.")
+
+
+class LeitorInativo(ErroTopologiaPortal):
+    def __init__(self, leitor_id: int) -> None:
+        self.leitor_id = leitor_id
+        super().__init__(f"Leitor {leitor_id} associado à antena está inativo.")
+
+
 class AntenaNaoPertenceAoPortal(ErroTopologiaPortal):
     def __init__(self, antena_id: int, portal_esperado_id: int, portal_atual_id: int | None) -> None:
         self.antena_id = antena_id
@@ -229,6 +241,12 @@ def _validar_entidades_e_coerencia(
         raise AntenaNaoEncontrada(antena_id)
     if not antena.ativo:
         raise AntenaInativa(antena_id)
+
+    leitor = session.get(Leitor, antena.leitor_id)
+    if leitor is None:
+        raise LeitorNaoEncontrado(antena.leitor_id)
+    if not leitor.ativo:
+        raise LeitorInativo(antena.leitor_id)
 
     if antena.portal_id != portal_id:
         raise AntenaNaoPertenceAoPortal(antena_id, portal_id, antena.portal_id)

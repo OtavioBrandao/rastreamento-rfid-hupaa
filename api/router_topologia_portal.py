@@ -28,6 +28,7 @@ _NAO_ENCONTRADO = (
     service.MapeamentoNaoEncontrado,
     service.PortalNaoEncontrado,
     service.AntenaNaoEncontrada,
+    service.LeitorNaoEncontrado,
 )
 _CONFLITO = (
     service.MapeamentoAtivoExistente,
@@ -36,6 +37,7 @@ _CONFLITO = (
 _ENTIDADE_INVALIDA = (
     service.PortalInativo,
     service.AntenaInativa,
+    service.LeitorInativo,
     service.AntenaNaoPertenceAoPortal,
     service.LadoInvalido,
     service.FuncaoInvalida,
