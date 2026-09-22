@@ -204,6 +204,17 @@ necessário migrar ou remover os dados deliberadamente antes de voltar a UUID;
 essa conversão não é semanticamente possível. RSSI nulo também impede restaurar
 NOT NULL. A migration falha sem apagar ou inventar dados nessas situações.
 
+#### 2.3 — Observações consolidadas em memória (ISS-014)
+
+A ISS-014 não adiciona tabela: `leituras_brutas` continua sendo a fonte de
+verdade. Depois do commit, somente resultados `inserted` alimentam o debounce;
+`duplicate` não aumenta a contagem. A chave lógica é `(epc, antena_id)` e usa
+`lido_em` como event time. O resultado em memória referencia a primeira e a
+última leitura bruta, conserva timestamps e quantidade e agrega mínimo, máximo
+e média apenas dos RSSIs não nulos. Consulte a
+[documentação da ISS-014](../implementations/iss-014-debounce-leituras.md) para
+watermark, tolerância de reordenação, flush e limitações.
+
 ### `passagens` (RF-009 a RF-011)
 | Coluna | Tipo | Regra |
 |---|---|---|

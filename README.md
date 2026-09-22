@@ -19,10 +19,10 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Gestão de Equipamentos e Tags (ISS-008, ISS-009, ISS-010):** CRUDs FastAPI para Tipos de Equipamentos e Equipamentos; associação temporal de EPCs (`[inicio, fim)`) com constraint de unicidade parcial (`uq_tag_ativa`).
 - **Hierarquia Hospitalar (ISS-011):** CRUDs FastAPI de Andares, Setores e Zonas com validação de ciclo de vida (*guards* de integridade) e consulta da árvore física completa.
 - **Topologia de Hardware (ISS-012):** CRUDs FastAPI de Leitores, Antenas e Portais; índice único parcial de porta ativa (`uq_antena_ativa_por_porta_leitor`); desacoplamento entre leitor e portal.
+- **Topologia Lógica de Portais (ISS-013):** Mapeamentos temporais de antenas para lados A/B, zonas e funções operacionais, preservando histórico de configuração.
+- **Debounce Temporal (ISS-014):** Consolidação em memória por `(EPC, antena_id)` usando event time, tolerância configurável a reordenação e estatísticas de RSSI, sem remover leituras brutas.
 
 ### ⏳ Próximos Passos (Backlog Imediato):
-- **ISS-013:** Validação lógica de coerência entre antenas e portais (`zona_associada_id` $\in$ `{zona_a_id, zona_b_id}`).
-- **ISS-014:** Debounce temporal de leituras consecutivas na mesma antena.
 - **ISS-015:** Motor de inferência de passagens e vetor de direção em portais.
 - **ISS-016:** Atualização automática de localização dos equipamentos e histórico de movimentações.
 
@@ -40,6 +40,7 @@ flowchart LR
     INGESTOR --> JSONL["Auditoria JSONL (raw_events.jsonl)"]
     INGESTOR -->|Transação Atômica| POSTGRES[("PostgreSQL (leituras_brutas)")]
     POSTGRES -->|Commit OK| INGESTOR
+    INGESTOR --> DEBOUNCE["Debounce (observação consolidada)"]
     INGESTOR -->|Manual ACK| BROKER
     FASTAPI["FastAPI API REST<br/>(Equipamentos, Zonas, Hardware)"] --> POSTGRES
 ```
@@ -123,6 +124,8 @@ A documentação detalhada foi reorganizada segundo a **[Issue #51](docs/impleme
   - [ISS-008/009/010: Gestão de Equipamentos e Tags](docs/implementations/iss-008-009-010-equipamentos-epc.md)
   - [ISS-011: Hierarquia de Localização Hospitalar](docs/implementations/iss-011-localizacao-hospitalar.md)
   - [ISS-012: Topologia de Hardware](docs/implementations/iss-012-topologia-hardware.md)
+  - [ISS-013: Topologia Lógica de Portais](docs/implementations/iss-013-topologia-logica-portais.md)
+  - [ISS-014: Debounce Temporal de Leituras](docs/implementations/iss-014-debounce-leituras.md)
 - **Experimentos e Evidências:**
   - [Índice de Evidências e Matriz de Testes](docs/experiments/README.md)
   - [Evidências MQTT e Rede](docs/experiments/mqtt/)
