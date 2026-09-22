@@ -89,7 +89,7 @@ python -m alembic heads
 python -m pytest -q
 ```
 - **Esperado:** Todas as suítes unitárias, de integração e regressão de hardware/domínio aprovadas.
-- **Obtido:** `230 passed, 481 skipped` (481 skips de testes que requerem o contêiner PostgreSQL local em execução na porta 5432).
+- **Obtido:** `230 passed, 485 skipped, 52 subtests passed` (485 skips de testes que requerem banco PostgreSQL local descartável ativo via `TEST_DATABASE_URL`).
 
 ---
 
