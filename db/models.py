@@ -586,7 +586,7 @@ class Passagem(Base):
 
 
 class HistoricoMovimentacao(Base):
-    """RF-013 / RF-020. passagem_id NULL = correção manual."""
+    """RF-013: ledger append-only, sem materializar a última localização."""
 
     __tablename__ = "historico_movimentacoes"
 
@@ -595,6 +595,13 @@ class HistoricoMovimentacao(Base):
     zona_origem_id = Column(BigInteger, ForeignKey("zonas.id"), nullable=True)
     zona_destino_id = Column(BigInteger, ForeignKey("zonas.id"), nullable=False)
     passagem_id = Column(BigInteger, ForeignKey("passagens.id"), nullable=True)
+    epc = Column(String, nullable=True)
+    portal_id = Column(BigInteger, ForeignKey("portais.id"), nullable=True)
+    leitura_origem_id = Column(BigInteger, ForeignKey("leituras_brutas.id"), nullable=True)
+    leitura_destino_id = Column(BigInteger, ForeignKey("leituras_brutas.id"), nullable=True)
+    movimentada_em = Column(TIMESTAMP(timezone=True), nullable=True)
+    justificativa = Column(Text, nullable=True)
+    registro_anterior_id = Column(BigInteger, ForeignKey("historico_movimentacoes.id"), nullable=True)
     origem_registro = Column(String, nullable=False)  # 'passagem_automatica' | 'correcao_manual'
     registrado_em = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
@@ -602,12 +609,30 @@ class HistoricoMovimentacao(Base):
     zona_origem = relationship("Zona", foreign_keys=[zona_origem_id])
     zona_destino = relationship("Zona", foreign_keys=[zona_destino_id])
     passagem = relationship("Passagem")
+    portal = relationship("Portal")
+    leitura_origem = relationship("LeituraBruta", foreign_keys=[leitura_origem_id])
+    leitura_destino = relationship("LeituraBruta", foreign_keys=[leitura_destino_id])
+    registro_anterior = relationship("HistoricoMovimentacao", remote_side=[id])
 
     __table_args__ = (
         Index("ix_historico_equipamento_registrado_em", "equipamento_id", "registrado_em"),
+        Index("ix_historico_equipamento_movimentada_id", "equipamento_id", "movimentada_em", "id"),
+        Index("uq_historico_passagem_automatica", "passagem_id", unique=True,
+              postgresql_where=(origem_registro == "passagem_automatica")),
         CheckConstraint(
             "origem_registro IN ('passagem_automatica', 'correcao_manual')",
             name="ck_historico_origem_valida",
+        ),
+        CheckConstraint(
+            "(origem_registro = 'passagem_automatica' AND passagem_id IS NOT NULL "
+            "AND epc IS NOT NULL AND portal_id IS NOT NULL AND leitura_origem_id IS NOT NULL "
+            "AND leitura_destino_id IS NOT NULL AND movimentada_em IS NOT NULL "
+            "AND zona_origem_id IS NOT NULL AND zona_origem_id <> zona_destino_id "
+            "AND justificativa IS NULL AND registro_anterior_id IS NULL) OR "
+            "(origem_registro = 'correcao_manual' AND passagem_id IS NULL "
+            "AND justificativa IS NOT NULL AND length(btrim(justificativa)) > 0 "
+            "AND movimentada_em IS NOT NULL)",
+            name="ck_historico_registro_completo",
         ),
     )
 

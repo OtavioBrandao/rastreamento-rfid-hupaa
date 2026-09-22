@@ -207,8 +207,9 @@ classDiagram
 
 ## 4. Estado do processamento de inferência
 
-Para fins de avaliação e clareza do escopo do MVP, debounce, passagem e direção
-estão disponíveis. Atualização de localização e histórico permanecem etapas futuras:
+Para fins de avaliação e clareza do escopo do MVP, debounce, passagem, direção e
+infraestrutura do histórico estão disponíveis. A ISS-017 ainda integrará a
+gravação do histórico à atualização da última localização em uma transação:
 
 | Recurso | Status Atual | Issue Prevista | Descrição |
 |---|---|---|---|
@@ -216,7 +217,7 @@ estão disponíveis. Atualização de localização e histórico permanecem etap
 | **Detecção de Passagem** | Implementado | **ISS-015** | Correlação temporal por `(EPC, portal_id)` entre lados opostos, topologia histórica e persistência idempotente com `direcao=NULL`. |
 | **Inferência de Direção** | Implementado | **ISS-016** | A→B/B→A e zonas via topologia histórica; empate/próximos geram `ambiguous`, inconsistência gera `unknown`. |
 | **Última Zona do Ativo** | Pendente | **ISS-017** | Atualização automática dos campos `ultima_zona_id`, `ultima_deteccao_em` e `ultima_passagem_id` em `equipamentos`. |
-| **Histórico de Movimentações** | Pendente | **ISS-018** | Preenchimento automático de `historico_movimentacoes` a partir de passagens confirmadas. |
+| **Histórico de Movimentações** | Infraestrutura implementada | **ISS-018** | Ledger append-only, resolução temporal de EPC, correção manual e consulta paginada; gravação automática aguarda ISS-017. |
 
 ---
 
