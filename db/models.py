@@ -537,8 +537,10 @@ class LeituraBruta(Base):
 
 
 class Passagem(Base):
-    """RF-009 a RF-011. antena_destino/direcao ficam NULL até a inferência
-    de direção (RF-011, Should) estar implementada."""
+    """ISS-015: antenas origem/destino são evidências ordenadas, não zonas.
+
+    A direção permanece NULL até a futura interpretação semântica.
+    """
 
     __tablename__ = "passagens"
 
@@ -559,6 +561,7 @@ class Passagem(Base):
     leitura_destino = relationship("LeituraBruta", foreign_keys=[leitura_destino_id])
 
     __table_args__ = (
+        Index("uq_passagem_evidencias", "leitura_origem_id", "leitura_destino_id", unique=True),
         Index("ix_passagens_epc_detectada_em", "epc", "detectada_em"),
         Index("ix_passagens_portal_detectada_em", "portal_id", "detectada_em"),
         CheckConstraint(

@@ -56,6 +56,7 @@ class MqttReceiver:
         random_source: Callable[[], float] | None = None,
         debouncer: DebounceProcessor | None = None,
         observation_handler: Callable[[ConsolidatedObservation], None] | None = None,
+        observation_tick_handler: Callable[[float], None] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.settings = settings
@@ -66,6 +67,7 @@ class MqttReceiver:
             settings.rfid_out_of_order_tolerance_ms,
         )
         self.observation_handler = observation_handler
+        self.observation_tick_handler = observation_tick_handler
         self._monotonic_clock = monotonic_clock
         self.ready = Event()
         self.failed = Event()
@@ -528,6 +530,11 @@ class MqttReceiver:
         while not self.shutdown.is_set() and not self.failed.is_set():
             result = self.client.loop(timeout=0.2)
             self._poll_debounce()
+            if self.observation_tick_handler is not None:
+                try:
+                    self.observation_tick_handler(self._monotonic_clock())
+                except Exception:
+                    _log(logging.ERROR, "rfid_observation_tick_failed")
             if (
                 result != mqtt.MQTT_ERR_SUCCESS
                 or self.disconnected.is_set()

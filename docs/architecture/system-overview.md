@@ -45,7 +45,7 @@ flowchart TD
 
     subgraph Processamento["Processamento de Inferência"]
         DEBOUNCE["Debounce Temporal Implementado (ISS-014)"]
-        INFERENCE["Detecção de Passagem (ISS-015)"]
+        INFERENCE["Detecção de Passagem Implementada (ISS-015)"]
         DIRECTION["Inferência de Direção (ISS-016)"]
         UPDATE_LOC["Atualização da Última Zona (ISS-017)"]
         HISTORY["Histórico de Movimentações (ISS-018)"]
@@ -64,13 +64,13 @@ flowchart TD
     RECEPTOR -->|ACK Manual (PUBACK)| BROKER
 
     INSERT -->|Somente inserted, após commit| DEBOUNCE
-    DEBOUNCE -.-> INFERENCE
+    DEBOUNCE --> INFERENCE
     INFERENCE -.-> DIRECTION
     DIRECTION -.-> UPDATE_LOC
     UPDATE_LOC -.-> HISTORY
 
     classDef future fill:#f9f,stroke:#333,stroke-dasharray: 5 5;
-    class INFERENCE,DIRECTION,UPDATE_LOC,HISTORY future;
+    class DIRECTION,UPDATE_LOC,HISTORY future;
 ```
 
 ---
@@ -207,13 +207,13 @@ classDiagram
 
 ## 4. Estado do processamento de inferência
 
-Para fins de avaliação e clareza do escopo do MVP, o debounce já está disponível,
-enquanto passagem, direção e localização permanecem etapas futuras:
+Para fins de avaliação e clareza do escopo do MVP, debounce e detecção de
+passagem estão disponíveis. Direção e localização permanecem etapas futuras:
 
 | Recurso | Status Atual | Issue Prevista | Descrição |
 |---|---|---|---|
 | **Debounce Temporal** | Implementado | **ISS-014** | Consolidação por `(EPC, antena_id)` usando event time, tolerância a reordenação e preservação integral das leituras brutas. |
-| **Detecção de Passagem** | Pendente | **ISS-015** | Correlação de observações entre antenas distintas de um portal e criação de registros em `passagens`. |
+| **Detecção de Passagem** | Implementado | **ISS-015** | Correlação temporal por `(EPC, portal_id)` entre lados opostos, topologia histórica e persistência idempotente com `direcao=NULL`. |
 | **Inferência de Direção** | Pendente | **ISS-016** | Determinação do vetor de movimento da passagem. |
 | **Última Zona do Ativo** | Pendente | **ISS-017** | Atualização automática dos campos `ultima_zona_id`, `ultima_deteccao_em` e `ultima_passagem_id` em `equipamentos`. |
 | **Histórico de Movimentações** | Pendente | **ISS-018** | Preenchimento automático de `historico_movimentacoes` a partir de passagens confirmadas. |
@@ -229,3 +229,4 @@ enquanto passagem, direção e localização permanecem etapas futuras:
 - [Topologia de Hardware (ISS-012)](../implementations/iss-012-topologia-hardware.md)
 - [Topologia Lógica de Portais (ISS-013)](../implementations/iss-013-topologia-logica-portais.md)
 - [Debounce Temporal de Leituras (ISS-014)](../implementations/iss-014-debounce-leituras.md)
+- [Detecção de Passagem (ISS-015)](../implementations/iss-015-deteccao-passagem.md)

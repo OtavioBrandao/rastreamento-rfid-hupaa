@@ -20,7 +20,8 @@ class SettingsTests(unittest.TestCase):
                                  "DB_RETRY_INITIAL_DELAY", "DB_RETRY_MAX_DELAY",
                                  "DB_RETRY_MULTIPLIER", "DB_RETRY_JITTER"} <= source.keys())
                 self.assertTrue({"RFID_DEBOUNCE_WINDOW_MS",
-                                 "RFID_OUT_OF_ORDER_TOLERANCE_MS"} <= source.keys())
+                                 "RFID_OUT_OF_ORDER_TOLERANCE_MS",
+                                 "RFID_PASSAGE_MAX_INTERVAL_MS"} <= source.keys())
                 if source["MQTT_MODE"] == "cloud":
                     source.update(MQTT_USERNAME="synthetic-user", MQTT_PASSWORD="synthetic-password")
                 settings = Settings.from_env(source)
@@ -46,6 +47,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.db_retry_jitter, 0.2)
         self.assertEqual(settings.rfid_debounce_window_ms, 250)
         self.assertEqual(settings.rfid_out_of_order_tolerance_ms, 1000)
+        self.assertEqual(settings.rfid_passage_max_interval_ms, 3000)
 
     def test_all_settings_can_come_from_environment(self) -> None:
         settings = Settings.from_env(
@@ -69,6 +71,7 @@ class SettingsTests(unittest.TestCase):
                 "DB_RETRY_JITTER": "0.4",
                 "RFID_DEBOUNCE_WINDOW_MS": "400",
                 "RFID_OUT_OF_ORDER_TOLERANCE_MS": "1500",
+                "RFID_PASSAGE_MAX_INTERVAL_MS": "4500",
             }
         )
 
@@ -91,6 +94,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.db_retry_jitter, 0.4)
         self.assertEqual(settings.rfid_debounce_window_ms, 400)
         self.assertEqual(settings.rfid_out_of_order_tolerance_ms, 1500)
+        self.assertEqual(settings.rfid_passage_max_interval_ms, 4500)
         self.assertNotIn("valor-nao-real", repr(settings))
 
     def test_invalid_values_are_rejected(self) -> None:
@@ -110,6 +114,10 @@ class SettingsTests(unittest.TestCase):
             {"RFID_DEBOUNCE_WINDOW_MS": "1.5"},
             {"RFID_OUT_OF_ORDER_TOLERANCE_MS": "-1"},
             {"RFID_OUT_OF_ORDER_TOLERANCE_MS": "late"},
+            {"RFID_PASSAGE_MAX_INTERVAL_MS": "0"},
+            {"RFID_PASSAGE_MAX_INTERVAL_MS": "-1"},
+            {"RFID_PASSAGE_MAX_INTERVAL_MS": "late"},
+            {"RFID_PASSAGE_MAX_INTERVAL_MS": "1.5"},
         )
 
         for environment in invalid_environments:

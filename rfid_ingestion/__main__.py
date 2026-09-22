@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from db.runtime import DatabaseConfigurationError, create_app_engine
 from rfid_inference.debounce import DebounceProcessor
+from rfid_inference.passage import PassageDetector
+from rfid_inference.passage_repository import PassageRepository
+from rfid_inference.passage_service import PassageInferenceService
 
 from .config import Settings
 from .logging_config import configure_logging
@@ -31,11 +35,23 @@ def main() -> int:
             settings.rfid_debounce_window_ms,
             settings.rfid_out_of_order_tolerance_ms,
         )
+        passage_service = PassageInferenceService(
+            PassageDetector(
+                timedelta(milliseconds=settings.rfid_passage_max_interval_ms),
+                silence_grace=timedelta(milliseconds=(
+                    settings.rfid_debounce_window_ms
+                    + settings.rfid_out_of_order_tolerance_ms
+                )),
+            ),
+            PassageRepository(engine),
+        )
         receiver = MqttReceiver(
             settings,
             store,
             RawReadingRepository(engine),
             debouncer=debouncer,
+            observation_handler=passage_service.handle_observation,
+            observation_tick_handler=passage_service.tick,
         )
         return receiver.run()
     except DatabaseConfigurationError as error:

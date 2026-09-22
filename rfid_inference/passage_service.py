@@ -1,0 +1,82 @@
+"""Orquestra observações, topologia histórica, detector e persistência."""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+from dataclasses import dataclass
+from typing import Callable
+
+from rfid_inference.debounce import ConsolidatedObservation
+
+from .passage import DetectedPassage, PassageDetector
+from .passage_repository import PassageRepository
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _event(level: int, name: str, **fields: object) -> None:
+    LOGGER.log(level, json.dumps({"event_type": name, **fields}))
+
+
+@dataclass(slots=True)
+class ServiceCounters:
+    topology_unresolved: int = 0
+    persistence_failures: int = 0
+
+
+class PassageInferenceService:
+    def __init__(
+        self,
+        detector: PassageDetector,
+        repository: PassageRepository,
+        *,
+        monotonic_clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.detector = detector
+        self.repository = repository
+        self.monotonic_clock = monotonic_clock
+        self.counters = ServiceCounters()
+
+    def handle_observation(self, observation: ConsolidatedObservation) -> None:
+        try:
+            resolved = self.repository.resolve(observation)
+        except Exception:
+            self.counters.topology_unresolved += 1
+            _event(logging.ERROR, "rfid_passage_topology_unresolved",
+                   epc=observation.epc, antenna_id=observation.antenna_id,
+                   reason="database_error")
+            return
+        if resolved is None:
+            self.counters.topology_unresolved += 1
+            _event(logging.WARNING, "rfid_passage_topology_unresolved",
+                   epc=observation.epc, antenna_id=observation.antenna_id,
+                   reason="ambiguous_or_missing")
+            return
+        self.retry_pending()
+        proposal = self.detector.add(
+            resolved, received_at_monotonic=self.monotonic_clock()
+        )
+        if proposal is not None:
+            self._persist(proposal)
+
+    def _persist(self, passage: DetectedPassage) -> None:
+        try:
+            inserted = self.repository.persist(passage)
+        except Exception:
+            self.counters.persistence_failures += 1
+            _event(logging.ERROR, "rfid_passage_persistence_failed",
+                   epc=passage.epc, portal_id=passage.portal_id)
+            return
+        self.detector.mark_persisted(passage, duplicate=not inserted)
+
+    def retry_pending(self) -> None:
+        for proposal in self.detector.pending():
+            self._persist(proposal)
+
+    def tick(self, now_monotonic: float | None = None) -> None:
+        self.retry_pending()
+        self.detector.advance_time(
+            self.monotonic_clock() if now_monotonic is None else now_monotonic
+        )
