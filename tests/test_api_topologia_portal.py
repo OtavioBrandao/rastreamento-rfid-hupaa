@@ -228,18 +228,28 @@ def test_erros_validacao_criacao_mapeamento_api(client):
     assert res_func.status_code == 422
 
     # Duplicate active mapping
-    client.post(
+    res_criado = client.post(
         f"/portais/{portal['id']}/mapeamentos",
         json={"antena_id": antena_a["id"], "lado": "a", "funcao": "entrada"},
     )
+    assert res_criado.status_code == 201
+    map_a_id = res_criado.json()["id"]
+
     res_dup = client.post(
         f"/portais/{portal['id']}/mapeamentos",
         json={"antena_id": antena_a["id"], "lado": "a", "funcao": "auxiliar"},
     )
     assert res_dup.status_code == 409
 
-    # Inactive reader -> 422
-    client.post(f"/leitores/{leitor['id']}/inativar")
+    # Encerra o mapeamento ativo para permitir inativação legítima do leitor
+    res_close = client.post(f"/mapeamentos-antena/{map_a_id}/inativar")
+    assert res_close.status_code == 200
+
+    # Inativa o leitor com sucesso agora que não há mapeamentos ativos
+    res_inat_leitor = client.post(f"/leitores/{leitor['id']}/inativar")
+    assert res_inat_leitor.status_code == 200
+
+    # Inactive reader -> 422 ao tentar criar novo mapeamento
     res_leitor_inativo = client.post(
         f"/portais/{portal['id']}/mapeamentos",
         json={"antena_id": antena_b["id"], "lado": "b", "funcao": "saida"},
