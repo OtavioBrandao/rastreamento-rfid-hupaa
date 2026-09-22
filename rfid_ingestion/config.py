@@ -26,6 +26,7 @@ DEFAULT_RETRY_JITTER = 0.2
 DEFAULT_RFID_DEBOUNCE_WINDOW_MS = 250
 DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS = 1000
 DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS = 3000
+DEFAULT_RFID_DIRECTION_AMBIGUITY_MS = 100
 VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 LOCAL_MQTT_HOSTNAMES = frozenset({"localhost", "mosquitto"})
 
@@ -92,6 +93,7 @@ class Settings:
   rfid_debounce_window_ms: int = DEFAULT_RFID_DEBOUNCE_WINDOW_MS
   rfid_out_of_order_tolerance_ms: int = DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS
   rfid_passage_max_interval_ms: int = DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS
+  rfid_direction_ambiguity_ms: int = DEFAULT_RFID_DIRECTION_AMBIGUITY_MS
 
   @classmethod
   def from_env(cls, environ: Mapping[str, str] | None = None) -> "Settings":
@@ -164,6 +166,9 @@ class Settings:
           rfid_passage_max_interval_ms=_integer_value(
               source, "RFID_PASSAGE_MAX_INTERVAL_MS", DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS
           ),
+          rfid_direction_ambiguity_ms=_integer_value(
+              source, "RFID_DIRECTION_AMBIGUITY_MS", DEFAULT_RFID_DIRECTION_AMBIGUITY_MS
+          ),
       )
       settings.validate()
       return settings
@@ -184,6 +189,8 @@ class Settings:
           raise ValueError("RFID_DEBOUNCE_WINDOW_MS deve ser inteiro positivo")
       if type(self.rfid_passage_max_interval_ms) is not int or self.rfid_passage_max_interval_ms < 1:
           raise ValueError("RFID_PASSAGE_MAX_INTERVAL_MS deve ser inteiro positivo")
+      if type(self.rfid_direction_ambiguity_ms) is not int or self.rfid_direction_ambiguity_ms < 0:
+          raise ValueError("RFID_DIRECTION_AMBIGUITY_MS deve ser inteiro não negativo")
       if (
           type(self.rfid_out_of_order_tolerance_ms) is not int
           or self.rfid_out_of_order_tolerance_ms < 0
