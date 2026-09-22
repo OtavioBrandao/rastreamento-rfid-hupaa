@@ -242,11 +242,17 @@ monotônico usado para perceber silêncio não substitui `lido_em` no agrupament
 | equipamento_id | bigint | FK → equipamentos, NOT NULL |
 | zona_origem_id | bigint | FK → zonas, NULL |
 | zona_destino_id | bigint | FK → zonas, NOT NULL |
-| passagem_id | bigint | FK → passagens, NULL — **NULL indica correção manual (RF-020)** |
+| passagem_id | bigint | FK → passagens, obrigatório no automático e NULL na correção manual |
+| epc | varchar | EPC observado na passagem automática |
+| portal_id | bigint | FK → portais |
+| leitura_origem_id / leitura_destino_id | bigint | FKs → leituras_brutas, evidências da inferência |
+| movimentada_em | timestamptz | Instante físico derivado de `passagens.detectada_em` |
 | origem_registro | varchar | NOT NULL, CHECK IN ('passagem_automatica','correcao_manual') |
 | registrado_em | timestamptz | NOT NULL, default now() |
+| justificativa | text | Obrigatória na correção manual |
+| registro_anterior_id | bigint | FK autorreferente; correção preserva o registro original |
 
-**Índice:** `(equipamento_id, registrado_em)` — é a consulta direta do histórico de um ativo.
+**Índices:** `(equipamento_id, movimentada_em, id)` para consulta por período e ordem determinística; `(equipamento_id, registrado_em)` preservado. O índice único parcial em `passagem_id` para registros automáticos impede duplicação concorrente. Campos novos aceitam NULL para preservar linhas anteriores à ISS-018; novas inserções obedecem ao CHECK. O serviço grava apenas dentro da transação fornecida e não altera `equipamentos`.
 
 ### `perfis` / `usuarios` (RF-021, RF-022)
 Simples: `perfis` com `operacional`/`administrador`; `usuarios` referenciando `perfis`, com `email` único e `senha_hash` (nunca senha em texto puro).
@@ -292,9 +298,9 @@ Uma leitura de EPC não cadastrado (sem nenhuma linha em `associacoes_tag_equipa
 ## 4. Cenários de validação cruzada (para revisão da dupla)
 
 1. **Cadastro:** `tipos_equipamento` → `equipamentos` → `tags` → `associacoes_tag_equipamento` (ativa).
-2. **Inferência:** `leituras_brutas` → observações por antena (ISS-014) → `passagens` com `direcao=NULL` (ISS-015) → direção e zonas na própria passagem (ISS-016). `equipamentos.ultima_zona_id/ultima_deteccao_em/ultima_passagem_id` (ISS-017) e `historico_movimentacoes` (ISS-018) são etapas futuras.
+2. **Inferência:** `leituras_brutas` → observações por antena (ISS-014) → `passagens` com `direcao=NULL` (ISS-015) → direção e zonas na própria passagem (ISS-016). A ISS-018 fornece append e consulta do histórico; a ISS-017 ainda integrará esse append à atualização de `equipamentos` na mesma transação.
 3. **Troca de tag:** associação ativa antiga recebe `fim = now()`; nova linha criada para a nova tag no mesmo equipamento — o equipamento mantém histórico completo de EPCs já usados, sem perder o histórico de movimentação anterior (que referencia o equipamento, não a tag).
-4. **Correção manual:** admin altera `equipamentos.ultima_zona_id` diretamente → `historico_movimentacoes` recebe linha com `passagem_id = NULL` e `origem_registro='correcao_manual'` → `auditorias` recebe entrada com `dados_antes`/`dados_depois` e `usuario_id` preenchido.
+4. **Correção manual:** ISS-018 pode anexar novo registro com `passagem_id = NULL`, `origem_registro='correcao_manual'`, justificativa e referência ao registro anterior. A projeção de última localização e eventual auditoria de usuário dependerão da integração transacional da ISS-017.
 
 ## 5. Decisões e dúvidas pendentes do HUPAA
 

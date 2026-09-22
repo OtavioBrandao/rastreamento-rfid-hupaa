@@ -25,6 +25,10 @@ erDiagram
     ZONAS ||--o{ HISTORICO_MOVIMENTACOES : "zona origem (opcional)"
     ZONAS ||--o{ HISTORICO_MOVIMENTACOES : "zona destino"
     PASSAGENS ||--o| HISTORICO_MOVIMENTACOES : "gera (opcional)"
+    PORTAIS ||--o{ HISTORICO_MOVIMENTACOES : "portal observado"
+    LEITURAS_BRUTAS ||--o{ HISTORICO_MOVIMENTACOES : "evidencia origem"
+    LEITURAS_BRUTAS ||--o{ HISTORICO_MOVIMENTACOES : "evidencia destino"
+    HISTORICO_MOVIMENTACOES ||--o{ HISTORICO_MOVIMENTACOES : "registro anterior"
     ZONAS ||--o{ EQUIPAMENTOS : "ultima zona conhecida (opcional)"
 
     PERFIS ||--o{ USUARIOS : define
@@ -148,7 +152,11 @@ erDiagram
         bigint portal_id FK
         bigint antena_origem_id FK
         bigint antena_destino_id FK "opcional, RF-011 e Should"
-        string direcao "entrada, saida, indeterminada"
+        string direcao "a_para_b, b_para_a, indeterminada"
+        string direcao_status "confirmed, ambiguous, unknown"
+        string direcao_regra
+        bigint zona_origem_id FK
+        bigint zona_destino_id FK
         bigint leitura_origem_id FK
         bigint leitura_destino_id FK "opcional"
         timestamptz detectada_em
@@ -160,8 +168,15 @@ erDiagram
         bigint zona_origem_id FK "opcional"
         bigint zona_destino_id FK
         bigint passagem_id FK "opcional, NULL = correcao manual"
+        string epc "observado"
+        bigint portal_id FK
+        bigint leitura_origem_id FK
+        bigint leitura_destino_id FK
+        timestamptz movimentada_em "event time"
         string origem_registro "passagem_automatica, correcao_manual"
         timestamptz registrado_em
+        string justificativa "correcao manual"
+        bigint registro_anterior_id FK
     }
 
     PERFIS {
