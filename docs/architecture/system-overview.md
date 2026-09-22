@@ -43,10 +43,12 @@ flowchart TD
         INSERT["INSERT INTO leituras_brutas<br/>ON CONFLICT (event_id) DO NOTHING"]
     end
 
-    subgraph Futuro["Processamento Futuro (ISS-013+)"]
-        DEBOUNCE["Debounce Temporal (ISS-014)"]
-        INFERENCE["Inferência de Passagem e Direção (ISS-015)"]
-        UPDATE_LOC["Atualização de Zona do Ativo (ISS-016)"]
+    subgraph Processamento["Processamento de Inferência"]
+        DEBOUNCE["Debounce Temporal Implementado (ISS-014)"]
+        INFERENCE["Detecção de Passagem (ISS-015)"]
+        DIRECTION["Inferência de Direção (ISS-016)"]
+        UPDATE_LOC["Atualização da Última Zona (ISS-017)"]
+        HISTORY["Histórico de Movimentações (ISS-018)"]
     end
 
     LEITOR -->|Publica Payload JSON| BROKER
@@ -61,12 +63,14 @@ flowchart TD
     REPO -->|Transação Concluída| RECEPTOR
     RECEPTOR -->|ACK Manual (PUBACK)| BROKER
 
-    INSERT -.->|Leituras Persistidas| DEBOUNCE
+    INSERT -->|Somente inserted, após commit| DEBOUNCE
     DEBOUNCE -.-> INFERENCE
-    INFERENCE -.-> UPDATE_LOC
+    INFERENCE -.-> DIRECTION
+    DIRECTION -.-> UPDATE_LOC
+    UPDATE_LOC -.-> HISTORY
 
     classDef future fill:#f9f,stroke:#333,stroke-dasharray: 5 5;
-    class DEBOUNCE,INFERENCE,UPDATE_LOC future;
+    class INFERENCE,DIRECTION,UPDATE_LOC,HISTORY future;
 ```
 
 ---
@@ -201,17 +205,18 @@ classDiagram
 
 ---
 
-## 4. Demarcação de Recursos Futuros (Não Implementados no MVP Atual)
+## 4. Estado do processamento de inferência
 
-Para fins de avaliação e clareza do escopo do MVP, os seguintes módulos estão **explicitamente delimitados como etapas futuras**:
+Para fins de avaliação e clareza do escopo do MVP, o debounce já está disponível,
+enquanto passagem, direção e localização permanecem etapas futuras:
 
 | Recurso | Status Atual | Issue Prevista | Descrição |
 |---|---|---|---|
-| **Debounce Temporal** | Pendente | **ISS-014** | Agrupamento de leituras consecutivas do mesmo EPC na mesma antena dentro de uma janela de tempo para supressão de ruído de rádio. |
-| **Motor de Inferência de Passagem** | Pendente | **ISS-015** | Criação de registros na tabela `passagens` a partir da correlação de leituras entre antenas de entrada/saída de um portal. |
-| **Inferência de Direção** | Pendente | **ISS-015** | Determinação do vetor de movimento (`entrada` ou `saida`) comparando timestamps de detecção em antenas distintas de um portal. |
-| **Localização Dinâmica de Ativos** | Pendente | **ISS-016** | Atualização automática dos campos `ultima_zona_id`, `ultima_deteccao_em` e `ultima_passagem_id` em `equipamentos`. |
-| **Histórico de Movimentações** | Pendente | **ISS-016** | Preenchimento automático de `historico_movimentacoes` a partir de passagens confirmadas. |
+| **Debounce Temporal** | Implementado | **ISS-014** | Consolidação por `(EPC, antena_id)` usando event time, tolerância a reordenação e preservação integral das leituras brutas. |
+| **Detecção de Passagem** | Pendente | **ISS-015** | Correlação de observações entre antenas distintas de um portal e criação de registros em `passagens`. |
+| **Inferência de Direção** | Pendente | **ISS-016** | Determinação do vetor de movimento da passagem. |
+| **Última Zona do Ativo** | Pendente | **ISS-017** | Atualização automática dos campos `ultima_zona_id`, `ultima_deteccao_em` e `ultima_passagem_id` em `equipamentos`. |
+| **Histórico de Movimentações** | Pendente | **ISS-018** | Preenchimento automático de `historico_movimentacoes` a partir de passagens confirmadas. |
 
 ---
 
@@ -223,3 +228,4 @@ Para fins de avaliação e clareza do escopo do MVP, os seguintes módulos estã
 - [Resiliência e Recuperação do Ingestor (ISS-007)](../implementations/iss-007-ingestor-resilience.md)
 - [Topologia de Hardware (ISS-012)](../implementations/iss-012-topologia-hardware.md)
 - [Topologia Lógica de Portais (ISS-013)](../implementations/iss-013-topologia-logica-portais.md)
+- [Debounce Temporal de Leituras (ISS-014)](../implementations/iss-014-debounce-leituras.md)
