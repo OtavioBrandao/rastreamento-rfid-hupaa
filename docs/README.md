@@ -10,7 +10,7 @@ Este documento é o ponto de entrada principal para desenvolvedores, avaliadores
 
 O **RFID Hospital MVP** é uma solução de software experimental orientada a **rastreabilidade aproximada por zonas** de equipamentos médico-hospitalares móveis (como bombas de infusão, desfibriladores, macas e cadeiras de rodas) utilizando **RFID UHF passivo** (EPC Gen2).
 
-O MVP tem como objetivo inferir a localização aproximada de equipamentos por zonas. A implementação atual cobre ingestão, normalização, persistência idempotente, resiliência, detecção de passagem e inferência de direção. Atualização da última localização e histórico pertencem às próximas etapas.
+O MVP tem como objetivo inferir a localização aproximada de equipamentos por zonas. A implementação atual cobre ingestão, normalização, persistência idempotente, resiliência, detecção de passagem, inferência de direção e infraestrutura do histórico. A atualização da última localização e a integração automática do histórico pertencem à ISS-017.
 
 ---
 
@@ -41,10 +41,10 @@ O projeto prioriza a confiabilidade da ingestão e da persistência antes da ló
 - **Debounce temporal de leituras (ISS-014):** Consolidação em memória por `(EPC, antena_id)` com event time, limite inclusivo, tolerância a eventos fora de ordem e RSSI agregado, mantendo todas as evidências em `leituras_brutas`.
 - **Detecção de passagem (ISS-015):** Observações consolidadas em lados opostos do mesmo portal, usando topologia histórica e janela configurável, geram `passagens` com `direcao=NULL`.
 - **Inferência de direção (ISS-016):** Passagens são enriquecidas com A→B/B→A, zonas de origem/destino, status categórico e regra auditável, respeitando topologia histórica e tolerância temporal.
+- **Histórico de movimentações (ISS-018):** Ledger append-only com EPC, evidências, tempos de evento/processamento, correção manual e consulta paginada. A inserção automática ainda não está ligada ao pipeline.
 
 ### ⏳ O que está PLANEJADO (Próximos passos):
 - **Última zona (ISS-017):** Atualização da zona conhecida do equipamento após passagem confirmada.
-- **Histórico de movimentações (ISS-018):** Registro das movimentações dos equipamentos.
 - **Painel/Dashboard web e relatórios gerenciais:** Interface visual para busca e monitoramento em tempo real.
 
 ---
@@ -130,6 +130,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Debounce Temporal de Leituras (ISS-014)](implementations/iss-014-debounce-leituras.md)
    - [Detecção de Passagem (ISS-015)](implementations/iss-015-deteccao-passagem.md)
    - [Inferência de Direção (ISS-016)](implementations/iss-016-inferencia-direcao.md)
+   - [Histórico de Movimentações (ISS-018)](implementations/iss-018-historico-movimentacoes.md)
 4. Decisões Arquiteturais:
    - [Índice de ADRs](decisions/README.md)
 5. Ambiente e Testes:
@@ -166,6 +167,7 @@ docs/
 │   ├── iss-014-debounce-leituras.md <- Consolidação temporal por EPC e antena
 │   ├── iss-015-deteccao-passagem.md <- Evidências de passagem por portal
 │   ├── iss-016-inferencia-direcao.md <- Direção e zonas da passagem
+│   ├── iss-018-historico-movimentacoes.md <- Ledger auditável de movimentações
 │   └── iss-051-reorganizacao-documentacao.md <- Registro desta reestruturação (AGENTS.md)
 ├── experiments/                   <- Relatórios e evidências de testes práticos
 │   ├── README.md                  <- Síntese de experimentos e matriz de aceitação
@@ -189,5 +191,5 @@ docs/
 
 Em conformidade com as boas práticas científicas e as diretrizes do projeto:
 - **Ambiente de Hardware:** O projeto foi exaustivamente validado com simuladores e contêineres Docker reproduzindo os formatos do Identix EZ700. O aceite definitivo com **leitores físicos EZ700 e na rede Wi-Fi hospitalar** permanece como **PENDENTE DE VALIDAÇÃO FÍSICA** (aguardando liberação de infraestrutura de TI do HUPAA).
-- **Localização e histórico ainda pendentes:** A ISS-016 interpreta e enriquece a passagem; última zona do equipamento (ISS-017) e histórico (ISS-018) ainda não são atualizados.
+- **Integração da localização pendente:** A ISS-018 fornece a gravação e consulta do histórico, mas o pipeline não cria registros automaticamente. A ISS-017 integrará histórico e última zona em uma transação.
 - **Retenção de Leituras:** O expurgo ou particionamento de leituras brutas antigas depende de definição formal de governança com o hospital (RNF-015).
