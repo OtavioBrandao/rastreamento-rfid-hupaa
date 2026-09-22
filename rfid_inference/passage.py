@@ -1,0 +1,177 @@
+"""Detecção de passagem por evidências consolidadas, sem ORM ou transporte."""
+
+from __future__ import annotations
+
+import json
+import logging
+import time
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _event(name: str, epc: str, portal_id: int) -> None:
+    LOGGER.info(json.dumps({"event_type": name, "epc": epc, "portal_id": portal_id}))
+
+
+@dataclass(frozen=True, slots=True)
+class PortalObservation:
+    epc: str
+    portal_id: int
+    antenna_id: int
+    side: str
+    zone_id: int
+    mapping_id: int
+    first_seen_at: datetime
+    last_seen_at: datetime
+    first_reading_id: int
+    last_reading_id: int
+    first_event_id: str
+    last_event_id: str
+
+    def __post_init__(self) -> None:
+        if self.side not in ("a", "b") or self.first_seen_at > self.last_seen_at:
+            raise ValueError("observação de portal inválida")
+        if self.first_seen_at.tzinfo is None or self.last_seen_at.tzinfo is None:
+            raise ValueError("observação exige timestamps com fuso")
+
+
+@dataclass(frozen=True, slots=True)
+class DetectedPassage:
+    epc: str
+    portal_id: int
+    first_side: str
+    second_side: str
+    first_antenna_id: int
+    second_antenna_id: int
+    first_reading_id: int
+    second_reading_id: int
+    first_observed_at: datetime
+    second_observed_at: datetime
+    detected_at: datetime
+
+
+@dataclass(slots=True)
+class PassageCounters:
+    observations_received: int = 0
+    candidates_started: int = 0
+    candidates_expired: int = 0
+    same_side_observations: int = 0
+    passages_confirmed: int = 0
+    passages_duplicates: int = 0
+    activity_suppressed: int = 0
+
+
+@dataclass(slots=True)
+class _State:
+    candidate: PortalObservation | None = None
+    confirmed: bool = False
+    last_event_at: datetime | None = None
+    last_received_monotonic: float = 0.0
+    proposed: DetectedPassage | None = None
+
+
+def _order(item: PortalObservation) -> tuple[datetime, int, str]:
+    return item.first_seen_at, item.antenna_id, item.first_event_id
+
+
+class PassageDetector:
+    """Estado independente por (EPC, portal), com confirmação em duas fases.
+
+    A proposta permanece recuperável até o serviço confirmar a persistência.
+    """
+
+    def __init__(self, max_interval: timedelta, *, silence_grace: timedelta = timedelta(0)):
+        if max_interval <= timedelta(0) or silence_grace < timedelta(0):
+            raise ValueError("intervalos inválidos")
+        self.max_interval = max_interval
+        self.silence_grace = silence_grace
+        self.states: dict[tuple[str, int], _State] = {}
+        self.counters = PassageCounters()
+
+    def add(
+        self, observation: PortalObservation, *, received_at_monotonic: float | None = None
+    ) -> DetectedPassage | None:
+        if received_at_monotonic is None:
+            received_at_monotonic = time.monotonic()
+        self.counters.observations_received += 1
+        key = observation.epc, observation.portal_id
+        state = self.states.setdefault(key, _State())
+        state.last_received_monotonic = received_at_monotonic
+        if state.proposed is not None:
+            return state.proposed
+        if state.confirmed:
+            assert state.last_event_at is not None
+            if observation.first_seen_at - state.last_event_at <= self.max_interval:
+                state.last_event_at = max(state.last_event_at, observation.last_seen_at)
+                self.counters.activity_suppressed += 1
+                _event("rfid_passage_activity_suppressed", *key)
+                return None
+            state.confirmed = False
+            state.candidate = None
+
+        candidate = state.candidate
+        if candidate is not None:
+            first, second = sorted((candidate, observation), key=_order)
+            gap = max(timedelta(0), second.first_seen_at - first.last_seen_at)
+            if gap > self.max_interval:
+                self.counters.candidates_expired += 1
+                _event("rfid_passage_candidate_expired", *key)
+                state.candidate = observation
+                self.counters.candidates_started += 1
+                return None
+            if candidate.side == observation.side:
+                state.candidate = max((candidate, observation), key=_order)
+                self.counters.same_side_observations += 1
+                _event("rfid_passage_same_side", *key)
+                return None
+            detected = DetectedPassage(
+                epc=observation.epc,
+                portal_id=observation.portal_id,
+                first_side=first.side,
+                second_side=second.side,
+                first_antenna_id=first.antenna_id,
+                second_antenna_id=second.antenna_id,
+                first_reading_id=first.last_reading_id,
+                second_reading_id=second.first_reading_id,
+                first_observed_at=first.last_seen_at,
+                second_observed_at=second.first_seen_at,
+                detected_at=max(first.last_seen_at, second.last_seen_at),
+            )
+            state.proposed = detected
+            state.last_event_at = max(first.last_seen_at, second.last_seen_at)
+            return detected
+        state.candidate = observation
+        self.counters.candidates_started += 1
+        _event("rfid_passage_candidate_started", *key)
+        return None
+
+    def mark_persisted(self, passage: DetectedPassage, *, duplicate: bool) -> None:
+        key = passage.epc, passage.portal_id
+        state = self.states[key]
+        if state.proposed != passage:
+            raise ValueError("proposta de passagem diferente do estado pendente")
+        state.proposed = None
+        state.candidate = None
+        state.confirmed = True
+        if duplicate:
+            self.counters.passages_duplicates += 1
+            _event("rfid_passage_duplicate", *key)
+        else:
+            self.counters.passages_confirmed += 1
+            _event("rfid_passage_confirmed", *key)
+
+    def pending(self) -> tuple[DetectedPassage, ...]:
+        return tuple(state.proposed for state in self.states.values() if state.proposed)
+
+    def advance_time(self, now_monotonic: float) -> None:
+        silence = (self.max_interval + self.silence_grace).total_seconds()
+        for key, state in tuple(self.states.items()):
+            if state.proposed is not None:
+                continue  # falha de banco: manter proposta para retry no próximo tick
+            if now_monotonic - state.last_received_monotonic > silence:
+                if state.candidate is not None:
+                    self.counters.candidates_expired += 1
+                    _event("rfid_passage_candidate_expired", *key)
+                del self.states[key]
