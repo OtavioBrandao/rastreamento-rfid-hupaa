@@ -197,6 +197,7 @@ classDiagram
    - A tabela `mapeamentos_antena_portal` estabelece o significado operacional da antena no portal (lado A/B, zona adjacente e função `entrada`, `saida` ou `auxiliar`).
    - O índice único parcial `uq_mapeamento_antena_ativo` restringe a no máximo um mapeamento com `fim IS NULL` por antena física.
    - Múltiplas antenas no mesmo lado do portal são expressamente suportadas.
+   - Inativação ou mutação de portal, antena ou leitor é protegida contra mapeamentos lógicos vigentes (`fim IS NULL`).
 
 ---
 
@@ -221,3 +222,4 @@ Para fins de avaliação e clareza do escopo do MVP, os seguintes módulos estã
 - [Persistência de Leituras Brutas e Idempotência (ISS-006)](../implementations/iss-006-raw-readings-persistence.md)
 - [Resiliência e Recuperação do Ingestor (ISS-007)](../implementations/iss-007-ingestor-resilience.md)
 - [Topologia de Hardware (ISS-012)](../implementations/iss-012-topologia-hardware.md)
+- [Topologia Lógica de Portais (ISS-013)](../implementations/iss-013-topologia-logica-portais.md)
