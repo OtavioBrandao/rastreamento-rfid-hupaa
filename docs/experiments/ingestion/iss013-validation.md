@@ -88,8 +88,11 @@ python -m alembic heads
 ```bash
 python -m pytest -q
 ```
-- **Esperado:** Todas as suítes unitárias, de integração e regressão de hardware/domínio aprovadas.
-- **Obtido:** `230 passed, 485 skipped, 52 subtests passed` (485 skips de testes que requerem banco PostgreSQL local descartável ativo via `TEST_DATABASE_URL`).
+- **Ambiente Local (sem PostgreSQL local ativo):** `230 passed, 485 skipped, 52 subtests passed` (485 skips de testes que requerem banco PostgreSQL local ativo via `TEST_DATABASE_URL`).
+- **Ambiente de Integração Contínua (GitHub Actions CI — Run #35675783122):**
+  - **Job Lint:** Aprovado em 14s (`All checks passed!`).
+  - **Job Testes:** Aprovado em 1m50s (`715 passed, 2 warnings, 52 subtests passed`).
+  - **Job Migrations / Validação completa:** Aprovado em 1m53s (`713 passed, 2 skipped, 2 warnings, 52 subtests passed`), com inspeção de schema confirmando exatamente 18 tabelas (17 do domínio + `alembic_version`).
 
 ---
 
