@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 
 from api.service_hardware import (
     AntenaComMapeamentoAtivo,
+    LeitorComMapeamentosAtivos,
     PortalComMapeamentosAtivos,
     atualizar_antena,
     atualizar_portal,
@@ -653,3 +654,81 @@ def test_inativar_zona_bloqueada_por_mapeamento_antena_portal(db):
 
     assert f"Zona {zona_a.id} não pode ser inativada" in str(exc.value)
     assert "mapeamentos_antena_portal (zona_id)" in str(exc.value)
+
+
+def test_guard_inativar_portal_bloqueado_com_mapeamentos_ativos(db):
+    """Inactivating portal with active logical mappings must be blocked; historical mappings do not block."""
+    _, _, zona_a, _, _, leitor, portal = _cenario_base(db)
+    antena = criar_antena(
+        db,
+        leitor_id=leitor.id,
+        porta_numero=1,
+        zona_associada_id=zona_a.id,
+        funcao="entrada",
+        portal_id=portal.id,
+    )
+    map_obj = criar_mapeamento(db, portal.id, antena.id, lado="a", funcao="entrada")
+
+    # Blocked while active
+    with pytest.raises(PortalComMapeamentosAtivos) as exc:
+        inativar_portal(db, portal.id)
+    assert f"Portal {portal.id} possui 1 mapeamento(s) lógico(s) ativo(s)" in str(exc.value)
+
+    # Inactivate mapping (becomes historical with fim != None)
+    inativar_mapeamento(db, map_obj.id)
+
+    # Historical mapping does not block portal inactivation
+    inativado = inativar_portal(db, portal.id)
+    assert inativado.ativo is False
+
+
+def test_guard_inativar_antena_bloqueada_com_mapeamento_ativo(db):
+    """Inactivating antenna with active logical mapping must be blocked; historical mappings do not block."""
+    _, _, zona_a, _, _, leitor, portal = _cenario_base(db)
+    antena = criar_antena(
+        db,
+        leitor_id=leitor.id,
+        porta_numero=1,
+        zona_associada_id=zona_a.id,
+        funcao="entrada",
+        portal_id=portal.id,
+    )
+    map_obj = criar_mapeamento(db, portal.id, antena.id, lado="a", funcao="entrada")
+
+    # Blocked while active
+    with pytest.raises(AntenaComMapeamentoAtivo) as exc:
+        inativar_antena(db, antena.id)
+    assert f"Antena {antena.id} possui mapeamento lógico ativo" in str(exc.value)
+
+    # Inactivate mapping (becomes historical with fim != None)
+    inativar_mapeamento(db, map_obj.id)
+
+    # Historical mapping does not block antenna inactivation
+    inativada = inativar_antena(db, antena.id)
+    assert inativada.ativo is False
+
+
+def test_guard_inativar_leitor_bloqueado_com_mapeamento_ativo(db):
+    """Inactivating reader with active antenna mappings must be blocked; historical mappings do not block."""
+    _, _, zona_a, _, _, leitor, portal = _cenario_base(db)
+    antena = criar_antena(
+        db,
+        leitor_id=leitor.id,
+        porta_numero=1,
+        zona_associada_id=zona_a.id,
+        funcao="entrada",
+        portal_id=portal.id,
+    )
+    map_obj = criar_mapeamento(db, portal.id, antena.id, lado="a", funcao="entrada")
+
+    # Blocked while active
+    with pytest.raises(LeitorComMapeamentosAtivos) as exc:
+        inativar_leitor(db, leitor.id)
+    assert f"Leitor {leitor.id} possui 1 antena(s) com mapeamento(s) lógico(s) ativo(s)" in str(exc.value)
+
+    # Inactivate mapping (becomes historical with fim != None)
+    inativar_mapeamento(db, map_obj.id)
+
+    # Historical mapping does not block reader inactivation
+    inativado = inativar_leitor(db, leitor.id)
+    assert inativado.ativo is False

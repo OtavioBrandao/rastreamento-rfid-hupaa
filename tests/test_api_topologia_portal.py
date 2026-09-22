@@ -292,13 +292,15 @@ def test_atualizacao_temporal_e_inativacao_api(client):
 
 
 def test_guards_bloqueio_mutacao_hardware_api(client):
-    zona_a, zona_b, zona_c, _, portal, antena_a, _ = _criar_hierarquia_e_hardware(client)
+    zona_a, zona_b, zona_c, leitor, portal, antena_a, _ = _criar_hierarquia_e_hardware(client)
 
     # Create active mapping
-    client.post(
+    res_map = client.post(
         f"/portais/{portal['id']}/mapeamentos",
         json={"antena_id": antena_a["id"], "lado": "a", "funcao": "entrada"},
     )
+    assert res_map.status_code == 201
+    map_id = res_map.json()["id"]
 
     # Attempt to change portal zone_a_id -> blocked with 409
     res_patch_portal = client.patch(
@@ -315,3 +317,27 @@ def test_guards_bloqueio_mutacao_hardware_api(client):
     )
     assert res_patch_antena.status_code == 409
     assert "possui mapeamento lógico ativo" in res_patch_antena.json()["detail"]
+
+    # Attempt to inactivate portal with active mapping -> blocked with 409
+    res_inat_portal = client.post(f"/portais/{portal['id']}/inativar")
+    assert res_inat_portal.status_code == 409
+    assert "mapeamento(s) lógico(s) ativo(s)" in res_inat_portal.json()["detail"]
+
+    # Attempt to inactivate antenna with active mapping -> blocked with 409
+    res_inat_antena = client.post(f"/antenas/{antena_a['id']}/inativar")
+    assert res_inat_antena.status_code == 409
+    assert "possui mapeamento lógico ativo" in res_inat_antena.json()["detail"]
+
+    # Attempt to inactivate reader with active mapped antenna -> blocked with 409
+    res_inat_leitor = client.post(f"/leitores/{leitor['id']}/inativar")
+    assert res_inat_leitor.status_code == 409
+    assert "mapeamento(s) lógico(s) ativo(s)" in res_inat_leitor.json()["detail"]
+
+    # Inactivate the logical mapping (becomes historical)
+    res_close = client.post(f"/mapeamentos-antena/{map_id}/inativar")
+    assert res_close.status_code == 200
+
+    # Historical mapping does not block inactivation
+    assert client.post(f"/portais/{portal['id']}/inativar").status_code == 200
+    assert client.post(f"/antenas/{antena_a['id']}/inativar").status_code == 200
+    assert client.post(f"/leitores/{leitor['id']}/inativar").status_code == 200
