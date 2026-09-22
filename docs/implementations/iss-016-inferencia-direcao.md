@@ -100,6 +100,18 @@ PostgreSQL, limites `[inicio, fim)`, persistência, constraints e o fluxo
 MQTT → leitura bruta → debounce → passagem → direção, incluindo o cenário
 de 50 ms. `tests/test_migrations.py` cobre upgrade/downgrade/re-upgrade.
 
+Validação de 22/09/2026 no PR #57: Ruff `E4,E7,E9,F,I` passou. Localmente,
+`tests/test_direction.py` terminou com **24 passed**; a suíte completa,
+com diretório temporário acessível, terminou com **289 passed, 507 skipped e
+63 subtests passed**. Os skips locais decorrem da ausência de
+`TEST_DATABASE_URL` e dos serviços de integração. Na CI, o job **Testes**
+com PostgreSQL e Mosquitto descartáveis terminou com **796 passed,
+0 skipped e 63 subtests passed**. O job **Migrations** realizou upgrade,
+downgrade e reupgrade em banco vazio, verificou o schema e terminou com
+**794 passed, 2 skipped e 63 subtests passed**; os dois skips são os
+cenários MQTT de `tests/test_integration.py`, pois esse job não inicia o
+broker. Os mesmos cenários passaram no job Testes.
+
 A ISS-017 poderá consumir somente passagens com
 `direcao_status == "confirmed"` e `zona_destino_id IS NOT NULL` para atualizar
 a última zona. **Esta issue não altera** `equipamentos.ultima_zona_id`,
