@@ -28,7 +28,7 @@ def test_empty_upgrade_repeat_downgrade_reupgrade(pg_empty_schema):
         for index in inspector.get_indexes("passagens")
     )
     with pg_empty_schema.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "9d0116a01600"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "f018a1b2c3d4"
 
 
 def test_existing_reader_receives_serial_as_initial_reader_id(pg_empty_schema):
@@ -111,3 +111,46 @@ def test_iss016_upgrade_preserves_pending_passage_and_roundtrip(pg_empty_schema)
     command.upgrade(config, "head")
     with pg_empty_schema.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM passagens")) == 1
+
+
+def test_iss018_schema_roundtrip_and_legacy_row(pg_empty_schema):
+    config = migration_config()
+    command.upgrade(config, "9d0116a01600")
+    with pg_empty_schema.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO tipos_equipamento (id,nome,nome_normalizado) "
+            "VALUES (1,'tipo','tipo')"
+        ))
+        connection.execute(text(
+            "INSERT INTO andares (id,nome,nome_normalizado) VALUES (1,'a','a')"
+        ))
+        connection.execute(text(
+            "INSERT INTO setores (id,andar_id,nome,nome_normalizado) VALUES (1,1,'s','s')"
+        ))
+        connection.execute(text(
+            "INSERT INTO zonas (id,setor_id,nome,nome_normalizado) VALUES (1,1,'z','z')"
+        ))
+        connection.execute(text(
+            "INSERT INTO equipamentos (id,nome,tipo_id,identificador_interno,"
+            "identificador_interno_normalizado) VALUES (1,'eq',1,'EQ','eq')"
+        ))
+        connection.execute(text(
+            "INSERT INTO historico_movimentacoes "
+            "(id,equipamento_id,zona_destino_id,origem_registro) "
+            "VALUES (1,1,1,'correcao_manual')"
+        ))
+    command.upgrade(config, "head")
+    with pg_empty_schema.connect() as connection:
+        assert connection.execute(text(
+            "SELECT id,movimentada_em,justificativa FROM historico_movimentacoes"
+        )).one() == (1, None, None)
+    indexes = {item["name"] for item in inspect(pg_empty_schema).get_indexes(
+        "historico_movimentacoes")}
+    assert "uq_historico_passagem_automatica" in indexes
+    assert "ix_historico_equipamento_movimentada_id" in indexes
+    command.downgrade(config, "9d0116a01600")
+    with pg_empty_schema.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM historico_movimentacoes")) == 1
+    command.upgrade(config, "head")
+    with pg_empty_schema.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM historico_movimentacoes")) == 1
