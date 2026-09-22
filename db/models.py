@@ -474,11 +474,11 @@ class MapeamentoAntenaPortal(Base):
     portal_id = Column(
         BigInteger, ForeignKey("portais.id", name="fk_mapeamentos_portal_id"), nullable=False
     )
-    lado = Column(String, nullable=False)
+    lado = Column(String(1), nullable=False)
     zona_id = Column(
         BigInteger, ForeignKey("zonas.id", name="fk_mapeamentos_zona_id"), nullable=False
     )
-    funcao = Column(String, nullable=False)
+    funcao = Column(String(20), nullable=False)
     inicio = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     fim = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())

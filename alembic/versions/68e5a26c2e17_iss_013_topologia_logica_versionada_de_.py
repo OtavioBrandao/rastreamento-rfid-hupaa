@@ -44,14 +44,14 @@ def upgrade() -> None:
             sa.ForeignKey('portais.id', name='fk_mapeamentos_portal_id'),
             nullable=False,
         ),
-        sa.Column('lado', sa.String(), nullable=False),
+        sa.Column('lado', sa.String(1), nullable=False),
         sa.Column(
             'zona_id',
             sa.BigInteger(),
             sa.ForeignKey('zonas.id', name='fk_mapeamentos_zona_id'),
             nullable=False,
         ),
-        sa.Column('funcao', sa.String(), nullable=False),
+        sa.Column('funcao', sa.String(20), nullable=False),
         sa.Column(
             'inicio',
             sa.TIMESTAMP(timezone=True),
