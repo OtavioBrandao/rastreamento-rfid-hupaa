@@ -34,6 +34,7 @@ def test_basic_insert(pg_engine, topology):
     with pg_engine.connect() as connection:
         row = connection.execute(select(LeituraBruta.__table__)).mappings().one()
     assert row["id"] == result.reading_id
+    assert result.antenna_id == topology["antenna"]
     assert row["event_id"] == event["canonical_event"]["event_id"]
     assert row["antena_id"] == topology["antenna"]
 
