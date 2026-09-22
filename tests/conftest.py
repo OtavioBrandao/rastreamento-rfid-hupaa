@@ -51,6 +51,7 @@ from db.models import Andar, Antena, Leitor, Setor, Zona
 # resolve a ordem de dependência sozinho (não precisa listar filhos antes de
 # pais); o CASCADE leva junto o que depender delas (passagens, leituras...).
 TABELAS_DO_CRUD = (
+    "mapeamentos_antena_portal",
     "auditorias",
     "associacoes_tag_equipamento",
     "historico_movimentacoes",
@@ -138,13 +139,15 @@ def db(engine):
         # antes. Como está dentro da transação externa, o rollback do final
         # devolve tudo — isto só ESCONDE o dado pré-existente pela duração
         # deste teste, não apaga de verdade.
-        # Ordem por FK: filhos antes dos pais. associacoes_tag_equipamento e
+        # Ordem por FK: filhos antes dos pais. mapeamentos_antena_portal
+        # referencia antenas, portais e zonas; associacoes_tag_equipamento e
         # historico_movimentacoes referenciam equipamentos; equipamentos
         # referencia tipos_equipamento, zonas e passagens; passagens referencia
         # portais/antenas/leituras_brutas; antenas -> leitores -> portais;
         # portais/antenas/historico referenciam zonas; zonas -> setores ->
         # andares. auditorias não tem FK para nenhuma delas — ordem livre.
         for tabela in (
+            "mapeamentos_antena_portal",
             "auditorias",
             "associacoes_tag_equipamento",
             "historico_movimentacoes",

@@ -15,6 +15,7 @@ from api.router_equipamento import router as router_equipamento
 from api.router_hardware import router as router_hardware
 from api.router_localizacao import router as router_localizacao
 from api.router_tipos_equipamento import router as router_tipos_equipamento
+from api.router_topologia_portal import router as router_topologia_portal
 
 app = FastAPI(
     title="RFID Hospital MVP - API",
@@ -32,6 +33,8 @@ app.include_router(router_associacao)
 app.include_router(router_localizacao)
 # hardware depois de localizacao: antena/portal dependem de zonas ativas.
 app.include_router(router_hardware)
+# topologia logica de portais (ISS-013) apos hardware e localizacao
+app.include_router(router_topologia_portal)
 
 
 @app.exception_handler(RequestValidationError)

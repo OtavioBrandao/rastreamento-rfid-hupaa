@@ -147,6 +147,17 @@ classDiagram
         +DateTime fim
     }
 
+    class MapeamentoAntenaPortal {
+        +BigInt id
+        +BigInt antena_id
+        +BigInt portal_id
+        +String lado
+        +BigInt zona_id
+        +String funcao
+        +DateTime inicio
+        +DateTime fim
+    }
+
     Andar "1" *-- "many" Setor
     Setor "1" *-- "many" Zona
     Zona "1" <-- "1" Portal : zona_a
@@ -154,6 +165,9 @@ classDiagram
     Zona "1" <-- "many" Antena : aponta para
     Leitor "1" *-- "many" Antena : fisicamente conectada
     Portal "1" o-- "many" Antena : agrega logicamente
+    Portal "1" -- "many" MapeamentoAntenaPortal : mapeia
+    Antena "1" -- "many" MapeamentoAntenaPortal : historico
+    Zona "1" <-- "many" MapeamentoAntenaPortal : zona do lado
     Equipamento "1" -- "many" AssociacaoTagEquipamento
     Tag "1" -- "many" AssociacaoTagEquipamento
 ```
@@ -179,6 +193,11 @@ classDiagram
 7. **Resolução de Antena Ativa e Reconfiguração de Hardware:**
    - O índice único parcial `uq_antena_ativa_por_porta_leitor` restringe a no máximo uma antena com `ativo = true` por porta física do leitor.
    - Antenas inativas históricas são preservadas para integridade referencial de leituras passadas. A ingestão sempre filtra por `Antena.ativo = true`.
+8. **Topologia Lógica Versionada de Portais (`[inicio, fim)`):**
+   - A tabela `mapeamentos_antena_portal` estabelece o significado operacional da antena no portal (lado A/B, zona adjacente e função `entrada`, `saida` ou `auxiliar`).
+   - O índice único parcial `uq_mapeamento_antena_ativo` restringe a no máximo um mapeamento com `fim IS NULL` por antena física.
+   - Múltiplas antenas no mesmo lado do portal são expressamente suportadas.
+   - Inativação ou mutação de portal, antena ou leitor é protegida contra mapeamentos lógicos vigentes (`fim IS NULL`).
 
 ---
 
@@ -188,7 +207,6 @@ Para fins de avaliação e clareza do escopo do MVP, os seguintes módulos estã
 
 | Recurso | Status Atual | Issue Prevista | Descrição |
 |---|---|---|---|
-| **Consistência Portal-Antena** | Pendente | **ISS-013** | Validação a nível de aplicação de que a `zona_associada_id` da antena coincide com a `zona_a_id` ou `zona_b_id` do portal ao qual foi associada. |
 | **Debounce Temporal** | Pendente | **ISS-014** | Agrupamento de leituras consecutivas do mesmo EPC na mesma antena dentro de uma janela de tempo para supressão de ruído de rádio. |
 | **Motor de Inferência de Passagem** | Pendente | **ISS-015** | Criação de registros na tabela `passagens` a partir da correlação de leituras entre antenas de entrada/saída de um portal. |
 | **Inferência de Direção** | Pendente | **ISS-015** | Determinação do vetor de movimento (`entrada` ou `saida`) comparando timestamps de detecção em antenas distintas de um portal. |
@@ -204,3 +222,4 @@ Para fins de avaliação e clareza do escopo do MVP, os seguintes módulos estã
 - [Persistência de Leituras Brutas e Idempotência (ISS-006)](../implementations/iss-006-raw-readings-persistence.md)
 - [Resiliência e Recuperação do Ingestor (ISS-007)](../implementations/iss-007-ingestor-resilience.md)
 - [Topologia de Hardware (ISS-012)](../implementations/iss-012-topologia-hardware.md)
+- [Topologia Lógica de Portais (ISS-013)](../implementations/iss-013-topologia-logica-portais.md)
