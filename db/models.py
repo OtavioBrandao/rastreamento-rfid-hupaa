@@ -335,6 +335,7 @@ class Portal(Base):
     zona_a = relationship("Zona", foreign_keys=[zona_a_id])
     zona_b = relationship("Zona", foreign_keys=[zona_b_id])
     antenas = relationship("Antena", back_populates="portal")
+    mapeamentos_antena = relationship("MapeamentoAntenaPortal", back_populates="portal")
 
     __table_args__ = (
         CheckConstraint("zona_a_id <> zona_b_id", name="ck_portal_zonas_distintas"),
@@ -420,6 +421,7 @@ class Antena(Base):
     leitor = relationship("Leitor", back_populates="antenas")
     portal = relationship("Portal", back_populates="antenas")
     zona_associada = relationship("Zona")
+    mapeamentos_portal = relationship("MapeamentoAntenaPortal", back_populates="antena")
 
     __table_args__ = (
         # Índice único PARCIAL (mesmo padrão de `uq_tag_ativa`, ISS-010): só as
@@ -438,6 +440,68 @@ class Antena(Base):
             "funcao IN ('entrada', 'saida', 'indefinido')", name="ck_antena_funcao_valida"
         ),
         Index("ix_antenas_portal_id", "portal_id"),
+    )
+
+
+class MapeamentoAntenaPortal(Base):
+    """
+    ISS-013. Logical, versioned mapping defining the operational meaning of an
+    antenna inside a portal (logical side A or B, adjacent zone, and function).
+
+    `fim IS NULL` represents the currently active mapping. Historical records
+    preserve previous configurations with `fim` populated, allowing past
+    readings and passages to be interpreted deterministically.
+
+    Temporal half-open interval [inicio, fim):
+    - Reading at timestamp T belongs to this mapping if:
+        inicio <= T and (fim IS NULL or fim > T)
+
+    Invariants enforced at DB level:
+    - lado IN ('a', 'b')
+    - funcao IN ('entrada', 'saida', 'auxiliar')
+    - fim IS NULL OR fim >= inicio
+    - At most ONE active mapping per antenna via partial unique index
+      `uq_mapeamento_antena_ativo` (WHERE fim IS NULL). Multiple antennas on
+      the same side of a portal are explicitly allowed.
+    """
+
+    __tablename__ = "mapeamentos_antena_portal"
+
+    id = Column(BigInteger, primary_key=True)
+    antena_id = Column(
+        BigInteger, ForeignKey("antenas.id", name="fk_mapeamentos_antena_id"), nullable=False
+    )
+    portal_id = Column(
+        BigInteger, ForeignKey("portais.id", name="fk_mapeamentos_portal_id"), nullable=False
+    )
+    lado = Column(String(1), nullable=False)
+    zona_id = Column(
+        BigInteger, ForeignKey("zonas.id", name="fk_mapeamentos_zona_id"), nullable=False
+    )
+    funcao = Column(String(20), nullable=False)
+    inicio = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    fim = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+
+    antena = relationship("Antena", back_populates="mapeamentos_portal")
+    portal = relationship("Portal", back_populates="mapeamentos_antena")
+    zona = relationship("Zona")
+
+    __table_args__ = (
+        CheckConstraint("lado IN ('a', 'b')", name="ck_mapeamento_lado_valido"),
+        CheckConstraint(
+            "funcao IN ('entrada', 'saida', 'auxiliar')", name="ck_mapeamento_funcao_valida"
+        ),
+        CheckConstraint("fim IS NULL OR fim >= inicio", name="ck_mapeamento_periodo_valido"),
+        Index(
+            "uq_mapeamento_antena_ativo",
+            "antena_id",
+            unique=True,
+            postgresql_where=(fim.is_(None)),
+        ),
+        Index("ix_mapeamentos_portal_id", "portal_id"),
+        Index("ix_mapeamentos_antena_id", "antena_id"),
+        Index("ix_mapeamentos_zona_id", "zona_id"),
     )
 
 

@@ -64,7 +64,7 @@ jobs:
       - name: Reaplicar (confirma que o rollback é reversível)
         run: python -m alembic upgrade head
 
-      - name: "Conferir schema resultante (17 tabelas: 16 do domínio + alembic_version)"
+      - name: "Conferir schema resultante (18 tabelas: 17 do domínio + alembic_version)"
         run: |
           python -c "
           import os
@@ -76,7 +76,7 @@ jobs:
           cur.execute(\"SELECT count(*) FROM pg_tables WHERE schemaname = 'public';\")
           count = cur.fetchone()[0]
           print(f'Tabelas encontradas: {count}')
-          assert count == 17, f'Esperava 17 tabelas, encontrou {count} — schema não bateu com o esperado'
+          assert count == 18, f'Esperava 18 tabelas, encontrou {count} — schema não bateu com o esperado'
           "
 
       - name: Rodar suíte de testes

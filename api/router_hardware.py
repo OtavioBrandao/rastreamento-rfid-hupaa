@@ -48,6 +48,9 @@ _CONFLITO = (
     service.ReaderIdDuplicado,
     service.IdentificadorSerialDuplicado,
     service.PortaJaUtilizada,
+    service.PortalComMapeamentosAtivos,
+    service.AntenaComMapeamentoAtivo,
+    service.LeitorComMapeamentosAtivos,
 )
 _ENTIDADE_INVALIDA = (
     service.LeitorInvalido,

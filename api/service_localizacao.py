@@ -18,9 +18,9 @@ Regras que valem para os três níveis:
   idempotente; reativar também.
 - Inativação é de BAIXO PARA CIMA (zona -> setor -> andar): não cascateia.
   Andar/setor com filho ATIVO não inativa. Zona referenciada por qualquer
-  linha de portais/antenas/historico/equipamentos não inativa, mesmo que
-  quem referencia esteja inativo ou seja histórico (mesmo critério
-  "qualquer referência conta" de `TipoEquipamentoEmUso`, ISS-009).
+  linha de portais/antenas/mapeamentos_antena_portal/historico/equipamentos
+  não inativa, mesmo que quem referencia esteja inativo ou seja histórico
+  (mesmo critério "qualquer referência conta" de `TipoEquipamentoEmUso`, ISS-009).
 - Criar setor/zona exige pai existente E ativo. Como nas issues
   anteriores, há uma janela (pai inativado entre a checagem e o INSERT)
   aceita para o MVP.
@@ -43,7 +43,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api.normalizacao import normalizar_nome
-from db.models import Andar, Antena, Equipamento, HistoricoMovimentacao, Portal, Setor, Zona
+from db.models import (
+    Andar,
+    Antena,
+    Equipamento,
+    HistoricoMovimentacao,
+    MapeamentoAntenaPortal,
+    Portal,
+    Setor,
+    Zona,
+)
 
 TAMANHO_PAGINA_PADRAO = 20
 TAMANHO_PAGINA_MAXIMO = 100
@@ -517,6 +526,11 @@ def _primeira_referencia_a_zona(session: Session, zona_id: int) -> tuple[str, in
         ),
         ("antenas (zona_associada_id)", Antena, Antena.zona_associada_id == zona_id),
         (
+            "mapeamentos_antena_portal (zona_id)",
+            MapeamentoAntenaPortal,
+            MapeamentoAntenaPortal.zona_id == zona_id,
+        ),
+        (
             "historico_movimentacoes (zona_origem_id/zona_destino_id)",
             HistoricoMovimentacao,
             or_(
@@ -535,7 +549,7 @@ def _primeira_referencia_a_zona(session: Session, zona_id: int) -> tuple[str, in
 def inativar_zona(session: Session, zona_id: int) -> Zona:
     """
     Bloqueia se QUALQUER linha de equipamentos.ultima_zona_id, portais,
-    antenas ou historico_movimentacoes referenciar a zona. Idempotente.
+    antenas, mapeamentos_antena_portal ou historico_movimentacoes referenciar a zona. Idempotente.
     """
     zona = buscar_zona_por_id(session, zona_id)
     if not zona.ativo:
