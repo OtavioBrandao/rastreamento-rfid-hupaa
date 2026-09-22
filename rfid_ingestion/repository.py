@@ -18,6 +18,7 @@ class PersistenceResult:
     status: Literal["inserted", "duplicate", "rejected"]
     reading_id: int | None = None
     reason: str | None = None
+    antenna_id: int | None = None
 
 
 class PersistenceError(RuntimeError):
@@ -109,7 +110,13 @@ class RawReadingRepository:
                 ).returning(LeituraBruta.id)
                 reading_id = connection.execute(statement).scalar_one_or_none()
             # Só devolver sucesso após a confirmação da transação.
-            return PersistenceResult("inserted", reading_id) if reading_id is not None else PersistenceResult("duplicate")
+            return (
+                PersistenceResult(
+                    "inserted", reading_id, antenna_id=topology[1]
+                )
+                if reading_id is not None
+                else PersistenceResult("duplicate")
+            )
         except SQLAlchemyError as error:
             raise _safe_persistence_error(error) from None
 

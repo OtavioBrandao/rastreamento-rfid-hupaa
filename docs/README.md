@@ -38,11 +38,13 @@ O projeto prioriza a confiabilidade da ingestão e da persistência antes da ló
 - **Hierarquia de localização hospitalar (ISS-011):** CRUD de Andares, Setores e Zonas com integridade relacional e guards contra exclusão/inativação de elementos em uso ou com filhos ativos.
 - **Topologia de hardware (ISS-012):** CRUD de Leitores, Antenas e Portais; índice único parcial para porta ativa por leitor (`uq_antena_ativa_por_porta_leitor`); separação clara entre `reader_id` lógico do tópico e número serial físico.
 - **Topologia lógica versionada de portais (ISS-013):** Mapeamento temporal de antenas a lados do portal (A/B), zonas adjacentes (`zona_a_id`/`zona_b_id`) e funções operacionais (`entrada`, `saida`, `auxiliar`) com preservação estrita de histórico (`[inicio, fim)`), índice único parcial por antena ativa e consulta consolidada em join único.
+- **Debounce temporal de leituras (ISS-014):** Consolidação em memória por `(EPC, antena_id)` com event time, limite inclusivo, tolerância a eventos fora de ordem e RSSI agregado, mantendo todas as evidências em `leituras_brutas`.
 
 ### ⏳ O que está PLANEJADO (Próximos passos):
-- **Debounce temporal de leituras (ISS-014):** Agrupamento de leituras múltiplas de um mesmo EPC em janela de tempo para evitar saturação.
-- **Motor de inferência de passagens e direção (ISS-015):** Algoritmo para correlacionar leituras em antenas consecutivas de um portal, determinando entrada, saída ou indefinição.
-- **Atualização automática da localização de equipamentos (ISS-016):** Atualização da `ultima_zona_id` no cadastro do equipamento a partir de passagens confirmadas.
+- **Detecção de passagem (ISS-015):** Correlação de observações em antenas distintas de um portal.
+- **Inferência de direção (ISS-016):** Determinação do sentido da passagem.
+- **Última zona (ISS-017):** Atualização da zona conhecida do equipamento após passagem confirmada.
+- **Histórico de movimentações (ISS-018):** Registro das movimentações dos equipamentos.
 - **Painel/Dashboard web e relatórios gerenciais:** Interface visual para busca e monitoramento em tempo real.
 
 ---
@@ -96,8 +98,9 @@ Para compreender a rastreabilidade e integridade do dado ponta a ponta:
 3. **Normalização Canônica:** O adaptador correspondente valida tamanho, codificação UTF-8 e campos obrigatórios. Gera um `event_id` determinístico (`sha256:...`) invariante a horários de rede.
 4. **Resolução Topológica:** O repositório consulta o PostgreSQL para resolver `(reader_id, porta_numero) -> antena_id`, considerando estritamente antenas marcadas como ativas (`ativo = true`).
 5. **Persistência Idempotente:** É executado `INSERT INTO leituras_brutas ... ON CONFLICT (event_id) DO NOTHING`. Se a mensagem for reentregue pelo broker (devido a falhas anteriores), o banco ignora a inserção sem erro.
-6. **Confirmação (ACK):** Somente após o commit bem-sucedido no PostgreSQL o ingestor envia o `manual_ack` ao broker MQTT.
-7. **Resiliência a Falhas:** Se o PostgreSQL estiver fora do ar, o ACK **não** é enviado; o ingestor pausa o consumo no MQTT, aguarda com backoff e sonda o banco com `SELECT 1`. Ao restabelecer a conexão com o banco, o MQTT é reconectado, o broker reentrega a leitura pendente e o fluxo se completa sem perda de dados.
+6. **Debounce:** Somente leituras realmente inseridas alimentam a consolidação temporal por EPC e antena; duplicatas de `event_id` não aumentam a contagem.
+7. **Confirmação (ACK):** Somente após o commit bem-sucedido no PostgreSQL o ingestor envia o `manual_ack` ao broker MQTT.
+8. **Resiliência a Falhas:** Se o PostgreSQL estiver fora do ar, o ACK **não** é enviado; o ingestor pausa o consumo no MQTT, aguarda com backoff e sonda o banco com `SELECT 1`. Ao restabelecer a conexão com o banco, o MQTT é reconectado, o broker reentrega a leitura pendente e o fluxo se completa sem perda de dados.
 
 ---
 
@@ -124,6 +127,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Hierarquia Hospitalar (ISS-011)](implementations/iss-011-localizacao-hospitalar.md)
    - [Topologia de Hardware (ISS-012)](implementations/iss-012-topologia-hardware.md)
    - [Topologia Lógica de Portais (ISS-013)](implementations/iss-013-topologia-logica-portais.md)
+   - [Debounce Temporal de Leituras (ISS-014)](implementations/iss-014-debounce-leituras.md)
 4. Decisões Arquiteturais:
    - [Índice de ADRs](decisions/README.md)
 5. Ambiente e Testes:
@@ -157,6 +161,7 @@ docs/
 │   ├── iss-011-localizacao-hospitalar.md <- Andares, setores e zonas
 │   ├── iss-012-topologia-hardware.md <- Leitores, antenas, portais e integridade de porta
 │   ├── iss-013-topologia-logica-portais.md <- Topologia lógica versionada de portais, lados, zonas e funções
+│   ├── iss-014-debounce-leituras.md <- Consolidação temporal por EPC e antena
 │   └── iss-051-reorganizacao-documentacao.md <- Registro desta reestruturação (AGENTS.md)
 ├── experiments/                   <- Relatórios e evidências de testes práticos
 │   ├── README.md                  <- Síntese de experimentos e matriz de aceitação
@@ -180,5 +185,5 @@ docs/
 
 Em conformidade com as boas práticas científicas e as diretrizes do projeto:
 - **Ambiente de Hardware:** O projeto foi exaustivamente validado com simuladores e contêineres Docker reproduzindo os formatos do Identix EZ700. O aceite definitivo com **leitores físicos EZ700 e na rede Wi-Fi hospitalar** permanece como **PENDENTE DE VALIDAÇÃO FÍSICA** (aguardando liberação de infraestrutura de TI do HUPAA).
-- **Sem inferência de passagem ou localização ainda:** A persistência atual é de *leituras brutas* e a topologia lógica versionada está cadastrada (ISS-013). O agrupamento/debounce temporal (ISS-014), o cálculo de direção e passagem através de portais (ISS-015) e a atualização da localização do ativo (ISS-016) pertencem às próximas etapas.
+- **Sem inferência de passagem ou localização ainda:** A persistência atual é de *leituras brutas*, a topologia lógica versionada está cadastrada (ISS-013) e o debounce temporal produz observações consolidadas em execução normal (ISS-014). A detecção de passagem (ISS-015), a direção (ISS-016), a última zona (ISS-017) e o histórico de movimentações (ISS-018) pertencem às próximas etapas.
 - **Retenção de Leituras:** O expurgo ou particionamento de leituras brutas antigas depende de definição formal de governança com o hospital (RNF-015).

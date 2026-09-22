@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from db.runtime import DatabaseConfigurationError, create_app_engine
+from rfid_inference.debounce import DebounceProcessor
 
 from .config import Settings
 from .logging_config import configure_logging
@@ -26,7 +27,16 @@ def main() -> int:
     try:
         engine = create_app_engine()
         store = JsonlEventStore(settings.events_file)
-        receiver = MqttReceiver(settings, store, RawReadingRepository(engine))
+        debouncer = DebounceProcessor.from_milliseconds(
+            settings.rfid_debounce_window_ms,
+            settings.rfid_out_of_order_tolerance_ms,
+        )
+        receiver = MqttReceiver(
+            settings,
+            store,
+            RawReadingRepository(engine),
+            debouncer=debouncer,
+        )
         return receiver.run()
     except DatabaseConfigurationError as error:
         logging.getLogger(__name__).error("Configuração inválida: %s", error)
