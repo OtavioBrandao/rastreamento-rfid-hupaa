@@ -14,6 +14,8 @@ Mapeamento de erro:
 - payload inválido                           -> 422, direto pelo Pydantic
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -25,9 +27,43 @@ from api.schemas_equipamento import (
     EquipamentoPagina,
     EquipamentoResposta,
 )
+from api.schemas_movimentacao import MovimentacaoPagina, MovimentacaoResposta
 from db.models import Equipamento
+from rfid_movement import repository as movement_repository
 
 router = APIRouter(prefix="/equipamentos", tags=["equipamentos"])
+
+
+@router.get(
+    "/{equipamento_id}/movimentacoes",
+    response_model=MovimentacaoPagina,
+    summary="Consultar histórico de movimentações",
+)
+def listar_movimentacoes(
+    equipamento_id: int,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    inicio: datetime | None = Query(None),
+    fim: datetime | None = Query(None),
+    db: Session = Depends(get_db),
+) -> MovimentacaoPagina:
+    if any(value is not None and (value.tzinfo is None or value.utcoffset() is None)
+           for value in (inicio, fim)):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            detail="inicio e fim exigem fuso horário")
+    connection = db.connection()
+    if not movement_repository.equipment_exists(connection, equipamento_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="equipamento inexistente")
+    try:
+        result = movement_repository.list_for_equipment(
+            connection, equipamento_id, page=page, size=size, inicio=inicio, fim=fim
+        )
+    except ValueError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
+    return MovimentacaoPagina(
+        items=[MovimentacaoResposta(**vars(item)) for item in result.items],
+        page=result.page, size=result.size, total=result.total, pages=result.pages,
+    )
 
 
 def _para_resposta(equipamento: Equipamento) -> EquipamentoResposta:
