@@ -12,11 +12,12 @@ portais diferentes; um portal pode agregar antenas de leitores diferentes.
 `Leitor.reader_id` (origem no MQTT) é um campo SEPARADO de
 `identificador_serial` (número de série de fábrica).
 
-Inativação — DIFERENTE da ISS-011: inativar leitor/antena/portal NUNCA é
-bloqueado por `leituras_brutas`/`passagens` (nem por nada): hardware inativo
-continua referenciado pelo histórico, e é só um toggle idempotente de `ativo`,
-sem cascata e sem checagem de uso. (Já a `ZonaEmUso` da ISS-011 bloqueia por
-qualquer referência.) A validação existe na CRIAÇÃO/ASSOCIAÇÃO: antena exige
+Inativação: leituras brutas, passagens e mapeamentos históricos (fim preenchido)
+NUNCA bloqueiam a inativação de leitor, antena ou portal. Contudo, após a ISS-013,
+a existência de MAPEAMENTOS LÓGICOS ATIVOS (fim IS NULL) bloqueia a inativação de
+portais, antenas e leitores, para evitar que a interpretação topológica vigente seja
+invalidada enquanto os mapeamentos permanecerem ativos. Inativações históricas não bloqueiam.
+A validação de integridade existe na CRIAÇÃO/ASSOCIAÇÃO: antena exige
 leitor e zona ativos (e portal ativo, se informado); portal exige as duas zonas
 ativas.
 
@@ -209,6 +210,21 @@ class AntenaComMapeamentoAtivo(ErroHardware):
         )
 
 
+class LeitorComMapeamentosAtivos(ErroHardware):
+    """
+    ISS-013 guard: reader cannot be inactivated while its antennas participate in
+    active logical mappings in portals.
+    """
+
+    def __init__(self, leitor_id: int, total_mapeamentos: int) -> None:
+        self.leitor_id = leitor_id
+        self.total_mapeamentos = total_mapeamentos
+        super().__init__(
+            f"Leitor {leitor_id} possui {total_mapeamentos} antena(s) com mapeamento(s) lógico(s) ativo(s). "
+            "Inative ou reconfigure os mapeamentos antes de inativar o leitor."
+        )
+
+
 # --- helpers internos ------------------------------------------------------------
 
 
@@ -376,9 +392,21 @@ def atualizar_leitor(session: Session, leitor_id: int, campos: Mapping[str, Any]
 
 
 def inativar_leitor(session: Session, leitor_id: int) -> Leitor:
-    """Toggle idempotente. Sem cascata para as antenas, sem checagem de histórico."""
+    """Toggle idempotente. Sem cascata para antenas e não bloqueado por histórico,
+    mas bloqueado se alguma antena possuir mapeamento lógico ativo (ISS-013)."""
     leitor = buscar_leitor_por_id(session, leitor_id)
     if leitor.ativo:
+        total_ativos = session.scalar(
+            select(func.count())
+            .select_from(MapeamentoAntenaPortal)
+            .join(Antena, MapeamentoAntenaPortal.antena_id == Antena.id)
+            .where(
+                Antena.leitor_id == leitor_id,
+                MapeamentoAntenaPortal.fim.is_(None),
+            )
+        ) or 0
+        if total_ativos > 0:
+            raise LeitorComMapeamentosAtivos(leitor_id, total_ativos)
         leitor.ativo = False
         session.commit()
         session.refresh(leitor)
@@ -474,9 +502,20 @@ def atualizar_portal(session: Session, portal_id: int, campos: Mapping[str, Any]
 
 
 def inativar_portal(session: Session, portal_id: int) -> Portal:
-    """Toggle idempotente. NUNCA bloqueado por `passagens`/antenas que o referenciam."""
+    """Toggle idempotente. Não é bloqueado por passagens ou leituras brutas,
+    mas bloqueado se houver mapeamentos lógicos ativos (ISS-013)."""
     portal = buscar_portal_por_id(session, portal_id)
     if portal.ativo:
+        total_ativos = session.scalar(
+            select(func.count())
+            .select_from(MapeamentoAntenaPortal)
+            .where(
+                MapeamentoAntenaPortal.portal_id == portal_id,
+                MapeamentoAntenaPortal.fim.is_(None),
+            )
+        ) or 0
+        if total_ativos > 0:
+            raise PortalComMapeamentosAtivos(portal_id, total_ativos)
         portal.ativo = False
         session.commit()
         session.refresh(portal)
@@ -596,9 +635,22 @@ def atualizar_antena(session: Session, antena_id: int, campos: Mapping[str, Any]
 
 
 def inativar_antena(session: Session, antena_id: int) -> Antena:
-    """Toggle idempotente. NUNCA bloqueado por `leituras_brutas`/`passagens`."""
+    """Toggle idempotente. Não é bloqueado por passagens ou leituras brutas,
+    mas bloqueado se houver mapeamento lógico ativo (ISS-013)."""
     antena = buscar_antena_por_id(session, antena_id)
     if antena.ativo:
+        mapeamento_ativo = session.scalar(
+            select(MapeamentoAntenaPortal).where(
+                MapeamentoAntenaPortal.antena_id == antena_id,
+                MapeamentoAntenaPortal.fim.is_(None),
+            )
+        )
+        if mapeamento_ativo is not None:
+            raise AntenaComMapeamentoAtivo(
+                antena_id,
+                mapeamento_ativo.portal_id,
+                f"não é possível inativar a antena enquanto houver mapeamento lógico ativo no portal {mapeamento_ativo.portal_id}",
+            )
         antena.ativo = False
         session.commit()
         session.refresh(antena)
