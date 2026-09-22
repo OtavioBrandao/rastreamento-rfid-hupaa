@@ -50,8 +50,13 @@ def _saida(processo: subprocess.CompletedProcess) -> str:
     return processo.stdout + processo.stderr
 
 
-def _migrar(url, alvo: str) -> None:
-    processo = _alembic(url, "upgrade" if alvo != "base" else "downgrade", alvo)
+def _upgrade(url, alvo: str) -> None:
+    processo = _alembic(url, "upgrade", alvo)
+    assert processo.returncode == 0, _saida(processo)
+
+
+def _downgrade(url, alvo: str) -> None:
+    processo = _alembic(url, "downgrade", alvo)
     assert processo.returncode == 0, _saida(processo)
 
 
@@ -80,10 +85,10 @@ def _revisao_atual(url) -> str:
 
 def test_upgrade_e_downgrade_roundtrip_vazio(banco):
     """Verifies clean migration upgrade, downgrade, and re-upgrade on empty schema."""
-    _migrar(banco, REVISAO_ANTERIOR)
+    _upgrade(banco, REVISAO_ANTERIOR)
     assert _revisao_atual(banco) == REVISAO_ANTERIOR
 
-    _migrar(banco, REVISAO_ISS013)
+    _upgrade(banco, REVISAO_ISS013)
     assert _revisao_atual(banco) == REVISAO_ISS013
     assert {
         "id",
@@ -98,12 +103,12 @@ def test_upgrade_e_downgrade_roundtrip_vazio(banco):
     } <= _colunas(banco, "mapeamentos_antena_portal")
 
     # Downgrade
-    _migrar(banco, REVISAO_ANTERIOR)
+    _downgrade(banco, REVISAO_ANTERIOR)
     assert _revisao_atual(banco) == REVISAO_ANTERIOR
     assert _colunas(banco, "mapeamentos_antena_portal") == set()
 
     # Re-upgrade
-    _migrar(banco, REVISAO_ISS013)
+    _upgrade(banco, REVISAO_ISS013)
     assert _revisao_atual(banco) == REVISAO_ISS013
 
 
@@ -115,7 +120,7 @@ def test_upgrade_backfill_antenas_existentes_validas(banco):
     Antenna 3 (sem portal) -> remains unmapped
     Antenna 4 (inativa) -> remains unmapped
     """
-    _migrar(banco, REVISAO_ANTERIOR)
+    _upgrade(banco, REVISAO_ANTERIOR)
     _sql(
         banco,
         """
@@ -134,7 +139,7 @@ def test_upgrade_backfill_antenas_existentes_validas(banco):
         """,
     )
 
-    _migrar(banco, REVISAO_ISS013)
+    _upgrade(banco, REVISAO_ISS013)
 
     mapeamentos = _sql(
         banco,
@@ -155,7 +160,7 @@ def test_upgrade_aborta_com_zona_incompativel(banco):
     Fail-fast check: if an existing active antenna references a zone not belonging
     to the portal, migration must abort with a descriptive error.
     """
-    _migrar(banco, REVISAO_ANTERIOR)
+    _upgrade(banco, REVISAO_ANTERIOR)
     _sql(
         banco,
         """
@@ -184,7 +189,7 @@ def test_upgrade_aborta_com_funcao_indefinida(banco):
     Fail-fast check: if an existing active antenna tied to a portal has funcao='indefinido',
     migration must abort because active inference topology requires unambiguous function.
     """
-    _migrar(banco, REVISAO_ANTERIOR)
+    _upgrade(banco, REVISAO_ANTERIOR)
     _sql(
         banco,
         """
