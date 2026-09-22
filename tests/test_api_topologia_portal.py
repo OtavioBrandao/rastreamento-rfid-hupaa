@@ -54,13 +54,13 @@ def _criar_hierarquia_e_hardware(client):
     assert res_andar.status_code == 201
     andar_id = res_andar.json()["id"]
 
-    res_setor = client.post(f"/andares/{andar_id}/setores", json={"nome": f"Setor {_serial()}"})
+    res_setor = client.post("/setores", json={"andar_id": andar_id, "nome": f"Setor {_serial()}"})
     assert res_setor.status_code == 201
     setor_id = res_setor.json()["id"]
 
-    res_za = client.post(f"/setores/{setor_id}/zonas", json={"nome": f"Zona A {_serial()}"})
-    res_zb = client.post(f"/setores/{setor_id}/zonas", json={"nome": f"Zona B {_serial()}"})
-    res_zc = client.post(f"/setores/{setor_id}/zonas", json={"nome": f"Zona C {_serial()}"})
+    res_za = client.post("/zonas", json={"setor_id": setor_id, "nome": f"Zona A {_serial()}"})
+    res_zb = client.post("/zonas", json={"setor_id": setor_id, "nome": f"Zona B {_serial()}"})
+    res_zc = client.post("/zonas", json={"setor_id": setor_id, "nome": f"Zona C {_serial()}"})
     assert res_za.status_code == 201 and res_zb.status_code == 201 and res_zc.status_code == 201
     zona_a = res_za.json()
     zona_b = res_zb.json()
