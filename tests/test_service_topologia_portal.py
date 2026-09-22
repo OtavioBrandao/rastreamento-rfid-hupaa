@@ -29,6 +29,7 @@ from api.service_hardware import (
     criar_leitor,
     criar_portal,
     inativar_antena,
+    inativar_leitor,
     inativar_portal,
 )
 from api.service_localizacao import (
@@ -44,6 +45,7 @@ from api.service_topologia_portal import (
     AntenaNaoPertenceAoPortal,
     FuncaoInvalida,
     LadoInvalido,
+    LeitorInativo,
     MapeamentoAtivoExistente,
     MapeamentoJaEncerrado,
     PortalInativo,
@@ -330,6 +332,39 @@ def test_rejeitar_entidades_inativas_ou_inexistentes(db):
     inativar_antena(db, antena.id)
     with pytest.raises(AntenaInativa):
         criar_mapeamento(db, portal.id, antena.id, lado="a", funcao="entrada")
+
+
+def test_validar_leitor_ativo_para_mapeamento(db):
+    """
+    Active reader -> mapping allowed
+    Inactive reader -> mapping rejected with LeitorInativo
+    Reader status ('online'/'offline') does not affect mapping (ISS-012 separation).
+    """
+    _, _, zona_a, _, _, leitor, portal = _cenario_base(db)
+    antena = criar_antena(
+        db,
+        leitor_id=leitor.id,
+        porta_numero=1,
+        zona_associada_id=zona_a.id,
+        funcao="entrada",
+        portal_id=portal.id,
+    )
+
+    # 1. Leitor ativo (mesmo que conectividade seja offline) -> criação permitida
+    leitor.status = "offline"
+    db.commit()
+    map_obj = criar_mapeamento(db, portal.id, antena.id, lado="a", funcao="entrada")
+    assert map_obj.id is not None
+    assert map_obj.fim is None
+
+    # Inativa o mapeamento atual para liberar a antena para novo teste
+    inativar_mapeamento(db, map_obj.id)
+
+    # 2. Inativar leitor (ciclo de vida cadastral) -> criação de mapeamento deve ser rejeitada
+    inativar_leitor(db, leitor.id)
+    with pytest.raises(LeitorInativo) as exc:
+        criar_mapeamento(db, portal.id, antena.id, lado="a", funcao="entrada")
+    assert f"Leitor {leitor.id} associado à antena está inativo" in str(exc.value)
 
 
 def test_rejeitar_lado_ou_funcao_invalidos(db):

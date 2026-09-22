@@ -238,6 +238,15 @@ def test_erros_validacao_criacao_mapeamento_api(client):
     )
     assert res_dup.status_code == 409
 
+    # Inactive reader -> 422
+    client.post(f"/leitores/{leitor['id']}/inativar")
+    res_leitor_inativo = client.post(
+        f"/portais/{portal['id']}/mapeamentos",
+        json={"antena_id": antena_b["id"], "lado": "b", "funcao": "saida"},
+    )
+    assert res_leitor_inativo.status_code == 422
+    assert "inativo" in res_leitor_inativo.json()["detail"]
+
 
 def test_atualizacao_temporal_e_inativacao_api(client):
     zona_a, zona_b, _, leitor, portal, antena_a, _ = _criar_hierarquia_e_hardware(client)
