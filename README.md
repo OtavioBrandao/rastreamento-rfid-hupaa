@@ -90,6 +90,17 @@ uvicorn api.main:app --reload
 # Acesse a documentação interativa em http://127.0.0.1:8000/docs
 ```
 
+### Iniciar o frontend demonstrativo (Etapa A da ISS-032):
+
+```bash
+cd frontend
+npm ci
+npm run dev
+# Abra http://localhost:5173/
+```
+
+O Dashboard usa dados fictícios isolados e ainda não consulta a API. Veja [escopo e estados demonstrativos](docs/implementations/iss-032-frontend-dashboard.md).
+
 ---
 
 ## 4. Comandos de Verificação e Testes
