@@ -1,9 +1,23 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
+import { StatusBadge } from '../components/DashboardParts'
+import type { DetectionStatus } from '../types/dashboard'
 
 beforeEach(() => { window.history.replaceState(null, '', '/'); window.location.hash = '' })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
+
+describe('StatusBadge', () => {
+  it.each<[DetectionStatus, string]>([
+    ['recent', 'Recente'],
+    ['outdated', 'Desatualizada'],
+    ['never', 'Nunca detectado'],
+  ])('exibe texto acessível para %s', (status, label) => {
+    const { container } = render(<StatusBadge status={status} />)
+    expect(container.querySelector('.status-badge')).toHaveTextContent(label)
+    expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument()
+  })
+})
 
 describe('Etapa A do dashboard', () => {
   it('mostra título, cards e última zona com estado', async () => {
