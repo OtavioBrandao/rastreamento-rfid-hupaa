@@ -16,7 +16,7 @@ Este documento apresenta a arquitetura técnica de alto nível do **RFID Hospita
 
 ## 2. Fluxo de Ingestão de Leitura RFID
 
-O diagrama abaixo ilustra o caminho percorrido por uma leitura RFID desde a emissão pela tag física até a persistência no banco de dados e as etapas futuras de inferência:
+O diagrama abaixo ilustra o caminho percorrido por uma leitura RFID desde a emissão pela tag física até a projeção da última zona:
 
 ```mermaid
 flowchart TD
@@ -66,11 +66,8 @@ flowchart TD
     INSERT -->|Somente inserted, após commit| DEBOUNCE
     DEBOUNCE --> INFERENCE
     INFERENCE --> DIRECTION
-    DIRECTION -.-> UPDATE_LOC
-    UPDATE_LOC -.-> HISTORY
-
-    classDef future fill:#f9f,stroke:#333,stroke-dasharray: 5 5;
-    class UPDATE_LOC,HISTORY future;
+    DIRECTION --> UPDATE_LOC
+    UPDATE_LOC --> HISTORY
 ```
 
 ---
@@ -136,6 +133,8 @@ classDiagram
         +String identificador_interno
         +BigInt ultima_zona_id
         +DateTime ultima_deteccao_em
+        +BigInt ultima_passagem_id
+        +BigInt ultima_movimentacao_id
     }
 
     class Tag {
@@ -207,17 +206,16 @@ classDiagram
 
 ## 4. Estado do processamento de inferência
 
-Para fins de avaliação e clareza do escopo do MVP, debounce, passagem, direção e
-infraestrutura do histórico estão disponíveis. A ISS-017 ainda integrará a
-gravação do histórico à atualização da última localização em uma transação:
+Para fins de avaliação e clareza do escopo do MVP, debounce, passagem, direção,
+histórico e última localização estão implementados no pipeline lógico:
 
 | Recurso | Status Atual | Issue Prevista | Descrição |
 |---|---|---|---|
 | **Debounce Temporal** | Implementado | **ISS-014** | Consolidação por `(EPC, antena_id)` usando event time, tolerância a reordenação e preservação integral das leituras brutas. |
 | **Detecção de Passagem** | Implementado | **ISS-015** | Correlação temporal por `(EPC, portal_id)` entre lados opostos, topologia histórica e persistência idempotente com `direcao=NULL`. |
 | **Inferência de Direção** | Implementado | **ISS-016** | A→B/B→A e zonas via topologia histórica; empate/próximos geram `ambiguous`, inconsistência gera `unknown`. |
-| **Última Zona do Ativo** | Pendente | **ISS-017** | Atualização automática dos campos `ultima_zona_id`, `ultima_deteccao_em` e `ultima_passagem_id` em `equipamentos`. |
-| **Histórico de Movimentações** | Infraestrutura implementada | **ISS-018** | Ledger append-only, resolução temporal de EPC, correção manual e consulta paginada; gravação automática aguarda ISS-017. |
+| **Última Zona do Ativo** | Implementado | **ISS-017** | Projeção transacional em `equipamentos`, com event time e referência ao histórico. |
+| **Histórico de Movimentações** | Implementado | **ISS-018** | Ledger append-only, resolução temporal de EPC, correção manual e consulta paginada; gravação automática integrada à ISS-017. |
 
 ---
 

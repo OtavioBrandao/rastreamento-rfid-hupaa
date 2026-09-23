@@ -28,9 +28,10 @@ Documento de apoio à issue de modelagem (Épico E1, Must, RF-001 a RF-023, RNF-
 | ultima_zona_id | bigint | FK → zonas, NULL |
 | ultima_deteccao_em | timestamptz | NULL |
 | ultima_passagem_id | bigint | FK → passagens, NULL |
+| ultima_movimentacao_id | bigint | FK → historico_movimentacoes, NULL; registro que originou a projeção |
 | created_at / updated_at | timestamptz | NOT NULL, default now() |
 
-> RF-012 (última zona conhecida) foi resolvido como **colunas diretas no próprio equipamento**, não uma tabela separada — é uma relação 1:1, e criar uma tabela `localizacoes_atuais` só adicionaria um join sem ganho real.
+> RF-012 usa uma projeção diretamente no equipamento. `ultima_movimentacao_id` aponta para a fonte auditável, inclusive após correção manual, quando `ultima_passagem_id` é NULL. `registrado_em` do movimento é o tempo de processamento; `updated_at` do equipamento também muda por edições cadastrais.
 
 **Índices:** `ultima_zona_id` (busca por localização, RF-014/015), `status`.
 
@@ -252,7 +253,7 @@ monotônico usado para perceber silêncio não substitui `lido_em` no agrupament
 | justificativa | text | Obrigatória na correção manual |
 | registro_anterior_id | bigint | FK autorreferente; correção preserva o registro original |
 
-**Índices:** `(equipamento_id, movimentada_em, id)` para consulta por período e ordem determinística; `(equipamento_id, registrado_em)` preservado. O índice único parcial em `passagem_id` para registros automáticos impede duplicação concorrente. Campos novos aceitam NULL para preservar linhas anteriores à ISS-018; novas inserções obedecem ao CHECK. O serviço grava apenas dentro da transação fornecida e não altera `equipamentos`.
+**Índices:** `(equipamento_id, movimentada_em, id)` para consulta por período e ordem determinística; `(equipamento_id, registrado_em)` preservado. O índice único parcial em `passagem_id` para registros automáticos impede duplicação concorrente. Campos novos aceitam NULL para preservar linhas anteriores à ISS-018; novas inserções obedecem ao CHECK. O serviço de ledger não altera `equipamentos`; a ISS-017 chama o append e atualiza a projeção na mesma transação.
 
 ### `perfis` / `usuarios` (RF-021, RF-022)
 Simples: `perfis` com `operacional`/`administrador`; `usuarios` referenciando `perfis`, com `email` único e `senha_hash` (nunca senha em texto puro).
@@ -298,9 +299,9 @@ Uma leitura de EPC não cadastrado (sem nenhuma linha em `associacoes_tag_equipa
 ## 4. Cenários de validação cruzada (para revisão da dupla)
 
 1. **Cadastro:** `tipos_equipamento` → `equipamentos` → `tags` → `associacoes_tag_equipamento` (ativa).
-2. **Inferência:** `leituras_brutas` → observações por antena (ISS-014) → `passagens` com `direcao=NULL` (ISS-015) → direção e zonas na própria passagem (ISS-016). A ISS-018 fornece append e consulta do histórico; a ISS-017 ainda integrará esse append à atualização de `equipamentos` na mesma transação.
+2. **Inferência:** `leituras_brutas` → observações por antena (ISS-014) → `passagens` com `direcao=NULL` (ISS-015) → direção e zonas (ISS-016) → histórico e última zona na mesma transação (ISS-018/ISS-017).
 3. **Troca de tag:** associação ativa antiga recebe `fim = now()`; nova linha criada para a nova tag no mesmo equipamento — o equipamento mantém histórico completo de EPCs já usados, sem perder o histórico de movimentação anterior (que referencia o equipamento, não a tag).
-4. **Correção manual:** ISS-018 pode anexar novo registro com `passagem_id = NULL`, `origem_registro='correcao_manual'`, justificativa e referência ao registro anterior. A projeção de última localização e eventual auditoria de usuário dependerão da integração transacional da ISS-017.
+4. **Correção manual:** O serviço interno ISS-017 anexa novo registro com `passagem_id = NULL`, `origem_registro='correcao_manual'`, justificativa e referência ao registro anterior, e atualiza a projeção atomicamente. Autorização e API administrativa permanecem para ISS-025/ISS-027.
 
 ## 5. Decisões e dúvidas pendentes do HUPAA
 

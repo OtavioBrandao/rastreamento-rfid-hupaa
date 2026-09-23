@@ -23,10 +23,11 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Debounce Temporal (ISS-014):** Consolidação em memória por `(EPC, antena_id)` usando event time, tolerância configurável a reordenação e estatísticas de RSSI, sem remover leituras brutas.
 - **Detecção de Passagem (ISS-015):** Correlação temporal de observações em lados opostos do mesmo portal, com evidências rastreáveis e `direcao=NULL`.
 - **Inferência de Direção (ISS-016):** Interpretação da ordem temporal A→B/B→A com topologia histórica, zonas de origem/destino e estados `confirmed`, `ambiguous` e `unknown`. Tolerância temporal inicial configurável de 100 ms, ainda sem validação física.
-- **Histórico de Movimentações (ISS-018):** Ledger append-only, resolução temporal EPC → equipamento, correção manual e consulta cronológica paginada. A gravação participa de transação externa; a integração automática fica para a ISS-017.
+- **Histórico de Movimentações (ISS-018):** Ledger append-only, resolução temporal EPC → equipamento, correção manual e consulta cronológica paginada.
+- **Última Zona do Equipamento (ISS-017):** Passagem confirmada grava histórico e atualiza a projeção em uma transação; eventos atrasados não fazem a zona regredir e a reconciliação recupera falhas após o commit da direção.
 
 ### ⏳ Próximos Passos (Backlog Imediato):
-- **ISS-017:** Atualização da última zona do equipamento.
+- **Validação física:** Calibrar debounce, janela de passagem e tolerância de direção no HUPAA.
 
 > [!NOTE]
 > O aceite final com **leitores físicos Identix EZ700 e na rede Wi-Fi hospitalar** permanece como **PENDENTE DE VALIDAÇÃO FÍSICA**, aguardando infraestrutura de TI do HUPAA. Os testes atuais comprovam o pipeline lógico via simuladores e contêineres Docker.
@@ -47,6 +48,8 @@ flowchart LR
     PASSAGEM --> POSTGRES
     POSTGRES --> DIRECAO["ISS-016: direção e zonas na passagem"]
     DIRECAO --> POSTGRES
+    DIRECAO --> LOCALIZACAO["ISS-017: histórico + última zona"]
+    LOCALIZACAO --> POSTGRES
     INGESTOR -->|Manual ACK| BROKER
     FASTAPI["FastAPI API REST<br/>(Equipamentos, Zonas, Hardware)"] --> POSTGRES
 ```
@@ -135,6 +138,7 @@ A documentação detalhada foi reorganizada segundo a **[Issue #51](docs/impleme
   - [ISS-015: Detecção de Passagem](docs/implementations/iss-015-deteccao-passagem.md)
   - [ISS-016: Inferência de Direção](docs/implementations/iss-016-inferencia-direcao.md)
   - [ISS-018: Histórico de Movimentações](docs/implementations/iss-018-historico-movimentacoes.md)
+  - [ISS-017: Última Localização](docs/implementations/iss-017-ultima-localizacao.md)
 - **Experimentos e Evidências:**
   - [Índice de Evidências e Matriz de Testes](docs/experiments/README.md)
   - [Evidências MQTT e Rede](docs/experiments/mqtt/)

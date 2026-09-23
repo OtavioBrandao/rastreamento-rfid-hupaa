@@ -28,7 +28,7 @@ def test_empty_upgrade_repeat_downgrade_reupgrade(pg_empty_schema):
         for index in inspector.get_indexes("passagens")
     )
     with pg_empty_schema.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "f018a1b2c3d4"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "a017b1c2d3e4"
 
 
 def test_existing_reader_receives_serial_as_initial_reader_id(pg_empty_schema):
@@ -154,3 +154,50 @@ def test_iss018_schema_roundtrip_and_legacy_row(pg_empty_schema):
     command.upgrade(config, "head")
     with pg_empty_schema.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM historico_movimentacoes")) == 1
+
+
+def test_iss017_projection_reference_roundtrip(pg_empty_schema):
+    config = migration_config()
+    command.upgrade(config, "f018a1b2c3d4")
+    with pg_empty_schema.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO tipos_equipamento (id,nome,nome_normalizado) "
+            "VALUES (1,'tipo','tipo')"
+        ))
+        connection.execute(text(
+            "INSERT INTO andares (id,nome,nome_normalizado) VALUES (1,'a','a')"
+        ))
+        connection.execute(text(
+            "INSERT INTO setores (id,andar_id,nome,nome_normalizado) VALUES (1,1,'s','s')"
+        ))
+        connection.execute(text(
+            "INSERT INTO zonas (id,setor_id,nome,nome_normalizado) VALUES (1,1,'z','z')"
+        ))
+        connection.execute(text(
+            "INSERT INTO equipamentos (id,nome,tipo_id,identificador_interno,"
+            "identificador_interno_normalizado) VALUES (1,'eq',1,'EQ','eq')"
+        ))
+        connection.execute(text(
+            "INSERT INTO historico_movimentacoes (id,equipamento_id,zona_destino_id,"
+            "origem_registro,justificativa,movimentada_em) "
+            "VALUES (1,1,1,'correcao_manual','teste','2026-09-22 10:00:00+00')"
+        ))
+    command.upgrade(config, "head")
+    with pg_empty_schema.connect() as connection:
+        assert connection.scalar(text(
+            "SELECT ultima_movimentacao_id FROM equipamentos WHERE id=1"
+        )) is None
+        assert connection.scalar(text("SELECT count(*) FROM historico_movimentacoes")) == 1
+    with pg_empty_schema.begin() as connection:
+        connection.execute(text(
+            "UPDATE equipamentos SET ultima_movimentacao_id=1 WHERE id=1"
+        ))
+    command.downgrade(config, "f018a1b2c3d4")
+    with pg_empty_schema.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM equipamentos")) == 1
+        assert connection.scalar(text("SELECT count(*) FROM historico_movimentacoes")) == 1
+    command.upgrade(config, "head")
+    with pg_empty_schema.connect() as connection:
+        assert connection.scalar(text(
+            "SELECT ultima_movimentacao_id FROM equipamentos WHERE id=1"
+        )) is None
