@@ -14,7 +14,7 @@ Mapeamento de erro:
 - payload inválido                           -> 422, direto pelo Pydantic
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -29,6 +29,7 @@ from api.schemas_equipamento import (
 )
 from api.schemas_movimentacao import MovimentacaoPagina, MovimentacaoResposta
 from db.models import Equipamento
+from rfid_location.recency import classify_recency, recency_threshold_from_env
 from rfid_movement import repository as movement_repository
 
 router = APIRouter(prefix="/equipamentos", tags=["equipamentos"])
@@ -66,7 +67,14 @@ def listar_movimentacoes(
     )
 
 
-def _para_resposta(equipamento: Equipamento) -> EquipamentoResposta:
+def get_recency_context() -> tuple[datetime, timedelta]:
+    """Relógio UTC e configuração da API, capturados uma vez por request."""
+    return datetime.now(timezone.utc), recency_threshold_from_env()
+
+
+def _para_resposta(
+    equipamento: Equipamento, recency_context: tuple[datetime, timedelta],
+) -> EquipamentoResposta:
     """
     Monta a resposta a partir do relacionamento `tipo` já carregado pelo
     serviço (`joinedload`/`refresh` explícito) — nunca dispara query nova
@@ -82,6 +90,10 @@ def _para_resposta(equipamento: Equipamento) -> EquipamentoResposta:
         identificador_interno_normalizado=equipamento.identificador_interno_normalizado,
         descricao=equipamento.descricao,
         status=equipamento.status,
+        ultima_deteccao_em=equipamento.ultima_deteccao_em,
+        estado_recencia=classify_recency(
+            equipamento.ultima_deteccao_em, *recency_context
+        ),
         created_at=equipamento.created_at,
         updated_at=equipamento.updated_at,
     )
@@ -96,6 +108,7 @@ def _para_resposta(equipamento: Equipamento) -> EquipamentoResposta:
 def criar_equipamento(
     payload: EquipamentoCriar,
     db: Session = Depends(get_db),
+    recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
     try:
         equipamento = service.criar(
@@ -109,7 +122,7 @@ def criar_equipamento(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(erro)) from erro
     except service.IdentificadorDuplicado as erro:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(erro)) from erro
-    return _para_resposta(equipamento)
+    return _para_resposta(equipamento, recency_context)
 
 
 @router.get(
@@ -122,10 +135,11 @@ def listar_equipamentos(
     size: int = Query(service.TAMANHO_PAGINA_PADRAO, ge=1, le=service.TAMANHO_PAGINA_MAXIMO),
     incluir_inativos: bool = Query(False),
     db: Session = Depends(get_db),
+    recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoPagina:
     pagina = service.listar(db, page=page, size=size, incluir_inativos=incluir_inativos)
     return EquipamentoPagina(
-        items=[_para_resposta(item) for item in pagina.items],
+        items=[_para_resposta(item, recency_context) for item in pagina.items],
         page=pagina.page,
         size=pagina.size,
         total=pagina.total,
@@ -141,6 +155,7 @@ def listar_equipamentos(
 def buscar_equipamento_por_identificador(
     identificador_interno: str,
     db: Session = Depends(get_db),
+    recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
     try:
         equipamento = service.buscar_por_identificador(db, identificador_interno)
@@ -149,7 +164,7 @@ def buscar_equipamento_por_identificador(
         service.EquipamentoNaoEncontradoPorIdentificador,
     ) as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
-    return _para_resposta(equipamento)
+    return _para_resposta(equipamento, recency_context)
 
 
 @router.get(
@@ -160,12 +175,13 @@ def buscar_equipamento_por_identificador(
 def detalhar_equipamento(
     equipamento_id: int,
     db: Session = Depends(get_db),
+    recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
     try:
         equipamento = service.buscar_por_id(db, equipamento_id)
     except service.EquipamentoNaoEncontrado as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
-    return _para_resposta(equipamento)
+    return _para_resposta(equipamento, recency_context)
 
 
 @router.patch(
@@ -177,6 +193,7 @@ def atualizar_equipamento(
     equipamento_id: int,
     payload: EquipamentoAtualizar,
     db: Session = Depends(get_db),
+    recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
     try:
         equipamento = service.atualizar(
@@ -191,7 +208,7 @@ def atualizar_equipamento(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
     except service.TipoEquipamentoInvalido as erro:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(erro)) from erro
-    return _para_resposta(equipamento)
+    return _para_resposta(equipamento, recency_context)
 
 
 @router.post(
@@ -202,12 +219,13 @@ def atualizar_equipamento(
 def inativar_equipamento(
     equipamento_id: int,
     db: Session = Depends(get_db),
+    recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
     try:
         equipamento = service.inativar(db, equipamento_id)
     except service.EquipamentoNaoEncontrado as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
-    return _para_resposta(equipamento)
+    return _para_resposta(equipamento, recency_context)
 
 
 @router.post(
@@ -218,9 +236,10 @@ def inativar_equipamento(
 def reativar_equipamento(
     equipamento_id: int,
     db: Session = Depends(get_db),
+    recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
     try:
         equipamento = service.reativar(db, equipamento_id)
     except service.EquipamentoNaoEncontrado as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
-    return _para_resposta(equipamento)
+    return _para_resposta(equipamento, recency_context)
