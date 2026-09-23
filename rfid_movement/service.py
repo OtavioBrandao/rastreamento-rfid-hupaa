@@ -32,6 +32,9 @@ def append_automatic_movement(connection: Connection, passage_id: int) -> Moveme
     if not valid:
         logger.info("rfid_movement_invalid_passage", extra={"passage_id": passage_id})
         return MovementWriteResult("invalid_passage", passagem_id=passage_id)
+    existing = repository.get_automatic_for_passage(connection, passage_id)
+    if existing is not None:
+        return MovementWriteResult("duplicate", existing.id, existing.equipamento_id, passage_id)
     equipment_ids = repository.resolve_equipment(
         connection, passage["epc"], passage["detectada_em"]
     )
