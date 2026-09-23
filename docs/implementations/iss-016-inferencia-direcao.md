@@ -1,5 +1,9 @@
 # ISS-016 — Inferência temporal da direção da passagem
 
+> Estado atual: a ISS-017 já consome passagens `confirmed` e atualiza histórico e
+> última localização. As referências a trabalho futuro abaixo descrevem a
+> fronteira original da entrega ISS-016.
+
 ## Problema e importância para o MVP
 
 A ISS-014 consolida leituras repetidas por EPC e antena. A ISS-015 detecta a

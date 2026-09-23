@@ -104,6 +104,9 @@ class Equipamento(Base):
     ultima_zona_id = Column(BigInteger, ForeignKey("zonas.id"), nullable=True)
     ultima_deteccao_em = Column(TIMESTAMP(timezone=True), nullable=True)
     ultima_passagem_id = Column(BigInteger, ForeignKey("passagens.id"), nullable=True)
+    ultima_movimentacao_id = Column(
+        BigInteger, ForeignKey("historico_movimentacoes.id"), nullable=True
+    )
 
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     # onupdate=func.now() só dispara em UPDATEs feitos VIA SQLAlchemy.
@@ -119,8 +122,14 @@ class Equipamento(Base):
     tipo = relationship("TipoEquipamento", back_populates="equipamentos")
     ultima_zona = relationship("Zona", foreign_keys=[ultima_zona_id])
     ultima_passagem = relationship("Passagem", foreign_keys=[ultima_passagem_id])
+    ultima_movimentacao = relationship(
+        "HistoricoMovimentacao", foreign_keys=[ultima_movimentacao_id]
+    )
     associacoes_tag = relationship("AssociacaoTagEquipamento", back_populates="equipamento")
-    historico = relationship("HistoricoMovimentacao", back_populates="equipamento")
+    historico = relationship(
+        "HistoricoMovimentacao", back_populates="equipamento",
+        foreign_keys="HistoricoMovimentacao.equipamento_id",
+    )
 
     __table_args__ = (
         Index("ix_equipamentos_ultima_zona_id", "ultima_zona_id"),
@@ -605,7 +614,9 @@ class HistoricoMovimentacao(Base):
     origem_registro = Column(String, nullable=False)  # 'passagem_automatica' | 'correcao_manual'
     registrado_em = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
-    equipamento = relationship("Equipamento", back_populates="historico")
+    equipamento = relationship(
+        "Equipamento", back_populates="historico", foreign_keys=[equipamento_id]
+    )
     zona_origem = relationship("Zona", foreign_keys=[zona_origem_id])
     zona_destino = relationship("Zona", foreign_keys=[zona_destino_id])
     passagem = relationship("Passagem")

@@ -12,6 +12,7 @@ from rfid_inference.direction_service import DirectionInferenceService
 from rfid_inference.passage import PassageDetector
 from rfid_inference.passage_repository import PassageRepository
 from rfid_inference.passage_service import PassageInferenceService
+from rfid_location.service import LocationProjectionService
 
 from .config import Settings
 from .logging_config import configure_logging
@@ -37,10 +38,13 @@ def main() -> int:
             settings.rfid_debounce_window_ms,
             settings.rfid_out_of_order_tolerance_ms,
         )
+        location_service = LocationProjectionService(engine)
         direction_service = DirectionInferenceService(
-            DirectionRepository(engine), settings.rfid_direction_ambiguity_ms
+            DirectionRepository(engine), settings.rfid_direction_ambiguity_ms,
+            confirmed_handler=location_service.process_passage,
         )
         direction_service.process_pending()
+        location_service.process_pending()
         passage_service = PassageInferenceService(
             PassageDetector(
                 timedelta(milliseconds=settings.rfid_passage_max_interval_ms),
@@ -55,6 +59,7 @@ def main() -> int:
         def inference_tick(now_monotonic: float) -> None:
             passage_service.tick(now_monotonic)
             direction_service.tick(now_monotonic)
+            location_service.tick(now_monotonic)
 
         receiver = MqttReceiver(
             settings,

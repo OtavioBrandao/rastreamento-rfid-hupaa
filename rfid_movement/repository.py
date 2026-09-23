@@ -67,6 +67,14 @@ def get_movement(connection: Connection, movement_id: int):
     ).mappings().one_or_none()
 
 
+def get_automatic_for_passage(connection: Connection, passage_id: int):
+    return connection.execute(
+        select(HistoricoMovimentacao.id, HistoricoMovimentacao.equipamento_id)
+        .where(HistoricoMovimentacao.passagem_id == passage_id,
+               HistoricoMovimentacao.origem_registro == "passagem_automatica")
+    ).one_or_none()
+
+
 def equipment_exists(connection: Connection, equipment_id: int) -> bool:
     return connection.scalar(select(Equipamento.id).where(Equipamento.id == equipment_id)) is not None
 
