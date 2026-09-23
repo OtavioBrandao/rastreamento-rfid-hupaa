@@ -29,6 +29,7 @@ erDiagram
     LEITURAS_BRUTAS ||--o{ HISTORICO_MOVIMENTACOES : "evidencia origem"
     LEITURAS_BRUTAS ||--o{ HISTORICO_MOVIMENTACOES : "evidencia destino"
     HISTORICO_MOVIMENTACOES ||--o{ HISTORICO_MOVIMENTACOES : "registro anterior"
+    HISTORICO_MOVIMENTACOES ||--o{ EQUIPAMENTOS : "origem da ultima localizacao"
     ZONAS ||--o{ EQUIPAMENTOS : "ultima zona conhecida (opcional)"
 
     PERFIS ||--o{ USUARIOS : define
@@ -49,6 +50,7 @@ erDiagram
         bigint ultima_zona_id FK
         timestamptz ultima_deteccao_em
         bigint ultima_passagem_id FK
+        bigint ultima_movimentacao_id FK
         timestamptz created_at
         timestamptz updated_at
     }
