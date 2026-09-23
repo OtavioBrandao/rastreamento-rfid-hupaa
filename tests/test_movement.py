@@ -25,6 +25,7 @@ def passage(**changes):
 def test_confirmed_builds_event_from_persisted_passage():
     with patch("rfid_movement.service.repository") as repo:
         repo.load_passage.return_value = passage()
+        repo.get_automatic_for_passage.return_value = None
         repo.resolve_equipment.return_value = (42,)
         repo.append.return_value = (8, True)
         result = append_automatic_movement(Mock(), 1)
@@ -60,6 +61,7 @@ def test_invalid_passage_never_resolves_or_inserts(changes):
 def test_unresolved_or_ambiguous_epc_does_not_insert(owners, status):
     with patch("rfid_movement.service.repository") as repo:
         repo.load_passage.return_value = passage()
+        repo.get_automatic_for_passage.return_value = None
         repo.resolve_equipment.return_value = owners
         assert append_automatic_movement(Mock(), 1).status == status
         repo.append.assert_not_called()
@@ -68,6 +70,7 @@ def test_unresolved_or_ambiguous_epc_does_not_insert(owners, status):
 def test_retry_reports_duplicate():
     with patch("rfid_movement.service.repository") as repo:
         repo.load_passage.return_value = passage()
+        repo.get_automatic_for_passage.return_value = None
         repo.resolve_equipment.return_value = (42,)
         repo.append.return_value = (8, False)
         assert append_automatic_movement(Mock(), 1).status == "duplicate"
