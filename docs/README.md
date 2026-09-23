@@ -133,6 +133,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Inferência de Direção (ISS-016)](implementations/iss-016-inferencia-direcao.md)
    - [Histórico de Movimentações (ISS-018)](implementations/iss-018-historico-movimentacoes.md)
    - [Última Localização (ISS-017)](implementations/iss-017-ultima-localizacao.md)
+   - [Frontend e Dashboard Operacional (ISS-032, Etapa A)](implementations/iss-032-frontend-dashboard.md)
 4. Decisões Arquiteturais:
    - [Índice de ADRs](decisions/README.md)
 5. Ambiente e Testes:
