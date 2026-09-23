@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from db.models import (
     Antena,
+    AssociacaoTagEquipamento,
     Equipamento,
     HistoricoMovimentacao,
     Leitor,
@@ -17,6 +18,7 @@ from db.models import (
     MapeamentoAntenaPortal,
     Passagem,
     Portal,
+    Tag,
     TipoEquipamento,
     Zona,
 )
@@ -29,6 +31,7 @@ from rfid_ingestion.config import Settings
 from rfid_ingestion.mqtt_client import MqttReceiver
 from rfid_ingestion.persistence import JsonlEventStore
 from rfid_ingestion.repository import RawReadingRepository
+from rfid_location.service import LocationProjectionService
 
 T0 = datetime(2026, 9, 22, 12, tzinfo=timezone.utc)
 
@@ -247,7 +250,7 @@ def _message(mid, antenna, at):
     ("2026-09-22T12:00:01.000Z", "confirmed"),
     ("2026-09-22T12:00:00.050Z", "ambiguous"),
 ])
-def test_full_pipeline_preserves_equipment_and_history(
+def test_full_pipeline_projects_only_confirmed_passages(
     pg_engine, portal_setup, tmp_path, second_time, status,
 ):
     with pg_engine.begin() as connection:
@@ -259,7 +262,16 @@ def test_full_pipeline_preserves_equipment_and_history(
             identificador_interno="ISS016-1",
             identificador_interno_normalizado="iss016-1",
         ).returning(Equipamento.id)).scalar_one()
-    direction = DirectionInferenceService(DirectionRepository(pg_engine), 100)
+        tag = connection.scalar(Tag.__table__.insert().values(
+            epc="EPC-E2E").returning(Tag.id))
+        connection.execute(AssociacaoTagEquipamento.__table__.insert().values(
+            tag_id=tag, equipamento_id=equipment, inicio=T0 - timedelta(days=1),
+        ))
+    location = LocationProjectionService(pg_engine)
+    direction = DirectionInferenceService(
+        DirectionRepository(pg_engine), 100,
+        confirmed_handler=location.process_passage,
+    )
     passage = PassageInferenceService(
         PassageDetector(timedelta(seconds=3)), PassageRepository(pg_engine),
         passage_persisted=direction.process_pending,
@@ -285,11 +297,23 @@ def test_full_pipeline_preserves_equipment_and_history(
         assert row.direcao == ("a_para_b" if status == "confirmed" else "indeterminada")
         assert row.zona_origem_id == (portal_setup["zone_a"] if status == "confirmed" else None)
         assert row.zona_destino_id == (portal_setup["zone_b"] if status == "confirmed" else None)
-        assert connection.execute(select(
+        projected = connection.execute(select(
             Equipamento.ultima_zona_id, Equipamento.ultima_deteccao_em,
-            Equipamento.ultima_passagem_id
-        ).where(Equipamento.id == equipment)).one() == (None, None, None)
-        assert connection.scalar(select(func.count()).select_from(HistoricoMovimentacao)) == 0
+            Equipamento.ultima_passagem_id, Equipamento.ultima_movimentacao_id,
+        ).where(Equipamento.id == equipment)).one()
+        if status == "confirmed":
+            movement = connection.execute(
+                select(HistoricoMovimentacao.__table__)
+            ).mappings().one()
+            assert projected == (
+                portal_setup["zone_b"], row.detectada_em, row.id, movement["id"],
+            )
+            assert movement["zona_origem_id"] == portal_setup["zone_a"]
+            assert movement["zona_destino_id"] == portal_setup["zone_b"]
+            assert movement["movimentada_em"] == row.detectada_em
+        else:
+            assert projected == (None, None, None, None)
+            assert connection.scalar(select(func.count()).select_from(HistoricoMovimentacao)) == 0
 
 
 def test_database_constraints_reject_invalid_state_and_fk(pg_engine, portal_setup):

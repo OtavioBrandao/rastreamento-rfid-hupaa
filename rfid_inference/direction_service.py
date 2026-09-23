@@ -29,6 +29,7 @@ class DirectionInferenceService:
         self, repository: DirectionRepository, ambiguity_ms: int, *,
         monotonic_clock: Callable[[], float] = time.monotonic,
         retry_interval_seconds: float = 5.0,
+        confirmed_handler: Callable[[int], object] | None = None,
     ) -> None:
         if type(ambiguity_ms) is not int or ambiguity_ms < 0:
             raise ValueError("ambiguidade deve ser inteiro não negativo")
@@ -36,6 +37,7 @@ class DirectionInferenceService:
         self.ambiguity = timedelta(milliseconds=ambiguity_ms)
         self.monotonic_clock = monotonic_clock
         self.retry_interval_seconds = retry_interval_seconds
+        self.confirmed_handler = confirmed_handler
         self._next_retry_at = 0.0
         self.counters = DirectionCounters()
 
@@ -67,6 +69,15 @@ class DirectionInferenceService:
                 "passage_id": result.passage_id, "epc": result.epc,
                 "portal_id": result.portal_id, "reason": result.rule,
             }))
+        if result.status == "confirmed" and self.confirmed_handler is not None:
+            try:
+                self.confirmed_handler(result.passage_id)
+            except Exception:
+                self.counters.retries += 1
+                LOGGER.exception(json.dumps({
+                    "event_type": "rfid_location_reconciliation_failed",
+                    "passage_id": result.passage_id, "reason": "confirmed_handler_failed",
+                }))
         return result
 
     def process_pending(self, *, limit: int = 100) -> None:

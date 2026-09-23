@@ -1,5 +1,9 @@
 # ISS-018 — Histórico imutável de movimentações
 
+> Estado atual: a ISS-017 já integra este ledger ao pipeline e à projeção da
+> última zona em uma transação. As referências a integração futura abaixo
+> descrevem a fronteira original da entrega ISS-018.
+
 ## Objetivo e importância
 
 A Issue #20 (RF-013, RNF-006, RNF-015) prepara o ledger de movimentações para auditoria do MVP. Uma passagem confirmada pela ISS-016 pode ser convertida em registro com equipamento, EPC, portal, zonas, leituras e horários. A ISS-017 ainda deverá integrar essa operação à atualização da última localização, na **mesma transação**. Por isso, esta entrega não liga o ledger automaticamente ao ingestor ou ao serviço de direção e não altera `equipamentos.ultima_zona_id`, `ultima_deteccao_em` ou `ultima_passagem_id`.
