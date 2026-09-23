@@ -11,6 +11,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from rfid_location.recency import RecencyStatus
+
 
 def _validar_texto_preenchido(valor: str | None) -> str | None:
     """
@@ -67,6 +69,8 @@ class EquipamentoResposta(BaseModel):
     identificador_interno_normalizado: str
     descricao: str | None
     status: str
+    ultima_deteccao_em: datetime | None
+    estado_recencia: RecencyStatus
     created_at: datetime
     updated_at: datetime
 
