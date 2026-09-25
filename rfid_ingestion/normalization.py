@@ -38,7 +38,7 @@ def finite_number(value):
 def ez700(payload, settings):
     """Unidade RSSI não comprovada: não transformar -3880 em dBm."""
     return (payload.get("epc"), payload.get("antenna"), payload.get("rssi"),
-            payload.get("timestamp"), "unknown", settings.ez700_timestamp_format == "epoch_ms",
+            payload.get("timestamp"), "unknown", False,
             {k: v for k, v in payload.items() if k not in {"epc", "antenna", "rssi", "timestamp", "readerid", "reader_id"}})
 
 
@@ -56,7 +56,7 @@ def simulator(payload, settings):
 ADAPTERS = {"ez700": ez700, "simulator": simulator}
 
 
-def normalize(payload, topic, raw, settings):
+def normalize(payload, topic, raw, settings, *, received_at_utc=None):
     reader_id = None
     adapter = settings.normalization_adapter
     try:
@@ -81,8 +81,18 @@ def normalize(payload, topic, raw, settings):
             raise ValueError("unidade de rssi desconhecida; use dBm ou unknown")
         if unit == "dBm" and rssi > 0:
             raise ValueError("rssi em dBm deve ser menor ou igual a zero")
-        timestamp = utc_timestamp(timestamp, epoch_ms=epoch_ms)
         timestamp_format = "epoch_ms" if epoch_ms else "rfc3339"
+        if adapter == "ez700" and (
+            (type(timestamp) is int and timestamp >= 0)
+            or (isinstance(timestamp, str) and re.fullmatch(r"[0-9]+", timestamp))
+        ):
+            # O contador físico não representa uma data, nem mesmo com 13 dígitos.
+            timestamp = (
+                received_at_utc if received_at_utc is not None
+                else datetime.now(timezone.utc).isoformat()
+            )
+            timestamp_format = "received_at_utc"
+        timestamp = utc_timestamp(timestamp, epoch_ms=epoch_ms)
         identity = b"rfid-v1\0" + topic.encode() + b"\0" + adapter.encode() + b"\0" + timestamp_format.encode() + b"\0" + raw
         event = dict(event_id="sha256:" + hashlib.sha256(identity).hexdigest(),
                      epc=epc, antenna=antenna, rssi=rssi if unit == "dBm" else None,
@@ -90,7 +100,7 @@ def normalize(payload, topic, raw, settings):
                      metadata=dict(adapter=adapter, source_fields=extras,
                                    rssi_original=rssi, rssi_unit=unit,
                                    timestamp_original=payload.get("timestamp", payload.get("observed_at")),
-                                   timestamp_format="epoch_ms" if epoch_ms else "rfc3339"))
+                                   timestamp_format=timestamp_format))
         return event, [], reader_id, adapter
     except ValueError as error:
         return None, [str(error)], reader_id, adapter

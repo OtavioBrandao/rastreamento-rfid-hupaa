@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 from rfid_ingestion.config import Settings
 from rfid_ingestion.mqtt_client import MqttReceiver
-from rfid_ingestion.normalization import ADAPTERS
+from rfid_ingestion.normalization import ADAPTERS, normalize, utc_timestamp
 from rfid_ingestion.parsing import build_event
 from rfid_ingestion.persistence import JsonlEventStore
 from rfid_ingestion.repository import PersistenceResult
@@ -25,25 +25,61 @@ class NormalizationTests(unittest.TestCase):
         self.payload = json.loads(FIXTURE.read_bytes())
         self.reader = self.payload["readerid"]
         self.settings = Settings(ez700_timestamp_format="epoch_ms")
+        self.received_at = datetime(2026, 9, 25, 12, 30, 45, 123000, tzinfo=timezone.utc)
 
     def build(self, payload=None, settings=None, **kwargs):
         raw = payload if isinstance(payload, bytes) else json.dumps(self.payload if payload is None else payload).encode()
         return build_event(topic=kwargs.pop("topic", reading_topic(self.reader)), qos=1,
-                           retain=False, payload=raw, settings=settings or self.settings, **kwargs)
+                           retain=False, payload=raw, settings=settings or self.settings,
+                           received_at=kwargs.pop("received_at", self.received_at), **kwargs)
 
     def test_fixture_and_unknown_rssi(self):
         event = self.build()
         self.assertEqual(event["validation_errors"], [])
         canonical = event["canonical_event"]
-        self.assertEqual(canonical["timestamp"], "2021-09-27T16:16:35.291000Z")
+        self.assertEqual(canonical["timestamp"], "2026-09-25T12:30:45.123000Z")
         self.assertIsNone(canonical["rssi"])
         self.assertEqual(canonical["metadata"]["rssi_original"], -3880)
         self.assertEqual(canonical["metadata"]["source_fields"]["tid"], self.payload["tid"])
 
-    def test_numeric_timestamp_requires_explicit_profile(self):
-        self.assertIsNone(self.build(settings=Settings())["canonical_event"])
+    def test_ez700_counter_uses_receive_time_for_both_legacy_profiles(self):
+        for profile in ("rfc3339", "epoch_ms"):
+            for counter in ("1166264", 1166264, "1632759395291", 0, "0"):
+                with self.subTest(profile=profile, counter=counter):
+                    payload = {"epc": "007411B0A503007A91948576", "rssi": -5725,
+                               "antenna": 1, "timestamp": counter}
+                    event = self.build(payload, Settings(ez700_timestamp_format=profile),
+                                       topic="easy/dev/hupaa/portal-01/reader-01/readings")
+                    self.assertEqual(event["validation_errors"], [])
+                    canonical = event["canonical_event"]
+                    self.assertEqual(canonical["timestamp"], utc_timestamp(event["received_at_utc"]))
+                    self.assertEqual(canonical["timestamp"], "2026-09-25T12:30:45.123000Z")
+                    self.assertIsNone(canonical["rssi"])
+                    self.assertEqual(canonical["metadata"]["rssi_original"], -5725)
+                    self.assertEqual(canonical["metadata"]["rssi_unit"], "unknown")
+                    self.assertEqual(canonical["metadata"]["timestamp_original"], counter)
+                    self.assertEqual(canonical["metadata"]["timestamp_format"], "received_at_utc")
 
-    def test_ez700_simulator_clock_requires_explicit_epoch_ms(self):
+    def test_ez700_counter_without_receive_time_uses_current_utc(self):
+        before = datetime.now(timezone.utc)
+        canonical, errors, _, _ = normalize(
+            self.payload, reading_topic(self.reader), FIXTURE.read_bytes(), Settings()
+        )
+        after = datetime.now(timezone.utc)
+        self.assertEqual(errors, [])
+        instant = datetime.fromisoformat(canonical["timestamp"].replace("Z", "+00:00"))
+        self.assertLessEqual(before, instant)
+        self.assertLessEqual(instant, after)
+
+    def test_ez700_counter_still_validates_receive_timestamp(self):
+        canonical, errors, _, _ = normalize(
+            self.payload, reading_topic(self.reader), FIXTURE.read_bytes(), Settings(),
+            received_at_utc="invalid",
+        )
+        self.assertIsNone(canonical)
+        self.assertIn("RFC3339", errors[0])
+
+    def test_ez700_simulator_numeric_clock_is_also_a_counter(self):
         with patch.dict("os.environ", {}, clear=True):
             parser = _parser()
         for options in ([], ["--format", "ez700"]):
@@ -51,9 +87,10 @@ class NormalizationTests(unittest.TestCase):
             with patch("rfid_ingestion.simulator.time.time_ns", return_value=1632759395291999999):
                 payload = _payload(args)
             self.assertEqual(payload["timestamp"], "1632759395291")
-            self.assertIsNone(self.build(payload, Settings())["canonical_event"])
+            self.assertEqual(self.build(payload, Settings())["canonical_event"]["timestamp"],
+                             "2026-09-25T12:30:45.123000Z")
             self.assertEqual(self.build(payload)["canonical_event"]["timestamp"],
-                             "2021-09-27T16:16:35.291000Z")
+                             "2026-09-25T12:30:45.123000Z")
 
     def test_simulator_timestamps_and_explicit_override(self):
         with patch.dict("os.environ", {}, clear=True):
@@ -69,7 +106,7 @@ class NormalizationTests(unittest.TestCase):
     def test_simulator_and_equivalence(self):
         equivalent = {"tag": self.payload["epc"], "port": 1,
                       "signal": {"value": -3880, "unit": "unknown"},
-                      "observed_at": "2021-09-27T13:16:35.291-03:00"}
+                      "observed_at": "2026-09-25T09:30:45.123-03:00"}
         ez = self.build()["canonical_event"]
         sim = self.build(equivalent, replace(self.settings, reader_adapters={self.reader: "simulator"}))["canonical_event"]
         for field in ("epc", "antenna", "rssi", "timestamp", "reader_id"):
@@ -97,7 +134,7 @@ class NormalizationTests(unittest.TestCase):
 
     def test_invalid_fields(self):
         for key, values in {"epc": [None, "", " ", 3], "antenna": [None, 0, -1, True, 1.5, "1"],
-                            "rssi": [None, "-38", True], "timestamp": [None, "", "yesterday", "2026-01-01T00:00:00", "123"]}.items():
+                            "rssi": [None, "-38", True], "timestamp": [None, "", "yesterday", "2026-01-01T00:00:00", True, False, -1, 1.5, "-1", "1.5", "1e6", [], {}]}.items():
             for value in values:
                 with self.subTest(key=key, value=value):
                     event = self.build(self.payload | {key: value})
@@ -137,7 +174,10 @@ class NormalizationTests(unittest.TestCase):
         settings = replace(self.settings, normalization_adapter="new")
         self.assertIn("adapter desconhecido", self.build(settings=settings)["validation_errors"])
         with patch.dict(ADAPTERS, {"new": ADAPTERS["ez700"]}):
-            self.assertIsNotNone(self.build(settings=settings)["canonical_event"])
+            self.assertIsNotNone(self.build(
+                self.payload | {"timestamp": "2026-09-25T12:30:45Z"}, settings
+            )["canonical_event"])
+            self.assertIsNone(self.build(settings=settings)["canonical_event"])
         with patch.dict(ADAPTERS, {"new": Mock(side_effect=RuntimeError("private payload"))}):
             self.assertEqual(self.build(settings=settings)["validation_errors"], ["falha interna do adapter"])
 
@@ -148,6 +188,14 @@ class NormalizationTests(unittest.TestCase):
                     {"MQTT_MAX_PAYLOAD_BYTES": "0"}, {"EZ700_TIMESTAMP_FORMAT": "auto"}):
             with self.assertRaises(ValueError):
                 Settings.from_env(env)
+
+    def test_simulator_rejects_numeric_and_invalid_timestamps(self):
+        settings = Settings(normalization_adapter="simulator")
+        for timestamp in ("1166264", 1166264, None, "2026-09-25T12:30:45"):
+            with self.subTest(timestamp=timestamp):
+                payload = {"tag": "tag", "port": 1, "observed_at": timestamp,
+                           "signal": {"value": -57.25, "unit": "dBm"}}
+                self.assertIsNone(self.build(payload, settings)["canonical_event"])
 
     def test_simulator_invalid_signal_and_deep_json(self):
         settings = replace(self.settings, normalization_adapter="simulator")
