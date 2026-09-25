@@ -16,6 +16,7 @@ from db.models import Antena, Leitor, LeituraBruta
 from rfid_ingestion.config import Settings
 from rfid_ingestion.connection import create_client
 from rfid_ingestion.mqtt_client import MqttReceiver
+from rfid_ingestion.normalization import utc_timestamp
 from rfid_ingestion.persistence import JsonlEventStore
 from rfid_ingestion.repository import RawReadingRepository
 from rfid_ingestion.verification import run_simulator
@@ -83,8 +84,13 @@ class PipelineIntegrationTests(unittest.TestCase):
                 self.assertTrue(all(canonical))
                 self.assertEqual({event["reader_id"] for event in canonical}, {"ez", "sim"})
                 self.assertEqual(len({event["event_id"] for event in canonical}), 2)
-                for field in ("epc", "antenna", "timestamp", "rssi"):
+                for field in ("epc", "antenna", "rssi"):
                     self.assertEqual(len({event[field] for event in canonical}), 1, field)
+                for event in events:
+                    expected = (utc_timestamp(event["received_at_utc"])
+                                if event["adapter"] == "ez700"
+                                else "2021-09-27T16:16:35.291000Z")
+                    self.assertEqual(event["canonical_event"]["timestamp"], expected)
                 self.assertFalse(receiver.failed.is_set())
             finally:
                 for client in clients:

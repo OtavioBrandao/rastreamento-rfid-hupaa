@@ -68,20 +68,27 @@ Referência: `tests/fixtures/identix/tag-read.json`, mantida intacta:
 {"epc":"E2801190A502006016C32F62","tid":"E280119020004F62B6190300","timestamp":"1632759395291","rssi":-3880,"phase":49,"channel":906250,"antenna":1,"readerid":"EZ700-PORTAL-01"}
 ```
 
-Para replay dessa fixture use tópico com `EZ700-PORTAL-01` e
-`EZ700_TIMESTAMP_FORMAT=epoch_ms`. Esse perfil define explicitamente strings de
-13 dígitos como milissegundos desde Unix epoch UTC. Na validação sintética resulta
-em `2021-09-27T16:16:35.291000Z`. Não é autodetecção nem comprovação do firmware.
+Após a validação física relatada em 25/09/2026, timestamps numéricos do EZ700
+são tratados como contadores do dispositivo, não como datas. Inteiros não
+negativos e strings de dígitos usam `received_at_utc` do envelope MQTT como
+timestamp canônico. Chamadas diretas à normalização sem esse envelope usam o
+horário UTC atual. O valor original permanece em metadata, com
+`timestamp_format: received_at_utc`.
 
-**PENDENTE DE VALIDAÇÃO FÍSICA:** semântica do timestamp numérico, relógio do
-leitor e unidade/escala do RSSI. `-3880` permanece em metadata e o RSSI canônico
-fica nulo. Não dividimos por 100. Selecionar epoch_ms implica declaração do
-operador sobre o formato; o padrão seguro `rfc3339` rejeita o número da fixture.
+Isso também se aplica à fixture histórica de 13 dígitos e à configuração legada
+`EZ700_TIMESTAMP_FORMAT=epoch_ms`: números do EZ700 não são mais interpretados
+como Unix epoch. Para replay com data absoluta, fornecer RFC3339 explícito.
+Veja o [hotfix de compatibilidade física](hotfix-ez700-contador-timestamp.md).
+
+**PENDENTE DE VALIDAÇÃO FÍSICA:** unidade/escala do RSSI. `-3880` e `-5725`
+permanecem em metadata e o RSSI canônico fica nulo. Não dividimos por 100.
 
 RFC3339 exige data/hora com `T`, segundos, `Z` ou offset explícito e de zero a
 seis casas decimais. Converte offset para UTC, valida calendário e rejeita data
-sem timezone, formatos desconhecidos, leap second e precisão superior. Nunca
-usa `received_at_utc` para substituir timestamp ausente/inválido do leitor.
+sem timezone, formatos desconhecidos, leap second e precisão superior. Essa
+validação também se aplica ao horário de recepção usado pelo EZ700. Timestamp
+ausente ou inválido continua rejeitado; somente contadores inteiros não negativos
+recebem o tratamento específico do EZ700.
 
 ## Simulador alternativo e equivalência
 
@@ -89,16 +96,15 @@ usa `received_at_utc` para substituir timestamp ausente/inválido do leitor.
 {"tag":"E2801190A502006016C32F62","port":1,"observed_at":"2021-09-27T13:16:35.291-03:00","signal":{"value":-3880,"unit":"unknown"},"reader_id":"EZ700-PORTAL-01"}
 ```
 
-Com adapter `simulator`, esse exemplo produz os mesmos `epc`, `antenna`, `rssi`,
-`reader_id` e `timestamp` da fixture no perfil epoch_ms. Metadata e event_id
-diferem, pois identificam origens diferentes. `signal` é preservado integralmente
+Com adapter `simulator`, esse exemplo produz os mesmos `epc`, `antenna`, `rssi`
+e `reader_id` da fixture; seu timestamp absoluto é preservado, enquanto a fixture
+EZ700 usa a recepção. Metadata e event_id diferem, pois identificam origens diferentes. `signal` é preservado integralmente
 em metadata, inclusive campos extras. O CLI `--format simulator` gera por padrão
 `signal: {"value": -38.8, "unit": "dBm"}`; esse valor sintético já declara unidade.
 O simulador padrão (`--format ez700`) mantém a estrutura da fixture histórica e
 gera `str(time.time_ns() // 1_000_000)`: timestamp numérico em string, em
-milissegundos desde Unix epoch do relógio do próprio simulador. O ingestor deve
-usar `EZ700_TIMESTAMP_FORMAT=epoch_ms` explicitamente para essa origem sintética.
-O formato alternativo `--format simulator` continua gerando RFC3339 UTC.
+milissegundos desde Unix epoch do relógio do próprio simulador. O adapter EZ700 agora trata também esse número sintético como contador e usa
+o horário de recepção, independentemente do perfil legado. O formato alternativo `--format simulator` continua gerando RFC3339 UTC.
 `--timestamp` preserva literalmente o valor informado em ambos os formatos.
 Nenhum desses comportamentos comprova o timestamp do equipamento físico.
 
@@ -115,8 +121,10 @@ campos, extras ou representação numérica diferentes alteram o ID. Duas leitur
 legítimas de bytes idênticos no mesmo tópico também terão ID igual. Futuramente
 sequência/ID confiável de origem pode demandar nova versão desse contrato.
 Não há garantia exactly-once. A ISS-006 persiste esse ID com idempotência;
-a ISS-014 continua responsável pelo debounce. Alterar semântica de adapter exige versionar seu nome/contrato
-e revisar replay histórico.
+a ISS-014 continua responsável pelo debounce. O hotfix do contador usa o discriminador `received_at_utc` no hash para separar
+a nova semântica dos IDs antigos calculados com `epoch_ms`; revisar replay histórico.
+Reentregas mantêm o ID, embora o timestamp de recepção possa mudar. A persistência
+idempotente conserva a primeira leitura gravada.
 
 ## Rejeição e auditoria
 
