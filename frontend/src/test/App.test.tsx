@@ -12,7 +12,7 @@ const item = (id: number, overrides: Partial<EquipmentItem> = {}): EquipmentItem
 const assets = [item(1, { status: 'atencao', localizacao_desatualizada: true }), item(2, {
   status: 'nunca_detectado', ultima_zona: null, ultima_deteccao_em: null,
   localizacao_desatualizada: null,
-})]
+}), item(3, { ultima_zona: { id: 3, nome: 'Zona A', referencia_planta: 'sala-a' } })]
 let calls: string[]
 let paginationMode: boolean
 
@@ -33,6 +33,9 @@ beforeEach(() => {
       body = { items: paginated && page === 2 ? [item(99)] : page > 1 ? [] : filtered,
         total: paginated ? 21 : filtered.length, page,
         page_size: Number(url.searchParams.get('page_size') ?? '20') }
+    } else if (url.pathname === '/api/laboratorio/leituras') {
+      body = { items: url.searchParams.get('after_id') === '0' ? [{ id: 8, epc: assets[2].epc,
+        antena_porta: 1, recebido_em: '2026-09-26T12:00:00Z' }] : [], next_id: 8 }
     } else if (url.pathname === '/tipos-equipamento') body = { items: [{ id: 1, nome: 'Maca' }] }
     else body = [{ setores: [{ zonas: [{ id: 1, nome: 'Zona 1' }] }] }]
     return { ok: true, json: async () => body }
@@ -62,8 +65,9 @@ describe('integração da busca', () => {
     expect(screen.getAllByRole('button', { name: /1 equipamento.*Última zona/ })).toHaveLength(1)
     fireEvent.click(screen.getByRole('tab', { name: 'Laboratório de Testes (EASY)' }))
     expect(screen.getByRole('tabpanel', { name: 'Laboratório de Testes (EASY)' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Leitura simulada na Sala A' }))
-    expect(within(screen.getByRole('region', { name: 'Log simulado de leituras' })).getByText('Sala A', { exact: false })).toBeInTheDocument()
+    expect(await within(screen.getByRole('region', { name: 'Leituras das antenas' })).findByText(assets[2].epc!)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /1 equipamento.*Última zona: Sala A/ })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: /Antena A.*Sala A/ })).toHaveClass('marker-pulse'))
     fireEvent.change(screen.getByRole('searchbox', { name: 'Consultar EPC' }), { target: { value: 'FFFFFFFFFFFFFFFFFFFFFFFF' } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar tag' }))
     expect(await screen.findByText('Nenhum ativo associado a este EPC.')).toBeInTheDocument()

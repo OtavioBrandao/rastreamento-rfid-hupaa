@@ -28,6 +28,19 @@ export async function getAllAssets(filters: AssetFilters = {}, signal?: AbortSig
   return items
 }
 
+export interface LabReading {
+  id: number
+  epc: string
+  antena_porta: number
+  recebido_em: string
+}
+
+export function getLabReadings(afterId = 0, epc = '', signal?: AbortSignal): Promise<{ items: LabReading[]; next_id: number }> {
+  const params = new URLSearchParams({ after_id: String(afterId), limit: '100' })
+  if (epc) params.set('epc', epc)
+  return readJson(`/api/laboratorio/leituras?${params}`, signal)
+}
+
 export async function getTypes(signal?: AbortSignal): Promise<FilterOption[]> {
   const result = await readJson<{ items: FilterOption[] }>('/tipos-equipamento?size=100', signal)
   return result.items

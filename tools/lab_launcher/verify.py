@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from sqlalchemy import create_engine, text
 
+from .synthetic import LeituraPlanejada
+
 
 @dataclass(frozen=True)
 class Baseline:
@@ -28,12 +30,26 @@ def inicio(database_url: str) -> Baseline:
 
 def conferir(database_url: str, baseline: Baseline, epcs: list[str], *,
              passagem: bool, mensagens: int, timeout: float = 30,
-             contador_inicial: int | None = None) -> None:
+             contador_inicial: int | None = None,
+             programa: tuple[LeituraPlanejada, ...] | None = None) -> None:
     engine = create_engine(database_url, pool_pre_ping=True)
     pendentes = set(epc.upper() for epc in epcs)
     ultimo_estado: dict[str, str] = {}
     leituras_vistas = dict.fromkeys(pendentes, 0)
     ultimo_id_global = baseline.leitura_id
+    esperados = {epc.upper(): mensagens for epc in epcs}
+    direcoes: dict[str, list[str]] = {epc.upper(): [] for epc in epcs}
+    if programa:
+        esperados = dict.fromkeys(esperados, 0)
+        porta_anterior: dict[str, int] = {}
+        for leitura in programa:
+            epc = leitura.epc.upper()
+            esperados[epc] += 1
+            anterior = porta_anterior.get(epc)
+            if anterior is not None and anterior != leitura.porta:
+                direcoes[epc].append("a_para_b" if anterior == 1 else "b_para_a")
+            porta_anterior[epc] = leitura.porta
+    total_esperado = sum(esperados.values())
     parametros_contador = {}
     filtro_leituras = ""
     joins_passagem = ""
@@ -43,7 +59,7 @@ def conferir(database_url: str, baseline: Baseline, epcs: list[str], *,
         # ensaio têm sete dígitos; BETWEEN textual preserva a ordem numérica.
         parametros_contador = {
             "contador_inicio": str(contador_inicial),
-            "contador_fim": str(contador_inicial + len(epcs) * mensagens - 1),
+            "contador_fim": str(contador_inicial + total_esperado - 1),
         }
         filtro_leituras = (
             " AND (dados_origem #>> '{metadata,timestamp_original}') "
@@ -69,10 +85,16 @@ def conferir(database_url: str, baseline: Baseline, epcs: list[str], *,
         " WHERE p.id > :inicio AND p.epc = :epc" + filtro_passagem +
         " ORDER BY p.id DESC LIMIT 1"
     )
+    consulta_passagens = text(
+        "SELECT p.id, p.direcao_status, p.direcao, p.zona_destino_id "
+        "FROM passagens p" + joins_passagem +
+        " WHERE p.id > :inicio AND p.epc = :epc" + filtro_passagem +
+        " ORDER BY p.id"
+    )
     # O Neon pode processar a fila MQTT mais devagar que a publicação. Aguardar
     # enquanto houver avanço, com limite total proporcional ao tamanho do ensaio.
     inicio_espera = time.monotonic()
-    limite_total = 5 * len(epcs) * mensagens + timeout
+    limite_total = 5 * total_esperado + timeout
     fim_total = inicio_espera + limite_total
     fim_sem_progresso = inicio_espera + timeout
     print(f"Aguardando até {limite_total:g}s pela ingestão; falha após "
@@ -89,18 +111,30 @@ def conferir(database_url: str, baseline: Baseline, epcs: list[str], *,
                         leituras_vistas[epc] = leituras
                         progresso_atual = True
                         fim_sem_progresso = time.monotonic() + timeout
-                    esperado = mensagens
+                    esperado = esperados[epc]
                     if leituras < esperado:
                         estado = f"{leituras}/{esperado} leituras persistidas"
                     elif not passagem:
                         estado = f"{leituras} leituras persistidas"
                         pendentes.remove(epc)
                     else:
-                        linha = conn.execute(consulta_passagem, {
-                            **parametros, "inicio": baseline.passagem_id,
-                        }).one_or_none()
+                        parametros_passagem = {**parametros, "inicio": baseline.passagem_id}
+                        if programa:
+                            linhas = conn.execute(consulta_passagens, parametros_passagem).all()
+                            confirmadas = [linha for linha in linhas
+                                           if linha.direcao_status == "confirmed"]
+                            atual = [linha.direcao for linha in confirmadas]
+                            desejada = direcoes[epc]
+                            if atual != desejada[:len(atual)]:
+                                raise RuntimeError(f"EPC {epc}: passagens {atual}; esperado {desejada}")
+                            linha = confirmadas[-1] if len(confirmadas) == len(desejada) else None
+                        else:
+                            linha = conn.execute(consulta_passagem,
+                                                 parametros_passagem).one_or_none()
                         if linha is None:
-                            estado = f"{leituras} leituras; passagem pendente"
+                            detalhe = (f" {len(confirmadas)}/{len(direcoes[epc])} passagens"
+                                       if programa else "")
+                            estado = f"{leituras} leituras;{detalhe} passagem pendente"
                         elif linha.direcao_status != "confirmed":
                             estado = (f"passagem {linha.id}: direção "
                                       f"{linha.direcao_status or 'pendente'}")
@@ -126,7 +160,7 @@ def conferir(database_url: str, baseline: Baseline, epcs: list[str], *,
                         print(f"EPC {epc}: {estado}", flush=True)
                         ultimo_estado[epc] = estado
                 if not progresso_atual and any(
-                    quantidade < mensagens for quantidade in leituras_vistas.values()
+                    quantidade < esperados[epc] for epc, quantidade in leituras_vistas.items()
                 ):
                     # Uma sessão MQTT durável pode estar esvaziando a fila de
                     # um ensaio anterior antes de chegar às mensagens atuais.
