@@ -43,7 +43,7 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(canonical["metadata"]["source_fields"]["tid"], self.payload["tid"])
 
     def test_ez700_counter_uses_receive_time_for_both_legacy_profiles(self):
-        for profile in ("rfc3339", "epoch_ms"):
+        for profile in ("rfc3339", "epoch_ms", "counter"):
             for counter in ("1166264", 1166264, "1632759395291", 0, "0"):
                 with self.subTest(profile=profile, counter=counter):
                     payload = {"epc": "007411B0A503007A91948576", "rssi": -5725,
@@ -59,6 +59,18 @@ class NormalizationTests(unittest.TestCase):
                     self.assertEqual(canonical["metadata"]["rssi_unit"], "unknown")
                     self.assertEqual(canonical["metadata"]["timestamp_original"], counter)
                     self.assertEqual(canonical["metadata"]["timestamp_format"], "received_at_utc")
+
+    def test_ez700_counter_uses_receipt_time_and_preserves_counter(self):
+        payload = self.payload | {"timestamp": "1166264"}
+        received_at = datetime(2026, 9, 25, 12, 30, 0, tzinfo=timezone.utc)
+        settings = Settings.from_env({"EZ700_TIMESTAMP_FORMAT": "counter"})
+        event = self.build(payload, settings, received_at=received_at)
+        canonical = event["canonical_event"]
+        self.assertEqual(canonical["timestamp"], "2026-09-25T12:30:00.000000Z")
+        self.assertEqual(canonical["metadata"]["timestamp_original"], "1166264")
+        self.assertEqual(canonical["metadata"]["timestamp_format"], "received_at_utc")
+        later = self.build(payload, settings, received_at=received_at.replace(minute=31))
+        self.assertEqual(canonical["event_id"], later["canonical_event"]["event_id"])
 
     def test_ez700_counter_without_receive_time_uses_current_utc(self):
         before = datetime.now(timezone.utc)
