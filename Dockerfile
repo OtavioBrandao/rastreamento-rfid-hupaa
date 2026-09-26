@@ -16,6 +16,9 @@ COPY alembic ./alembic
 COPY db ./db
 COPY docker ./docker
 COPY rfid_ingestion ./rfid_ingestion
+COPY rfid_inference ./rfid_inference
+COPY rfid_movement ./rfid_movement
+COPY rfid_location ./rfid_location
 
 RUN chmod +x /app/docker/require-database-url.sh \
     && mkdir -p /app/data \

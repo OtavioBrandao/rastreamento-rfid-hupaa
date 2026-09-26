@@ -1,0 +1,108 @@
+"""Observadores de MQTT e leituras persistidas para os terminais do laboratório."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import subprocess
+import time
+from pathlib import Path
+from uuid import uuid4
+
+from sqlalchemy import create_engine, text
+
+from rfid_ingestion.config import Settings
+from rfid_ingestion.connection import create_client
+
+from .config import ROOT
+
+
+def _ativo() -> bool:
+    marker = os.environ.get("LAB_SESSION_MARKER")
+    return marker is None or Path(marker).exists()
+
+
+def mqtt_watch() -> None:
+    source = dict(os.environ, MQTT_CLIENT_ID=f"lab-watch-{uuid4().hex[:12]}")
+    settings = Settings.from_env(source)
+    client = create_client(settings)
+
+    def on_connect(c, _userdata, _flags, reason_code, _properties):
+        if reason_code.is_failure:
+            raise RuntimeError("conexão MQTT recusada")
+        c.subscribe(settings.mqtt_topic, qos=1)
+        print(f"Inscrito em {settings.mqtt_topic}", flush=True)
+
+    def on_message(_client, _userdata, msg):
+        print(f"{msg.topic} {msg.payload.decode('utf-8', errors='replace')}", flush=True)
+
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.connect(settings.mqtt_host, settings.mqtt_port, settings.mqtt_keepalive)
+    try:
+        client.loop_start()
+        while _ativo():
+            time.sleep(0.5)
+    finally:
+        client.disconnect()
+        client.loop_stop()
+
+
+def db_watch() -> None:
+    url = os.environ.get("APP_DATABASE_URL") or os.environ.get("DATABASE_URL")
+    if not url:
+        raise ValueError("APP_DATABASE_URL ou DATABASE_URL ausente")
+    engine = create_engine(url, pool_pre_ping=True)
+    ultimo = 0
+    print("Aguardando leituras brutas...", flush=True)
+    try:
+        while _ativo():
+            with engine.connect() as conn:
+                linhas = conn.execute(text(
+                    "SELECT id, epc, antena_id, lido_em FROM leituras_brutas "
+                    "WHERE id > :ultimo ORDER BY id LIMIT 100"
+                ), {"ultimo": ultimo}).all()
+            for linha in linhas:
+                print(f"id={linha.id} epc={linha.epc} antena={linha.antena_id} "
+                      f"lido_em={linha.lido_em}", flush=True)
+                ultimo = linha.id
+            time.sleep(2)
+    finally:
+        engine.dispose()
+
+
+def logs_watch() -> None:
+    arquivo = os.environ["LAB_COMPOSE_ENV_FILE"]
+    perfil = os.environ["LAB_COMPOSE_PROFILE"]
+    servico = os.environ["LAB_INGESTOR_SERVICE"]
+    processo = subprocess.Popen(
+        ["docker", "compose", "--env-file", arquivo, "--profile", perfil,
+         "logs", "-f", servico], cwd=ROOT, env=os.environ.copy()
+    )
+    try:
+        while _ativo() and processo.poll() is None:
+            time.sleep(0.5)
+    finally:
+        if processo.poll() is None:
+            processo.terminate()
+            try:
+                processo.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                processo.kill()
+                processo.wait()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("kind", choices=("mqtt", "db", "logs"))
+    kind = parser.parse_args().kind
+    if kind == "mqtt":
+        mqtt_watch()
+    elif kind == "db":
+        db_watch()
+    else:
+        logs_watch()
+
+
+if __name__ == "__main__":
+    main()
