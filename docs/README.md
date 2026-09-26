@@ -135,6 +135,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Última Localização (ISS-017)](implementations/iss-017-ultima-localizacao.md)
    - [Recência da Localização (ISS-022)](implementations/iss-022-recencia-localizacao.md)
    - [Frontend e Dashboard Operacional (ISS-032, Etapa A)](implementations/iss-032-frontend-dashboard.md)
+   - [Redesenho do Dashboard e Mapas (ISS-032)](implementations/iss-032-redesign-mapas.md)
 4. Decisões Arquiteturais:
    - [Índice de ADRs](decisions/README.md)
 5. Ambiente e Testes:
