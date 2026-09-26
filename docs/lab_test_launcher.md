@@ -48,8 +48,13 @@ hexadecimais próprios. O seed associa os EPCs sintéticos a equipamentos de
 laboratório antes da publicação, para que passagem confirmada também gere
 histórico de movimentação e última zona. Vínculos existentes são preservados.
 O launcher consulta o banco após publicar e informa, por EPC, as leituras
-persistidas, a passagem, o movimento e a última zona. Se o resultado não surgir
-em 30 segundos, a etapa falha com o último estado observado. `--single` mantém
+persistidas, a passagem, o movimento e a última zona. Para permitir a ingestão
+mais lenta em banco externo, aguarda enquanto houver progresso: falha após 30
+segundos sem novas leituras ou ao atingir o limite total de cinco segundos por
+mensagem esperada. Depois da última leitura, há até 30 segundos para a passagem
+e o movimento serem confirmados. A conferência usa o intervalo do contador
+sintético desta execução, para não contar mensagens pendentes de ensaios
+anteriores com o mesmo EPC. `--single` mantém
 o item na antena 1 e valida somente as leituras, sem esperar passagem.
 
 O launcher usa `--timestamp-format counter` por padrão tanto no teste físico

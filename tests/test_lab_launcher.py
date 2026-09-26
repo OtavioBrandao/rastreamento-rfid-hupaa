@@ -24,7 +24,7 @@ from db.models import (
 )
 from rfid_ingestion.config import Settings
 from rfid_ingestion.parsing import build_event
-from tools.lab_launcher import cli, docker_env, session, synthetic, terminals, watch
+from tools.lab_launcher import cli, docker_env, session, synthetic, terminals, verify, watch
 from tools.lab_launcher.config import carregar
 from tools.lab_launcher.seed import semear, semear_epcs_sinteticos
 
@@ -222,6 +222,129 @@ def test_modo_externo_sintetico_exige_perfil_de_publicacao(monkeypatch, tmp_path
     )
     with pytest.raises(ValueError, match="separada do ingestor"):
         cli._perfil_publicador("managed", valores, perfil, False)
+
+
+@pytest.mark.parametrize("progresso, conclui", [(True, True), (False, False)])
+def test_verificador_aguarda_fila_lenta_mas_detecta_parada(monkeypatch, progresso, conclui):
+    class Relogio:
+        instante = 0.0
+
+        def avancar(self, segundos):
+            self.instante += segundos
+
+    relogio = Relogio()
+
+    class Conexao:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def scalar(self, _consulta, _parametros=None):
+            return min(int(relogio.instante), 100 if progresso else 2)
+
+    class Engine:
+        def connect(self):
+            return Conexao()
+
+        def dispose(self):
+            pass
+
+    monkeypatch.setattr(verify, "create_engine", lambda *_args, **_kwargs: Engine())
+    monkeypatch.setattr(verify.time, "monotonic", lambda: relogio.instante)
+    monkeypatch.setattr(verify.time, "sleep", relogio.avancar)
+    def executar():
+        verify.conferir("db-local-de-teste", verify.Baseline(0, 0),
+                        [synthetic.epcs_padrao(1)[0]],
+                        passagem=False, mensagens=100, timeout=3)
+    if conclui:
+        executar()
+        assert relogio.instante >= 100
+    else:
+        with pytest.raises(RuntimeError, match="sem progresso por 3s.*2/100"):
+            executar()
+        assert relogio.instante < 30
+
+
+def test_verificador_usa_apenas_leituras_e_passagem_do_ensaio_atual(monkeypatch):
+    class Resultado:
+        def __init__(self, linha):
+            self.linha = linha
+
+        def one_or_none(self):
+            return self.linha
+
+    class Conexao:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def scalar(self, consulta, parametros):
+            assert "timestamp_original" in str(consulta)
+            assert parametros["contador_inicio"] == "1234567"
+            assert parametros["contador_fim"] == "1234568"
+            return 2
+
+        def execute(self, consulta, parametros):
+            if "FROM passagens p" in str(consulta):
+                assert str(consulta).count("timestamp_original") == 2
+                assert parametros["contador_inicio"] == "1234567"
+                return Resultado(SimpleNamespace(id=7, direcao_status="confirmed",
+                                                direcao="a_para_b", zona_destino_id=2))
+            return Resultado(SimpleNamespace(id=8, equipamento_id=9,
+                                            ultima_zona_id=2))
+
+    class Engine:
+        def connect(self):
+            return Conexao()
+
+        def dispose(self):
+            pass
+
+    monkeypatch.setattr(verify, "create_engine", lambda *_args, **_kwargs: Engine())
+    verify.conferir("db-local-de-teste", verify.Baseline(0, 0),
+                    [synthetic.epcs_padrao(1)[0]], passagem=True, mensagens=2,
+                    contador_inicial=1_234_567)
+
+
+def test_verificador_aguarda_fila_anterior_sem_conta_la_no_ensaio(monkeypatch):
+    class Relogio:
+        instante = 0.0
+
+        def avancar(self, segundos):
+            self.instante += segundos
+
+    relogio = Relogio()
+
+    class Conexao:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def scalar(self, consulta, _parametros=None):
+            if "MAX(id)" in str(consulta):
+                return int(relogio.instante)
+            return max(0, min(10, int(relogio.instante) - 8))
+
+    class Engine:
+        def connect(self):
+            return Conexao()
+
+        def dispose(self):
+            pass
+
+    monkeypatch.setattr(verify, "create_engine", lambda *_args, **_kwargs: Engine())
+    monkeypatch.setattr(verify.time, "monotonic", lambda: relogio.instante)
+    monkeypatch.setattr(verify.time, "sleep", relogio.avancar)
+    verify.conferir("db-local-de-teste", verify.Baseline(0, 0),
+                    [synthetic.epcs_padrao(1)[0]], passagem=False, mensagens=10,
+                    timeout=3, contador_inicial=1_234_567)
+    assert relogio.instante >= 18
 
 
 def test_detecta_processo_do_host_na_porta_mqtt(monkeypatch):

@@ -27,19 +27,68 @@ def inicio(database_url: str) -> Baseline:
 
 
 def conferir(database_url: str, baseline: Baseline, epcs: list[str], *,
-             passagem: bool, mensagens: int, timeout: float = 30) -> None:
+             passagem: bool, mensagens: int, timeout: float = 30,
+             contador_inicial: int | None = None) -> None:
     engine = create_engine(database_url, pool_pre_ping=True)
     pendentes = set(epc.upper() for epc in epcs)
     ultimo_estado: dict[str, str] = {}
-    fim = time.monotonic() + timeout
+    leituras_vistas = dict.fromkeys(pendentes, 0)
+    ultimo_id_global = baseline.leitura_id
+    parametros_contador = {}
+    filtro_leituras = ""
+    joins_passagem = ""
+    filtro_passagem = ""
+    if contador_inicial is not None:
+        # O contador original fica na auditoria JSONB. Todas as strings deste
+        # ensaio têm sete dígitos; BETWEEN textual preserva a ordem numérica.
+        parametros_contador = {
+            "contador_inicio": str(contador_inicial),
+            "contador_fim": str(contador_inicial + len(epcs) * mensagens - 1),
+        }
+        filtro_leituras = (
+            " AND (dados_origem #>> '{metadata,timestamp_original}') "
+            "BETWEEN :contador_inicio AND :contador_fim"
+        )
+        joins_passagem = (
+            " JOIN leituras_brutas origem ON origem.id = p.leitura_origem_id"
+            " JOIN leituras_brutas destino ON destino.id = p.leitura_destino_id"
+        )
+        filtro_passagem = (
+            " AND (origem.dados_origem #>> '{metadata,timestamp_original}') "
+            "BETWEEN :contador_inicio AND :contador_fim"
+            " AND (destino.dados_origem #>> '{metadata,timestamp_original}') "
+            "BETWEEN :contador_inicio AND :contador_fim"
+        )
+    consulta_leituras = text(
+        "SELECT COUNT(*) FROM leituras_brutas "
+        "WHERE id > :inicio AND epc = :epc" + filtro_leituras
+    )
+    consulta_passagem = text(
+        "SELECT p.id, p.direcao_status, p.direcao, p.zona_destino_id "
+        "FROM passagens p" + joins_passagem +
+        " WHERE p.id > :inicio AND p.epc = :epc" + filtro_passagem +
+        " ORDER BY p.id DESC LIMIT 1"
+    )
+    # O Neon pode processar a fila MQTT mais devagar que a publicação. Aguardar
+    # enquanto houver avanço, com limite total proporcional ao tamanho do ensaio.
+    inicio_espera = time.monotonic()
+    limite_total = 5 * len(epcs) * mensagens + timeout
+    fim_total = inicio_espera + limite_total
+    fim_sem_progresso = inicio_espera + timeout
+    print(f"Aguardando até {limite_total:g}s pela ingestão; falha após "
+          f"{timeout:g}s sem progresso...", flush=True)
     try:
-        while pendentes and time.monotonic() < fim:
+        while pendentes and time.monotonic() < fim_total and time.monotonic() < fim_sem_progresso:
+            progresso_atual = False
             with engine.connect() as conn:
                 for epc in tuple(pendentes):
-                    leituras = conn.scalar(text(
-                        "SELECT COUNT(*) FROM leituras_brutas "
-                        "WHERE id > :inicio AND epc = :epc"
-                    ), {"inicio": baseline.leitura_id, "epc": epc})
+                    parametros = {"inicio": baseline.leitura_id, "epc": epc,
+                                  **parametros_contador}
+                    leituras = conn.scalar(consulta_leituras, parametros)
+                    if leituras > leituras_vistas[epc]:
+                        leituras_vistas[epc] = leituras
+                        progresso_atual = True
+                        fim_sem_progresso = time.monotonic() + timeout
                     esperado = mensagens
                     if leituras < esperado:
                         estado = f"{leituras}/{esperado} leituras persistidas"
@@ -47,11 +96,9 @@ def conferir(database_url: str, baseline: Baseline, epcs: list[str], *,
                         estado = f"{leituras} leituras persistidas"
                         pendentes.remove(epc)
                     else:
-                        linha = conn.execute(text(
-                            "SELECT id, direcao_status, direcao, zona_destino_id "
-                            "FROM passagens WHERE id > :inicio AND epc = :epc "
-                            "ORDER BY id DESC LIMIT 1"
-                        ), {"inicio": baseline.passagem_id, "epc": epc}).one_or_none()
+                        linha = conn.execute(consulta_passagem, {
+                            **parametros, "inicio": baseline.passagem_id,
+                        }).one_or_none()
                         if linha is None:
                             estado = f"{leituras} leituras; passagem pendente"
                         elif linha.direcao_status != "confirmed":
@@ -78,12 +125,27 @@ def conferir(database_url: str, baseline: Baseline, epcs: list[str], *,
                     if ultimo_estado.get(epc) != estado:
                         print(f"EPC {epc}: {estado}", flush=True)
                         ultimo_estado[epc] = estado
+                if not progresso_atual and any(
+                    quantidade < mensagens for quantidade in leituras_vistas.values()
+                ):
+                    # Uma sessão MQTT durável pode estar esvaziando a fila de
+                    # um ensaio anterior antes de chegar às mensagens atuais.
+                    ultimo_id = conn.scalar(text(
+                        "SELECT COALESCE(MAX(id), 0) FROM leituras_brutas"
+                    ))
+                    if ultimo_id > ultimo_id_global:
+                        ultimo_id_global = ultimo_id
+                        fim_sem_progresso = time.monotonic() + timeout
+                        print("Ingestor ainda gravando leituras pendentes no banco...",
+                              flush=True)
             if pendentes:
                 time.sleep(0.5)
         if pendentes:
             detalhes = "; ".join(f"{epc}: {ultimo_estado.get(epc, 'sem dados')}"
                                  for epc in sorted(pendentes))
-            raise RuntimeError(f"teste sintético não concluiu em {timeout:g}s: {detalhes}")
+            motivo = (f"sem progresso por {timeout:g}s" if time.monotonic() < fim_total
+                      else f"limite total de {limite_total:g}s atingido")
+            raise RuntimeError(f"teste sintético não concluiu ({motivo}): {detalhes}")
         print(f"Teste sintético concluído para {len(epcs)} EPC(s)", flush=True)
     finally:
         engine.dispose()

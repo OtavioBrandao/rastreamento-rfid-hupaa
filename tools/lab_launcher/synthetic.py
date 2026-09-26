@@ -60,10 +60,18 @@ def _falha_puback(topic: str, desconectado: bool) -> str:
             "Publish e tópico da credencial do publicador")
 
 
+def novo_contador(total: int) -> int:
+    """Reserva um intervalo de sete dígitos para identificar este ensaio."""
+    if total < 1 or total >= 9_000_000:
+        raise ValueError("quantidade de mensagens excede o contador sintético de sete dígitos")
+    return 1_000_000 + secrets.randbelow(9_000_000 - total)
+
+
 def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
              passagem: bool, intervalo: float, portal_id: str = "portal-01",
              mensagens: int = 100,
-             timestamp_format: str = "counter") -> int:
+             timestamp_format: str = "counter",
+             contador_inicial: int | None = None) -> int:
     if not math.isfinite(intervalo) or intervalo < 0:
         raise ValueError("intervalo entre antenas deve ser finito e não negativo")
     if timestamp_format != "counter":
@@ -72,6 +80,10 @@ def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
         raise ValueError("informe EPCs hexadecimais válidos")
     etapas = roteiro(mensagens, passagem)
     epcs = [normalizar_epc(epc) for epc in epcs]
+    total_esperado = len(epcs) * mensagens
+    contador = novo_contador(total_esperado) if contador_inicial is None else contador_inicial
+    if contador < 1_000_000 or contador + total_esperado > 10_000_000:
+        raise ValueError("intervalo do contador sintético deve ter sete dígitos")
     assinatura = config.get("MQTT_TOPIC", "easy/dev/hupaa/+/+/readings").split("/")
     ambiente = assinatura[1] if len(assinatura) == 6 and assinatura[1] != "+" else "dev"
     site = assinatura[2] if len(assinatura) == 6 and assinatura[2] != "+" else "hupaa"
@@ -104,7 +116,6 @@ def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
         if erro:
             raise RuntimeError(erro[0])
         total = 0
-        contador = 1_000_000 + secrets.randbelow(8_000_000)
         for epc in epcs:
             for etapa in etapas:
                 if etapa.porta == 2:

@@ -29,7 +29,7 @@ from .docker_env import (
 )
 from .session import iniciar as iniciar_sessao
 from .session import parar as parar_sessao
-from .synthetic import epcs_padrao, publicar, roteiro
+from .synthetic import epcs_padrao, novo_contador, publicar, roteiro
 from .terminals import abrir, encerrar
 from .verify import conferir, inicio
 
@@ -261,14 +261,17 @@ def start(
             etapa = "publicação das leituras sintéticas"
             assert publisher is not None
             baseline = inicio(valores["APP_DATABASE_URL"])
+            contador_inicial = novo_contador(len(lista) * messages)
             total = publicar(publisher, reader_id, epcs=lista, passagem=passage,
                              intervalo=interval, portal_id=portal_id,
                              mensagens=messages,
-                             timestamp_format=ambiente["EZ700_TIMESTAMP_FORMAT"])
+                             timestamp_format=ambiente["EZ700_TIMESTAMP_FORMAT"],
+                             contador_inicial=contador_inicial)
             print(f"{total} leitura(s) sintética(s) publicada(s)")
             etapa = "verificação da Sprint 2 no banco"
             conferir(valores["APP_DATABASE_URL"], baseline, lista,
-                     passagem=passage, mensagens=messages)
+                     passagem=passage, mensagens=messages,
+                     contador_inicial=contador_inicial)
         else:
             print("Pronto para leituras do leitor físico. Use 'stop' ao encerrar.")
         if interativo and not no_terminals:
