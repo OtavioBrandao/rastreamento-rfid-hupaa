@@ -62,10 +62,12 @@ quanto no sintético. O publicador sintético usa os campos JSON observados
 (`epc`, `rssi`, `antenna`, `timestamp`) na mesma ordem do JSON capturado do leitor,
 em JSON compacto e sem `readerid` no corpo. O identificador do leitor vem do tópico MQTT. O
 `timestamp` é uma string numérica de sete dígitos, crescente durante o ensaio;
-seu valor é sintético e não presume a unidade do contador físico. No modo
-físico, `--timestamp-format` também aceita `rfc3339` e `epoch_ms` quando o
-leitor estiver configurado dessa forma. O contador original permanece na
-auditoria e o horário canônico vem do recebimento.
+seu valor é sintético e não presume a unidade do contador físico. O adapter
+EZ700 interpreta qualquer timestamp numérico como contador e usa o horário de
+recebimento para o evento canônico, inclusive quando o perfil legado
+`epoch_ms` está configurado. No modo físico, `--timestamp-format` também aceita
+`rfc3339` e `epoch_ms` por compatibilidade de configuração; esses valores não
+convertem números em datas. O contador original permanece na auditoria.
 
 O seed usa `reader-01` por padrão, cria um andar e setor exclusivos de laboratório,
 zonas A/B, portal, duas antenas e seus mapeamentos lógicos ativos. Pode ser

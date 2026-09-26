@@ -114,6 +114,7 @@ def build_event(
     if event["parse_error"] is None:
         (event["canonical_event"], event["validation_errors"],
          event["reader_id"], event["adapter"]) = normalize(
-             event["payload_json"], topic, payload, settings, event["received_at_utc"]
+             event["payload_json"], topic, payload, settings,
+             received_at_utc=event["received_at_utc"],
          )
     return event

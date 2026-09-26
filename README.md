@@ -70,8 +70,8 @@ docker compose up -d
 # 3. Carregar variáveis na sessão
 set -a; source .env.local; set +a
 
-# 4. Iniciar o ingestor (usando formato de timestamp para simulador)
-EZ700_TIMESTAMP_FORMAT=epoch_ms python -m rfid_ingestion
+# 4. Iniciar o ingestor (timestamps numéricos EZ700 usam a hora de recepção)
+python -m rfid_ingestion
 
 # Ou alternativamente via Make:
 make local-up
