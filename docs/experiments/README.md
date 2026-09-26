@@ -49,6 +49,8 @@ Para garantir honestidade técnica e precisão metodológica na apresentação a
   - **Ambiente:** Simulação de interrupção de broker MQTT e queda do PostgreSQL com sondas `SELECT 1`, reconexão com backoff e testes cobrindo todas as categorias de falhas de conexão.
 - [Evidência de Validação da Topologia Lógica (ISS-013)](ingestion/iss013-validation.md):
   - **Ambiente:** Docker Local / PostgreSQL 16 e simulador sintético; suíte de testes cobrindo as 10 regras de topologia de portais, imutabilidade temporal `[inicio, fim)`, índice único parcial por antena ativa, guards de integridade cruzada e endpoints REST consolidados (validação física de bancada no HUPAA segue pendente de hardware).
+- [Revisão da Sprint 2 após ensaio sintético gerenciado](ingestion/sprint2-revisao-sintetica-2026-09-26.md):
+  - **Ambiente:** HiveMQ Cloud, ingestor e Neon; 100 mensagens sintéticas no formato observado do leitor, passagem A→B, movimentação e última zona confirmadas. Registra os testes e a calibração física ainda pendentes e os limites para avançar na Sprint 3.
 
 ---
 
