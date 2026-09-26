@@ -79,9 +79,12 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
   nomeadas **MQTT**, **Ingestor** e **Banco** no Windows Terminal. Se `wt.exe`
   não estiver disponível, abre janelas `cmd.exe` com esses títulos. O launcher
   espera cada observador iniciar e recupera em janela separada uma aba que
-  falhou; se ainda houver falha, informa o observador pelo nome. O comando
-  Python deve ser executado
-  no Windows, no mesmo ambiente virtual usado para instalar as dependências.
+  falhou; se ainda houver falha, informa o observador pelo nome. O script recebe
+  o Python e o tipo de observador por argumentos explícitos. A configuração
+  sensível fica em `.lab_launcher/`, ignorada pelo Git, até o encerramento da
+  sessão. O terminal Banco mostra quando está conectado e aguardando leituras.
+  O comando Python deve ser executado no Windows, no mesmo ambiente virtual
+  usado para instalar as dependências.
 - Ubuntu 24.04: Docker Engine com plugin Compose e permissão para usar Docker.
   `gnome-terminal`, `konsole`, `xterm`, `x-terminal-emulator` ou `tmux` para os
   três painéis. Sem `DISPLAY`/`WAYLAND_DISPLAY` (inclusive WSL2 sem servidor
