@@ -99,7 +99,7 @@ npm run dev
 # Abra http://localhost:5173/
 ```
 
-O Dashboard usa dados fictícios isolados e ainda não consulta a API. Veja [escopo e estados demonstrativos](docs/implementations/iss-032-frontend-dashboard.md).
+O Dashboard e os mapas HUPAA/EASY usam dados fictícios isolados e ainda não consultam a API. O laboratório oferece simulação local de leituras. Veja a [base da Etapa A](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
 
 ---
 

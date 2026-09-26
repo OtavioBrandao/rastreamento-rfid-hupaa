@@ -1,4 +1,11 @@
 export type DetectionStatus = 'recent' | 'outdated' | 'never'
+export type OperationalStatus = 'available' | 'attention' | 'offline' | 'critical'
+
+export interface RfidReading {
+  antenna: string
+  portal: string
+  timestamp: string
+}
 
 export interface EquipmentItem {
   id: string
@@ -9,6 +16,18 @@ export interface EquipmentItem {
   zone: string | null
   detectedAgo: string | null
   status: DetectionStatus
+  operationalStatus: OperationalStatus
+  department: string
+  facility: string
+  room: string | null
+  manufacturer: string
+  serialNumber: string
+  lastInspection: string | null
+  nextMaintenance: string | null
+  readings: RfidReading[]
+  mapZoneId: string | null
+  mapX: number | null
+  mapY: number | null
 }
 
 export interface DashboardData {
