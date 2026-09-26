@@ -14,8 +14,8 @@ from .config import ROOT
 _TMUX_SESSION: str | None = None
 
 
-def _powershell(args: list[str]) -> str:
-    return "& " + " ".join("'" + part.replace("'", "''") + "'" for part in args)
+def _sistema() -> str:
+    return os.name
 
 
 def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
@@ -28,20 +28,28 @@ def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
         ("Banco", [sys.executable, "-m", "tools.lab_launcher.watch", "db"]),
     ]
     processos = []
-    if os.name == "nt":
-        wt = shutil.which("wt")
+    if _sistema() == "nt":
+        terminal = shutil.which("cmd.exe")
+        if terminal is None:
+            raise RuntimeError("cmd.exe não encontrado para abrir os observadores no Windows")
+        script = Path(__file__).with_name("watch_windows.cmd")
+        if not script.is_file():
+            raise RuntimeError("script dos observadores do Windows ausente")
         for titulo, comando in comandos:
-            pasta = "'" + str(ROOT).replace("'", "''") + "'"
-            script = f"Set-Location -LiteralPath {pasta}; " + _powershell(comando)
-            ps = ["powershell.exe", "-NoExit", "-Command", script]
-            prefixo = [wt, "-w", "0", "new-tab", "--title", titulo] if wt else []
-            processos.append(subprocess.Popen(prefixo + ps, cwd=ROOT, env=env))
+            janela_env = dict(env, LAB_WATCH_KIND=comando[-1],
+                              LAB_WATCH_PYTHON=sys.executable)
+            print(f"Abrindo terminal {titulo}...", flush=True)
+            processos.append(subprocess.Popen(
+                [terminal, "/k", str(script)], cwd=ROOT, env=janela_env,
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            ))
         return processos
 
-    gnome = shutil.which("gnome-terminal")
-    konsole = shutil.which("konsole")
-    xterm = shutil.which("xterm")
-    generic = shutil.which("x-terminal-emulator")
+    interface_grafica = bool(env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"))
+    gnome = shutil.which("gnome-terminal") if interface_grafica else None
+    konsole = shutil.which("konsole") if interface_grafica else None
+    xterm = shutil.which("xterm") if interface_grafica else None
+    generic = shutil.which("x-terminal-emulator") if interface_grafica else None
     if gnome or konsole or xterm or generic:
         for titulo, comando in comandos:
             linha = f"cd {shlex.quote(str(ROOT))} && " + shlex.join(comando) + "; exec bash"
@@ -71,14 +79,18 @@ def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
         _TMUX_SESSION = nome
         print(f"Observação em tmux: tmux attach -t {nome}")
         return processos
-    raise RuntimeError("instale um terminal gráfico ou tmux para abrir os observadores")
+    raise RuntimeError("instale tmux ou execute com interface gráfica para abrir os observadores")
 
 
 def encerrar(processos: list[subprocess.Popen]) -> None:
+    if _sistema() == "nt":
+        # O marcador encerra cada observador Python. Manter cmd aberto preserva
+        # o histórico e evita deixar o filho órfão ao matar só o shell.
+        return
     for processo in processos:
         if processo.poll() is None:
             processo.terminate()
-    if _TMUX_SESSION is not None and os.name != "nt" and shutil.which("tmux"):
+    if _TMUX_SESSION is not None and _sistema() != "nt" and shutil.which("tmux"):
         tmux = shutil.which("tmux")
         if subprocess.run([tmux, "has-session", "-t", _TMUX_SESSION],
                           capture_output=True).returncode == 0:

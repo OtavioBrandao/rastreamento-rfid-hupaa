@@ -141,6 +141,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Ambiente Docker Compose (ISS-003)](implementations/iss-003-docker-compose.md)
    - [Correção dos pacotes da imagem do ingestor](implementations/dockerfile-pacotes-inferencia.md)
    - [Launcher de testes de laboratório](lab_test_launcher.md)
+   - [Correção dos observadores e ensaio sintético da Sprint 2](implementations/lab-launcher-sprint2-sintetico.md)
    - [Guia de Migrations (ISS-002c)](implementations/iss-002c-migrations.md)
    - [Pipeline de CI (ISS-004)](implementations/iss-004-ci.md)
 
