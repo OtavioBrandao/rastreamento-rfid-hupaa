@@ -52,6 +52,14 @@ def roteiro(mensagens: int, passagem: bool) -> tuple[Etapa, ...]:
     )
 
 
+def _falha_puback(topic: str, desconectado: bool) -> str:
+    if desconectado:
+        return (f"conexão MQTT encerrada antes do PUBACK para {topic}; confira se a "
+                "credencial do publicador tem permissão Publish nesse tópico")
+    return (f"sem PUBACK QoS 1 em 10 s para {topic}; confira conexão, permissão "
+            "Publish e tópico da credencial do publicador")
+
+
 def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
              passagem: bool, intervalo: float, portal_id: str = "portal-01",
              mensagens: int = 100,
@@ -75,19 +83,26 @@ def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
         raise ValueError("tópico sintético não corresponde à assinatura do ingestor")
     client = create_client(settings)
     conectado = Event()
+    desconectado = Event()
     erro = []
 
     def on_connect(_client, _userdata, _flags, reason_code, _properties):
         if reason_code.is_failure:
-            erro.append("conexão MQTT recusada")
+            erro.append("conexão MQTT do publicador recusada; confira a credencial")
         conectado.set()
 
+    def on_disconnect(_client, _userdata, _flags, _reason_code, _properties):
+        desconectado.set()
+
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     try:
         client.connect(settings.mqtt_host, settings.mqtt_port, settings.mqtt_keepalive)
         client.loop_start()
-        if not conectado.wait(10) or erro:
-            raise RuntimeError("broker MQTT indisponível")
+        if not conectado.wait(10):
+            raise RuntimeError("publicador não recebeu CONNACK do broker em 10 s")
+        if erro:
+            raise RuntimeError(erro[0])
         total = 0
         contador = 1_000_000 + secrets.randbelow(8_000_000)
         for epc in epcs:
@@ -111,9 +126,15 @@ def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
                     }
                     result = client.publish(topic, json.dumps(payload, separators=(",", ":")),
                                             qos=1)
-                    result.wait_for_publish(timeout=10)
+                    if result.rc != mqtt.MQTT_ERR_SUCCESS:
+                        raise RuntimeError(f"MQTT não enfileirou a leitura para {topic}: "
+                                           f"{mqtt.error_string(result.rc)}")
+                    try:
+                        result.wait_for_publish(timeout=10)
+                    except RuntimeError:
+                        raise RuntimeError(_falha_puback(topic, desconectado.is_set())) from None
                     if not result.is_published():
-                        raise RuntimeError("broker não confirmou a leitura sintética")
+                        raise RuntimeError(_falha_puback(topic, desconectado.is_set()))
                     total += 1
                     print(f"Mensagem {total}/{len(epcs) * mensagens}: EPC {epc}, "
                           f"antena {etapa.porta}, {etapa.nome}", flush=True)
