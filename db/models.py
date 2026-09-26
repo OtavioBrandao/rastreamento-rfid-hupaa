@@ -132,7 +132,9 @@ class Equipamento(Base):
     )
 
     __table_args__ = (
+        Index("ix_equipamentos_tipo_id", "tipo_id"),
         Index("ix_equipamentos_ultima_zona_id", "ultima_zona_id"),
+        Index("ix_equipamentos_ultima_deteccao_em", "ultima_deteccao_em"),
         Index("ix_equipamentos_status", "status"),
         UniqueConstraint(
             "identificador_interno_normalizado",

@@ -1,5 +1,5 @@
 import { hospitalOutlinePath, type MainZone, type MapZone } from '../../config/mapaConfig'
-import type { OperationalStatus } from '../../types/dashboard'
+import type { AssetStatus } from '../../types/dashboard'
 import { Icon } from '../layout/Icon'
 
 export interface MapMarker {
@@ -9,7 +9,7 @@ export interface MapMarker {
   y: number
   label: string
   detail: string
-  status?: OperationalStatus
+  status?: AssetStatus
   dimmed?: boolean
   pulse?: boolean
 }
