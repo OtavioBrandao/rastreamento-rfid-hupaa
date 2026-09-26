@@ -200,9 +200,21 @@ def test_stop_sinaliza_observadores(monkeypatch, tmp_path):
     assert watch._ativo()
     watch._pronto("db")
     assert (tmp_path / f"{marker.stem}.db.ready").exists()
+    config = tmp_path / f"{marker.stem}.watch.json"
+    config.write_text("{}", encoding="utf-8")
     session.parar()
     assert not watch._ativo()
     assert not (tmp_path / f"{marker.stem}.db.ready").exists()
+    assert not config.exists()
+
+
+def test_stop_remove_configuracao_orfa_mesmo_sem_estado(monkeypatch, tmp_path):
+    monkeypatch.setattr(session, "SESSION_DIR", tmp_path)
+    monkeypatch.setattr(session, "STATE", tmp_path / "session.json")
+    config = tmp_path / ("a" * 32 + ".watch.json")
+    config.write_text("{}", encoding="utf-8")
+    session.parar()
+    assert not config.exists()
 
 
 def test_windows_terminal_abre_tres_abas_nomeadas(monkeypatch, tmp_path):
@@ -214,19 +226,28 @@ def test_windows_terminal_abre_tres_abas_nomeadas(monkeypatch, tmp_path):
         (args, kwargs)
     ))
     marker = tmp_path / "active"
-    terminals.abrir(tmp_path / ".env.local", "local", "ingestor-local", {}, marker)
-    assert len(chamadas) == 3
-    for (args, kwargs), (titulo, kind) in zip(chamadas, (
-        ("MQTT", "mqtt"), ("Ingestor", "logs"), ("Banco", "db")
-    ), strict=True):
-        assert args[:4] == ["wt.exe", "-w", "0", "new-tab"]
-        assert args[args.index("--title") + 1] == titulo
-        assert args[-2] == "/k"
-        assert args[-1].endswith("watch_windows.cmd")
-        assert kwargs["env"]["LAB_WATCH_KIND"] == kind
-        assert kwargs["env"]["LAB_WATCH_TITLE"] == f"RFID {titulo}"
-        assert kwargs["env"]["LAB_WATCH_PYTHON"] == terminals.sys.executable
-        assert kwargs["env"]["LAB_SESSION_MARKER"] == str(marker)
+    env = {"APP_DATABASE_URL": "postgresql://u:senha@localhost/db",
+           "MQTT_PASSWORD": "segredo", "UNRELATED_SECRET": "nao-gravar"}
+    terminals.abrir(tmp_path / ".env.local", "local", "ingestor-local", env, marker)
+    assert len(chamadas) == 1
+    args, _ = chamadas[0]
+    assert args[:4] == ["wt.exe", "-w", "0", "new-tab"]
+    assert args.count("new-tab") == 3
+    assert args.count(";") == 2
+    assert [args[i + 1] for i, item in enumerate(args) if item == "--title"] == [
+        "MQTT", "Ingestor", "Banco"
+    ]
+    for kind, titulo in (("mqtt", "MQTT"), ("logs", "Ingestor"), ("db", "Banco")):
+        assert [terminals.sys.executable, kind, titulo] in [
+            args[i:i + 3] for i in range(len(args) - 2)
+        ]
+    config = tmp_path / "active.watch.json"
+    valores = json.loads(config.read_text(encoding="utf-8"))
+    assert valores["APP_DATABASE_URL"] == env["APP_DATABASE_URL"]
+    assert valores["MQTT_PASSWORD"] == "segredo"
+    assert valores["LAB_SESSION_MARKER"] == str(marker)
+    assert "UNRELATED_SECRET" not in valores
+    assert "segredo" not in " ".join(args)
 
 
 def test_windows_sem_wt_abre_janelas_com_titulo(monkeypatch, tmp_path):
@@ -243,9 +264,8 @@ def test_windows_sem_wt_abre_janelas_com_titulo(monkeypatch, tmp_path):
     terminals.abrir(tmp_path / ".env.local", "local", "ingestor-local", {},
                     tmp_path / "active")
     assert len(chamadas) == 3
-    assert [kwargs["env"]["LAB_WATCH_TITLE"] for _, kwargs in chamadas] == [
-        "RFID MQTT", "RFID Ingestor", "RFID Banco"
-    ]
+    assert [args[-3] for args, _ in chamadas] == ["mqtt", "logs", "db"]
+    assert [args[-2] for args, _ in chamadas] == ["MQTT", "Ingestor", "Banco"]
     assert all(kwargs["creationflags"] == 16 for _, kwargs in chamadas)
 
 
@@ -263,9 +283,25 @@ def test_windows_recupera_observador_que_nao_iniciou_na_aba(monkeypatch, tmp_pat
     ))
     terminals.abrir(tmp_path / ".env.local", "local", "ingestor-local", {},
                     tmp_path / "active")
-    assert len(chamadas) == 4
+    assert len(chamadas) == 2
     assert chamadas[-1][0][0] == "cmd.exe"
-    assert chamadas[-1][1]["env"]["LAB_WATCH_KIND"] == "db"
+    assert chamadas[-1][0][-3] == "db"
+
+
+def test_observador_carrega_configuracao_local_sem_depender_do_ambiente_do_wt(
+    monkeypatch, tmp_path
+):
+    config = tmp_path / "watch.json"
+    config.write_text(json.dumps({"APP_DATABASE_URL": "postgresql://local"}),
+                      encoding="utf-8")
+    monkeypatch.setenv("APP_DATABASE_URL", "valor-antigo")
+    monkeypatch.setattr(watch.sys, "argv", ["watch", "db", "--session-file", str(config)])
+    visto = []
+    monkeypatch.setattr(watch, "db_watch", lambda: visto.append(
+        watch.os.environ["APP_DATABASE_URL"]
+    ))
+    watch.main()
+    assert visto == ["postgresql://local"]
 
 
 def test_observador_ausente_mostra_nome_do_erro(monkeypatch, tmp_path):

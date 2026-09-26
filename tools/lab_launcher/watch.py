@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -71,6 +72,7 @@ def db_watch() -> None:
     ultimo = 0
     ultimo_movimento = 0
     passagens_vistas: dict[int, tuple] = {}
+    ultimo_status = 0.0
     print("Acompanhando leituras, passagens, movimentos e última zona...", flush=True)
     try:
         while _ativo():
@@ -96,6 +98,10 @@ def db_watch() -> None:
                     "WHERE h.id > :ultimo ORDER BY h.id LIMIT 100"
                 ), {"ultimo": ultimo_movimento}).all()
             _pronto("db")
+            agora = time.monotonic()
+            if agora - ultimo_status >= 15:
+                print("Banco conectado; monitorando leituras e movimentações...", flush=True)
+                ultimo_status = agora
             for linha in reversed(passagens):
                 estado = (linha.direcao_status, linha.direcao,
                           linha.zona_origem_id, linha.zona_destino_id)
@@ -147,7 +153,17 @@ def logs_watch() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("kind", choices=("mqtt", "db", "logs"))
-    kind = parser.parse_args().kind
+    parser.add_argument("--session-file", type=Path)
+    args = parser.parse_args()
+    if args.session_file is not None:
+        valores = json.loads(args.session_file.read_text(encoding="utf-8"))
+        if not isinstance(valores, dict) or any(
+            not isinstance(chave, str) or not isinstance(valor, str)
+            for chave, valor in valores.items()
+        ):
+            raise ValueError("configuração local dos observadores inválida")
+        os.environ.update(valores)
+    kind = args.kind
     if kind == "mqtt":
         mqtt_watch()
     elif kind == "db":

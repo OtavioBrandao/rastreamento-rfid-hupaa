@@ -143,6 +143,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Launcher de testes de laboratório](lab_test_launcher.md)
    - [Correção dos observadores e ensaio sintético da Sprint 2](implementations/lab-launcher-sprint2-sintetico.md)
    - [Menu, observadores identificados e roteiro de 100 mensagens](implementations/lab-launcher-menu-abas-100-mensagens.md)
+   - [Correção da aba Banco no launcher do Windows](implementations/lab-launcher-windows-observador-banco.md)
    - [Guia de Migrations (ISS-002c)](implementations/iss-002c-migrations.md)
    - [Pipeline de CI (ISS-004)](implementations/iss-004-ci.md)
 

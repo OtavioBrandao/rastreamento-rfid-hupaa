@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import shutil
@@ -36,6 +37,18 @@ def _exigir_prontos(marker: Path) -> None:
                            + "; consulte as abas ou janelas abertas")
 
 
+def _configuracao_windows(marker: Path, env: dict[str, str]) -> Path:
+    """Entrega a configuração ao WT sem expor credenciais na linha de comando."""
+    permitidas = {"APP_DATABASE_URL", "DATABASE_URL", "LAB_SESSION_MARKER",
+                  "LAB_COMPOSE_ENV_FILE", "LAB_COMPOSE_PROFILE", "LAB_INGESTOR_SERVICE",
+                  "EVENTS_FILE", "LOG_LEVEL"}
+    valores = {chave: valor for chave, valor in env.items()
+               if chave in permitidas or chave.startswith(("MQTT_", "RFID_", "EZ700_"))}
+    path = marker.with_name(f"{marker.stem}.watch.json")
+    path.write_text(json.dumps(valores), encoding="utf-8")
+    return path
+
+
 def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
           marker: Path) -> list[subprocess.Popen]:
     env = dict(env, LAB_SESSION_MARKER=str(marker), LAB_COMPOSE_ENV_FILE=str(arquivo),
@@ -54,21 +67,24 @@ def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
         script = Path(__file__).with_name("watch_windows.cmd")
         if not script.is_file():
             raise RuntimeError("script dos observadores do Windows ausente")
-        for titulo, comando in comandos:
-            janela_env = dict(env, LAB_WATCH_KIND=comando[-1],
-                              LAB_WATCH_PYTHON=sys.executable,
-                              LAB_WATCH_TITLE=f"RFID {titulo}")
-            if windows_terminal:
-                args = [windows_terminal, "-w", "0", "new-tab", "--title", titulo,
-                        "--suppressApplicationTitle", "--startingDirectory", str(ROOT),
-                        "--inheritEnvironment", terminal, "/k", str(script)]
-                print(f"Abrindo aba {titulo} no Windows Terminal...", flush=True)
-                processos.append(subprocess.Popen(args, cwd=ROOT, env=janela_env))
-            else:
+        config = _configuracao_windows(marker, env)
+        if windows_terminal:
+            args = [windows_terminal, "-w", "0"]
+            for indice, (titulo, comando) in enumerate(comandos):
+                if indice:
+                    args.append(";")
+                args.extend(["new-tab", "--title", titulo, "--suppressApplicationTitle",
+                             "--startingDirectory", str(ROOT), terminal, "/k", str(script),
+                             sys.executable, comando[-1], titulo, str(config)])
+            print("Abrindo abas MQTT, Ingestor e Banco no Windows Terminal...", flush=True)
+            processos.append(subprocess.Popen(args, cwd=ROOT, env=env))
+        else:
+            for titulo, comando in comandos:
                 print(f"Abrindo janela {titulo} (Windows Terminal indisponível)...",
                       flush=True)
                 processos.append(subprocess.Popen(
-                    [terminal, "/k", str(script)], cwd=ROOT, env=janela_env,
+                    [terminal, "/k", str(script), sys.executable, comando[-1], titulo,
+                     str(config)], cwd=ROOT, env=env,
                     creationflags=subprocess.CREATE_NEW_CONSOLE,
                 ))
         if windows_terminal:
@@ -77,11 +93,9 @@ def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
                 if comando[-1] not in ausentes:
                     continue
                 print(f"Aba {titulo} não iniciou; abrindo janela de recuperação...", flush=True)
-                janela_env = dict(env, LAB_WATCH_KIND=comando[-1],
-                                  LAB_WATCH_PYTHON=sys.executable,
-                                  LAB_WATCH_TITLE=f"RFID {titulo}")
                 processos.append(subprocess.Popen(
-                    [terminal, "/k", str(script)], cwd=ROOT, env=janela_env,
+                    [terminal, "/k", str(script), sys.executable, comando[-1], titulo,
+                     str(config)], cwd=ROOT, env=env,
                     creationflags=subprocess.CREATE_NEW_CONSOLE,
                 ))
         _exigir_prontos(marker)
