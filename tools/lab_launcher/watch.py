@@ -5,8 +5,10 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
+from threading import Event
 from uuid import uuid4
 
 from sqlalchemy import create_engine, text
@@ -15,6 +17,7 @@ from rfid_ingestion.config import Settings
 from rfid_ingestion.connection import create_client
 
 from .config import ROOT
+from .docker_env import _limpar_saida
 
 
 def _ativo() -> bool:
@@ -26,10 +29,12 @@ def mqtt_watch() -> None:
     source = dict(os.environ, MQTT_CLIENT_ID=f"lab-watch-{uuid4().hex[:12]}")
     settings = Settings.from_env(source)
     client = create_client(settings)
+    falha = Event()
 
     def on_connect(c, _userdata, _flags, reason_code, _properties):
         if reason_code.is_failure:
-            raise RuntimeError("conexão MQTT recusada")
+            falha.set()
+            return
         c.subscribe(settings.mqtt_topic, qos=1)
         print(f"Inscrito em {settings.mqtt_topic}", flush=True)
 
@@ -42,6 +47,8 @@ def mqtt_watch() -> None:
     try:
         client.loop_start()
         while _ativo():
+            if falha.is_set():
+                raise RuntimeError("conexão MQTT do observador recusada")
             time.sleep(0.5)
     finally:
         client.disconnect()
@@ -54,7 +61,9 @@ def db_watch() -> None:
         raise ValueError("APP_DATABASE_URL ou DATABASE_URL ausente")
     engine = create_engine(url, pool_pre_ping=True)
     ultimo = 0
-    print("Aguardando leituras brutas...", flush=True)
+    ultimo_movimento = 0
+    passagens_vistas: dict[int, tuple] = {}
+    print("Acompanhando leituras, passagens, movimentos e última zona...", flush=True)
     try:
         while _ativo():
             with engine.connect() as conn:
@@ -66,6 +75,37 @@ def db_watch() -> None:
                 print(f"id={linha.id} epc={linha.epc} antena={linha.antena_id} "
                       f"lido_em={linha.lido_em}", flush=True)
                 ultimo = linha.id
+            with engine.connect() as conn:
+                passagens = conn.execute(text(
+                    "SELECT p.id, p.epc, p.direcao_status, p.direcao, "
+                    "p.zona_origem_id, p.zona_destino_id "
+                    "FROM passagens p ORDER BY p.id DESC LIMIT 100"
+                )).all()
+                movimentos = conn.execute(text(
+                    "SELECT h.id, h.epc, h.equipamento_id, h.zona_destino_id, "
+                    "e.ultima_zona_id FROM historico_movimentacoes h "
+                    "JOIN equipamentos e ON e.id = h.equipamento_id "
+                    "WHERE h.id > :ultimo ORDER BY h.id LIMIT 100"
+                ), {"ultimo": ultimo_movimento}).all()
+            for linha in reversed(passagens):
+                estado = (linha.direcao_status, linha.direcao,
+                          linha.zona_origem_id, linha.zona_destino_id)
+                if passagens_vistas.get(linha.id) != estado:
+                    print(f"passagem={linha.id} epc={linha.epc} "
+                          f"status={linha.direcao_status or 'pendente'} "
+                          f"direção={linha.direcao or '-'} "
+                          f"zonas={linha.zona_origem_id}->{linha.zona_destino_id}",
+                          flush=True)
+                    passagens_vistas[linha.id] = estado
+            recentes = {linha.id for linha in passagens}
+            passagens_vistas = {chave: valor for chave, valor in passagens_vistas.items()
+                               if chave in recentes}
+            for linha in movimentos:
+                print(f"movimento={linha.id} epc={linha.epc} "
+                      f"equipamento={linha.equipamento_id} "
+                      f"destino={linha.zona_destino_id} "
+                      f"última_zona={linha.ultima_zona_id}", flush=True)
+                ultimo_movimento = linha.id
             time.sleep(2)
     finally:
         engine.dispose()
@@ -90,6 +130,8 @@ def logs_watch() -> None:
             except subprocess.TimeoutExpired:
                 processo.kill()
                 processo.wait()
+    if processo.returncode not in (None, 0) and _ativo():
+        raise RuntimeError(f"docker compose logs terminou com código {processo.returncode}")
 
 
 def main() -> None:
@@ -105,4 +147,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as erro:
+        print("Falha no observador: " + _limpar_saida(str(erro), dict(os.environ)),
+              file=sys.stderr, flush=True)
+        raise SystemExit(1) from None

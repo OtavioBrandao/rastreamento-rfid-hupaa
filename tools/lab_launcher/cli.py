@@ -10,6 +10,9 @@ from typing import Annotated
 
 import typer
 from dotenv import dotenv_values
+from sqlalchemy.exc import SQLAlchemyError
+
+from api.epc import normalizar_epc
 
 from .config import ROOT, carregar
 from .docker_env import (
@@ -27,6 +30,7 @@ from .session import iniciar as iniciar_sessao
 from .session import parar as parar_sessao
 from .synthetic import epcs_padrao, publicar
 from .terminals import abrir, encerrar
+from .verify import conferir, inicio
 
 app = typer.Typer(help="Prepara e observa um teste de laboratório RFID.")
 
@@ -121,8 +125,10 @@ def start(
     serial: Annotated[str | None, typer.Option("--serial")] = None,
     timestamp_format: Annotated[str | None, typer.Option("--timestamp-format")] = None,
     passage: Annotated[bool, typer.Option("--passage/--single")] = True,
-    count: Annotated[int, typer.Option("--count")] = 1,
+    count: Annotated[int, typer.Option("--count", help="Quantidade de EPCs sintéticos")] = 3,
     interval: Annotated[float, typer.Option("--interval")] = 0.5,
+    repeats: Annotated[int, typer.Option("--repeats", help="Leituras por antena/EPC")] = 3,
+    burst_interval: Annotated[float, typer.Option("--burst-interval")] = 0.08,
     epc: Annotated[list[str] | None, typer.Option("--epc")] = None,
 ) -> None:
     processos = []
@@ -131,6 +137,7 @@ def start(
     ambiente = None
     started = False
     marker = None
+    lista: list[str] = []
     etapa = "seleção do cenário"
     try:
         modo, origem = _cenario(env, source)
@@ -148,8 +155,15 @@ def start(
         print(f"Configuração carregada de {arquivo.name}")
         if timestamp_format and timestamp_format not in ("counter", "rfc3339", "epoch_ms"):
             raise ValueError("--timestamp-format deve ser counter, rfc3339 ou epoch_ms")
-        if origem == "physical":
-            ambiente["EZ700_TIMESTAMP_FORMAT"] = timestamp_format or "counter"
+        if origem == "synthetic":
+            if timestamp_format == "epoch_ms":
+                raise ValueError("dados sintéticos aceitam counter ou rfc3339")
+            lista = [normalizar_epc(item) for item in (epc or epcs_padrao(count))]
+            if len(set(lista)) != len(lista):
+                raise ValueError("não repita o mesmo EPC no teste sintético")
+            print(f"Plano sintético: {len(lista)} EPC(s), {repeats} leitura(s) por antena, "
+                  f"passagem={'sim' if passage else 'não'}")
+        ambiente["EZ700_TIMESTAMP_FORMAT"] = timestamp_format or "counter"
         projeto = valores.get("COMPOSE_PROJECT_NAME", "rfid-hospital-local" if modo == "local"
                               else "rfid-hospital-managed")
         if fresh:
@@ -192,7 +206,9 @@ def start(
         if modo == "managed":
             seed_env["DATABASE_URL"] = valores["DATABASE_URL"]
         executar([sys.executable, "-m", "tools.lab_launcher.seed", "--reader-id", reader_id,
-                  *(["--serial", serial] if serial else [])], env=seed_env, mostrar=True)
+                  *(["--serial", serial] if serial else []),
+                  *(item for valor in lista for item in ("--epc", valor))],
+                 env=seed_env, mostrar=True)
         etapa = "inicialização do ingestor"
         print("Iniciando ingestor...")
         compose(arquivo, modo, "up", "-d", ingestor, env=ambiente, mostrar=True)
@@ -206,16 +222,21 @@ def start(
             time.sleep(2)
         if origem == "synthetic":
             etapa = "publicação das leituras sintéticas"
-            lista = epc or epcs_padrao(count)
             publisher = dict(valores)
             if publisher_env_file is not None:
                 if not publisher_env_file.exists():
                     raise ValueError("arquivo de configuração do publicador ausente")
                 publisher.update({k: v for k, v in dotenv_values(publisher_env_file).items()
                                   if v is not None and k.startswith("MQTT_")})
+            baseline = inicio(valores["APP_DATABASE_URL"])
             total = publicar(publisher, reader_id, epcs=lista, passagem=passage,
-                             intervalo=interval, portal_id=portal_id)
+                             intervalo=interval, portal_id=portal_id,
+                             repeticoes=repeats, intervalo_rajada=burst_interval,
+                             timestamp_format=ambiente["EZ700_TIMESTAMP_FORMAT"])
             print(f"{total} leitura(s) sintética(s) publicada(s)")
+            etapa = "verificação da Sprint 2 no banco"
+            conferir(valores["APP_DATABASE_URL"], baseline, lista,
+                     passagem=passage, repeticoes=repeats)
         else:
             print("Pronto para leituras do leitor físico. Use 'stop' ao encerrar.")
         if interativo and not no_terminals:
@@ -228,7 +249,7 @@ def start(
         if started and arquivo is not None and modo is not None and ambiente is not None:
             compose(arquivo, modo, "down", env=ambiente)
         print("Teste encerrado")
-    except (ValueError, RuntimeError, TimeoutError, OSError) as erro:
+    except (ValueError, RuntimeError, TimeoutError, OSError, SQLAlchemyError) as erro:
         if marker is not None:
             parar_sessao()
         if started and arquivo is not None and modo is not None and ambiente is not None:

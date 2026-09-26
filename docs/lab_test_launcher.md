@@ -16,6 +16,7 @@ deve reaproveitar os dados. O modo sem perguntas usa as flags equivalentes:
 
 ```bash
 python -m tools.lab_launcher start --env local --source synthetic --passage
+python -m tools.lab_launcher start --env local --source synthetic --count 5 --repeats 4
 python -m tools.lab_launcher start --env local --source physical --reader-id reader-01
 python -m tools.lab_launcher start --env managed --source synthetic --env-file .env.cloud
 python -m tools.lab_launcher stop --env local
@@ -31,13 +32,30 @@ essa confirmação. Não encerra o daemon Docker nem um processo sem PID acessí
 Se faltar permissão ou uma porta continuar indisponível, o teste é interrompido
 com erro em vez de alegar que a porta foi liberada. Contêineres do próprio
 projeto são reaproveitados. `--no-terminals` permite execução sem interface
-gráfica. `--count`,
-`--interval`, `--epc` e `--single` controlam as publicações sintéticas. O padrão
-`--passage` publica o mesmo EPC nas portas 1 e 2, nessa ordem.
-No modo `physical`, o launcher ativa `--timestamp-format counter` por padrão
-para o contador interno observado no laboratório; use `--timestamp-format
-rfc3339` ou `epoch_ms` se o leitor estiver configurado de outra forma. O
-contador original permanece na auditoria e o horário canônico vem do recebimento.
+gráfica. `--count`, `--repeats`, `--burst-interval`, `--interval`, `--epc` e
+`--single` controlam as publicações sintéticas. O padrão usa três EPCs fixos
+de laboratório e publica três leituras em cada antena, totalizando 18
+mensagens. Para cada EPC, `--passage` publica uma rajada na porta 1 e outra na
+porta 2, nessa ordem. `--burst-interval` controla o intervalo dentro da rajada
+(80 ms por padrão); `--interval` controla a pausa entre antenas (500 ms por
+padrão), maior que a tolerância inicial de ambiguidade da direção (100 ms).
+Os EPCs padrão são reutilizados entre execuções; `--epc` permite informar EPCs
+hexadecimais próprios. O seed associa os EPCs sintéticos a equipamentos de
+laboratório antes da publicação, para que passagem confirmada também gere
+histórico de movimentação e última zona. Vínculos existentes são preservados.
+O launcher consulta o banco após publicar e informa, por EPC, as leituras
+persistidas, a passagem, o movimento e a última zona. Se o resultado não surgir
+em 30 segundos, a etapa falha com o último estado observado. `--single` valida
+somente as leituras, sem esperar passagem.
+
+O launcher usa `--timestamp-format counter` por padrão tanto no teste físico
+quanto no sintético. O publicador sintético usa os campos JSON observados
+(`epc`, `timestamp`, `rssi`, `antenna`, `readerid`) com contador artificial
+crescente. Isso testa a normalização do contador sem afirmar unidade ou formato
+completo do relógio físico. `--timestamp-format rfc3339` testa o outro perfil;
+no modo físico também é possível usar `epoch_ms` se o leitor estiver configurado
+dessa forma. O contador original permanece na auditoria e o horário canônico
+vem do recebimento.
 
 O seed usa `reader-01` por padrão, cria um andar e setor exclusivos de laboratório,
 zonas A/B, portal, duas antenas e seus mapeamentos lógicos ativos. Pode ser
@@ -52,17 +70,19 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
 ## Pré-requisitos
 
 - Python 3.12 e `pip install -r requirements.txt` no host.
-- Windows 11: Docker Desktop com backend WSL2. Windows Terminal é preferido;
-  sem ele, são abertas janelas PowerShell. O comando Python deve ser executado
+- Windows 11: Docker Desktop com backend WSL2. O launcher abre três consoles
+  `cmd.exe` separados, evitando falhas de interpretação de argumentos no
+  Windows Terminal e mensagens do PSReadLine. O comando Python deve ser executado
   no Windows, no mesmo ambiente virtual usado para instalar as dependências.
 - Ubuntu 24.04: Docker Engine com plugin Compose e permissão para usar Docker.
   `gnome-terminal`, `konsole`, `xterm`, `x-terminal-emulator` ou `tmux` para os
-  três painéis. Em WSL2 sem servidor gráfico, instale `tmux`.
+  três painéis. Sem `DISPLAY`/`WAYLAND_DISPLAY` (inclusive WSL2 sem servidor
+  gráfico), o launcher escolhe `tmux`; instale-o para esse ambiente.
 - O observador MQTT usa `paho-mqtt` já presente em `requirements.txt`; não
   precisa instalar `mosquitto_sub` no host. No modo interativo o launcher
   acompanha o teste até `Ctrl+C`. Os três observadores usam um sinal de sessão:
   `Ctrl+C` ou `stop` encerra os observadores e os serviços Compose. As abas de
-  terminal podem permanecer abertas com o histórico para inspeção. `stop`
+  terminal podem permanecer abertos com o histórico para inspeção. `stop`
   confirma que as portas locais ficaram livres e oferece encerrar outros
   processos que ainda as ocupem; `--clear-ports` faz essa limpeza sem pergunta.
   Em execução sem terminal (`--no-terminals`), use `stop` para encerrar o Compose.
@@ -80,9 +100,9 @@ Se a ACL do broker reservar credenciais distintas para publicação, passe
 O launcher espera a saúde de PostgreSQL e Mosquitto locais, aplica Alembic,
 executa o seed no banco de testes e só então inicia o ingestor. O healthcheck
 do ingestor confirma conectividade MQTT e uma consulta simples ao banco. Abre observação
-MQTT, logs do ingestor e polling de leituras persistidas. Dados sintéticos
-seguem o contrato atualmente aceito pelo adapter `ez700` e usam timestamps
-RFC3339 gerados pelo software; isso não declara o formato do relógio físico.
+MQTT, logs do ingestor e polling de leituras, passagens, movimentos e última
+zona. Dados sintéticos seguem o contrato atualmente aceito pelo adapter
+`ez700`; isso não declara o formato completo do payload físico.
 A janela de passagem e o debounce ainda precisam de calibração física no HUPAA.
 Sem Docker disponível, use `--help` para verificar as opções, mas o fluxo de
 ponta a ponta exige um daemon Docker ativo e acesso ao broker/banco.

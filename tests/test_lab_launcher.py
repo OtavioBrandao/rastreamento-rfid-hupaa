@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from io import StringIO
 from types import SimpleNamespace
 
@@ -10,10 +11,22 @@ import psutil
 import pytest
 from sqlalchemy import func, select
 
-from db.models import Antena, Leitor, MapeamentoAntenaPortal, Portal, Zona
+from db.models import (
+    Antena,
+    AssociacaoTagEquipamento,
+    Equipamento,
+    Leitor,
+    MapeamentoAntenaPortal,
+    Portal,
+    Tag,
+    TipoEquipamento,
+    Zona,
+)
+from rfid_ingestion.config import Settings
+from rfid_ingestion.parsing import build_event
 from tools.lab_launcher import cli, docker_env, session, synthetic, terminals, watch
 from tools.lab_launcher.config import carregar
-from tools.lab_launcher.seed import semear
+from tools.lab_launcher.seed import semear, semear_epcs_sinteticos
 
 
 def test_seed_laboratorio_reexecutavel(db):
@@ -28,6 +41,19 @@ def test_seed_laboratorio_reexecutavel(db):
     assert db.scalar(select(func.count()).select_from(MapeamentoAntenaPortal)) == 2
     lados = db.scalars(select(MapeamentoAntenaPortal.lado).order_by(MapeamentoAntenaPortal.lado))
     assert list(lados) == ["a", "b"]
+
+
+def test_epcs_sinteticos_criam_vinculos_reutilizaveis(db):
+    semear(db)
+    epcs = synthetic.epcs_padrao(2)
+    primeiro = semear_epcs_sinteticos(db, epcs)
+    segundo = semear_epcs_sinteticos(db, epcs)
+    assert all("equipamento criado" in valor for valor in primeiro.values())
+    assert all("vínculo existente" in valor for valor in segundo.values())
+    assert db.scalar(select(func.count()).select_from(TipoEquipamento)) == 1
+    assert db.scalar(select(func.count()).select_from(Equipamento)) == 2
+    assert db.scalar(select(func.count()).select_from(Tag)) == 2
+    assert db.scalar(select(func.count()).select_from(AssociacaoTagEquipamento)) == 2
 
 
 def test_publicador_emite_mesmo_epc_em_duas_portas(monkeypatch):
@@ -61,13 +87,28 @@ def test_publicador_emite_mesmo_epc_em_duas_portas(monkeypatch):
     monkeypatch.setattr(synthetic.time, "sleep", lambda seconds: None)
     total = synthetic.publicar(
         {"MQTT_HOST": "localhost", "MQTT_PORT": "1883", "MQTT_MODE": "local"},
-        "reader-01", epcs=["E2801190A502006016C32F62"], passagem=True, intervalo=0.5,
+        "reader-01", epcs=["e2801190a502006016c32f62"], passagem=True, intervalo=0.5,
     )
-    assert total == 2
-    assert [p[1]["antenna"] for p in publicados] == [1, 2]
+    assert total == 6
+    assert [p[1]["antenna"] for p in publicados] == [1, 1, 1, 2, 2, 2]
     assert all(p[1]["epc"] == "E2801190A502006016C32F62" for p in publicados)
     assert all(p[0] == "easy/dev/hupaa/portal-01/reader-01/readings" for p in publicados)
     assert all(p[2] == 1 for p in publicados)
+    assert len({p[1]["timestamp"] for p in publicados}) == 6
+    settings = Settings.from_env({"EZ700_TIMESTAMP_FORMAT": "counter"})
+    for topic, payload, _ in publicados:
+        evento = build_event(topic=topic, qos=1, retain=False,
+                             payload=json.dumps(payload).encode(), settings=settings,
+                             received_at=datetime.now(timezone.utc))
+        assert evento["validation_errors"] == []
+        assert evento["canonical_event"]["metadata"]["timestamp_original"] == payload[
+            "timestamp"
+        ]
+
+
+def test_epcs_padrao_sao_reutilizaveis_sem_colisao():
+    assert synthetic.epcs_padrao(3) == synthetic.epcs_padrao(3)
+    assert len(set(synthetic.epcs_padrao(3))) == 3
 
 
 def test_modo_local_nao_usa_database_url_externa_do_shell(monkeypatch, tmp_path):
@@ -146,8 +187,48 @@ def test_abre_tres_observadores_em_terminais_separados(monkeypatch, tmp_path):
     terminals.abrir(tmp_path / ".env.local", "local", "ingestor-local", {}, marker)
     assert len(chamadas) == 3
     for (args, kwargs), kind in zip(chamadas, ("mqtt", "logs", "db"), strict=True):
-        assert kind in args[-1]
+        assert args[1] == "/k"
+        assert args[2].endswith("watch_windows.cmd")
+        assert kwargs["env"]["LAB_WATCH_KIND"] == kind
+        assert kwargs["env"]["LAB_WATCH_PYTHON"] == terminals.sys.executable
+        assert kwargs["creationflags"] == terminals.subprocess.CREATE_NEW_CONSOLE
         assert kwargs["env"]["LAB_SESSION_MARKER"] == str(marker)
+
+
+def test_ubuntu_abre_observadores_com_bash_em_terminais_separados(monkeypatch, tmp_path):
+    chamadas = []
+    monkeypatch.setattr(terminals, "_sistema", lambda: "posix")
+    monkeypatch.setattr(terminals.shutil, "which", lambda nome: (
+        "/usr/bin/gnome-terminal" if nome == "gnome-terminal" else None
+    ))
+    monkeypatch.setattr(terminals.subprocess, "Popen", lambda args, **kwargs: chamadas.append(
+        (args, kwargs)
+    ))
+    terminals.abrir(tmp_path / ".env", "local", "ingestor-local",
+                    {"DISPLAY": ":0"}, tmp_path / "active")
+    assert len(chamadas) == 3
+    for (args, kwargs), kind in zip(chamadas, ("mqtt", "logs", "db"), strict=True):
+        assert args[0] == "/usr/bin/gnome-terminal"
+        assert args[-3:-1] == ["bash", "-lc"]
+        assert f"watch {kind}" in args[-1]
+        assert kwargs["cwd"] == terminals.ROOT
+
+
+def test_ubuntu_sem_interface_grafica_usa_tmux(monkeypatch, tmp_path):
+    comandos = []
+    monkeypatch.setattr(terminals, "_sistema", lambda: "posix")
+    monkeypatch.setattr(terminals, "_TMUX_SESSION", None)
+    monkeypatch.setattr(terminals.shutil, "which", lambda nome: (
+        "/usr/bin/tmux" if nome == "tmux" else "/usr/bin/gnome-terminal"
+    ))
+    monkeypatch.setattr(terminals.subprocess, "run", lambda args, **kwargs: (
+        comandos.append(args) or SimpleNamespace(returncode=0)
+    ))
+    terminals.abrir(tmp_path / ".env", "local", "ingestor-local", {}, tmp_path / "active")
+    assert [args[1] for args in comandos] == [
+        "new-session", "split-window", "split-window", "select-layout"
+    ]
+    assert terminals._TMUX_SESSION is not None
 
 
 def test_erro_docker_mostra_causa_sem_expor_credenciais(monkeypatch):
