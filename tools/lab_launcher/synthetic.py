@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import math
+import secrets
 import time
-from datetime import datetime, timezone
+from dataclasses import dataclass
 from threading import Event
 from uuid import uuid4
 
@@ -17,19 +18,51 @@ from rfid_ingestion.connection import create_client
 from rfid_ingestion.topics import reading_topic
 
 
+@dataclass(frozen=True)
+class Etapa:
+    nome: str
+    porta: int
+    quantidade: int
+    pausa: float
+    rssi_inicial: int
+    rssi_final: int
+
+
+def roteiro(mensagens: int, passagem: bool) -> tuple[Etapa, ...]:
+    """Cenário ilustrativo: aproximação, permanência e travessia do portal."""
+    if passagem and mensagens < 10:
+        raise ValueError("passagem sintética exige ao menos 10 mensagens por EPC")
+    if mensagens < 1:
+        raise ValueError("quantidade de mensagens deve ser positiva")
+    if not passagem:
+        aproximacao = max(1, round(mensagens * 0.2))
+        return (
+            Etapa("aproximação da antena 1", 1, aproximacao, 0.10, -6700, -5700),
+            Etapa("parado na antena 1", 1, mensagens - aproximacao, 0.15, -5700, -5700),
+        )
+    aproximacao = round(mensagens * 0.15)
+    permanencia = round(mensagens * 0.45)
+    saida = round(mensagens * 0.10)
+    travessia = mensagens - aproximacao - permanencia - saida
+    return (
+        Etapa("aproximação da antena 1", 1, aproximacao, 0.10, -6700, -5700),
+        Etapa("parado na antena 1", 1, permanencia, 0.15, -5700, -5700),
+        Etapa("saída da antena 1", 1, saida, 0.08, -5700, -6700),
+        Etapa("passagem pela antena 2", 2, travessia, 0.10, -6700, -5700),
+    )
+
+
 def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
              passagem: bool, intervalo: float, portal_id: str = "portal-01",
-             repeticoes: int = 3, intervalo_rajada: float = 0.08,
+             mensagens: int = 100,
              timestamp_format: str = "counter") -> int:
-    if (not math.isfinite(intervalo) or intervalo < 0
-            or not math.isfinite(intervalo_rajada) or intervalo_rajada < 0):
-        raise ValueError("intervalos devem ser finitos e não negativos")
-    if repeticoes < 1:
-        raise ValueError("repetições por antena devem ser positivas")
-    if timestamp_format not in ("counter", "rfc3339"):
-        raise ValueError("formato sintético deve ser counter ou rfc3339")
+    if not math.isfinite(intervalo) or intervalo < 0:
+        raise ValueError("intervalo entre antenas deve ser finito e não negativo")
+    if timestamp_format != "counter":
+        raise ValueError("o JSON sintético do leitor exige timestamp no formato counter")
     if not epcs:
         raise ValueError("informe EPCs hexadecimais válidos")
+    etapas = roteiro(mensagens, passagem)
     epcs = [normalizar_epc(epc) for epc in epcs]
     assinatura = config.get("MQTT_TOPIC", "easy/dev/hupaa/+/+/readings").split("/")
     ambiente = assinatura[1] if len(assinatura) == 6 and assinatura[1] != "+" else "dev"
@@ -56,31 +89,36 @@ def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
         if not conectado.wait(10) or erro:
             raise RuntimeError("broker MQTT indisponível")
         total = 0
-        contador = time.monotonic_ns() // 1_000_000 % 100_000_000_000
+        contador = 1_000_000 + secrets.randbelow(8_000_000)
         for epc in epcs:
-            for porta in ((1, 2) if passagem else (1,)):
-                for indice in range(repeticoes):
-                    timestamp = (str(contador + total) if timestamp_format == "counter"
-                                 else datetime.now(timezone.utc).isoformat(
-                                     timespec="milliseconds"))
+            for etapa in etapas:
+                if etapa.porta == 2:
+                    print(f"EPC {epc}: deslocamento até a antena 2 ({intervalo:g}s)",
+                          flush=True)
+                    time.sleep(intervalo)
+                print(f"EPC {epc}: {etapa.nome}, {etapa.quantidade} mensagem(ns)",
+                      flush=True)
+                for indice in range(etapa.quantidade):
+                    timestamp = str(contador + total)
+                    fracao = indice / max(etapa.quantidade - 1, 1)
+                    rssi = round(etapa.rssi_inicial
+                                 + (etapa.rssi_final - etapa.rssi_inicial) * fracao)
                     payload = {
                         "epc": epc,
+                        "rssi": rssi,
+                        "antenna": etapa.porta,
                         "timestamp": timestamp,
-                        "rssi": -3880,
-                        "antenna": porta,
-                        "readerid": reader_id,
                     }
-                    result = client.publish(topic, json.dumps(payload), qos=1)
+                    result = client.publish(topic, json.dumps(payload, separators=(",", ":")),
+                                            qos=1)
                     result.wait_for_publish(timeout=10)
                     if not result.is_published():
                         raise RuntimeError("broker não confirmou a leitura sintética")
                     total += 1
-                    print(f"Leitura {total}: EPC {epc}, porta {porta}, "
-                          f"rajada {indice + 1}/{repeticoes}, tópico {topic}", flush=True)
-                    if indice + 1 < repeticoes:
-                        time.sleep(intervalo_rajada)
-                if passagem and porta == 1:
-                    time.sleep(intervalo)
+                    print(f"Mensagem {total}/{len(epcs) * mensagens}: EPC {epc}, "
+                          f"antena {etapa.porta}, {etapa.nome}", flush=True)
+                    if indice + 1 < etapa.quantidade:
+                        time.sleep(etapa.pausa)
         return total
     finally:
         client.disconnect()

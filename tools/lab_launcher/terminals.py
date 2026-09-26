@@ -7,6 +7,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from .config import ROOT
@@ -16,6 +17,23 @@ _TMUX_SESSION: str | None = None
 
 def _sistema() -> str:
     return os.name
+
+
+def _aguardar_prontos(marker: Path, kinds: tuple[str, ...], timeout: float = 10) -> tuple[str, ...]:
+    prazo = time.monotonic() + timeout
+    while True:
+        ausentes = tuple(kind for kind in kinds if not marker.with_name(
+            f"{marker.stem}.{kind}.ready").exists())
+        if not ausentes or time.monotonic() >= prazo:
+            return ausentes
+        time.sleep(0.2)
+
+
+def _exigir_prontos(marker: Path) -> None:
+    ausentes = _aguardar_prontos(marker, ("mqtt", "logs", "db"))
+    if ausentes:
+        raise RuntimeError("observadores não iniciaram: " + ", ".join(ausentes)
+                           + "; consulte as abas ou janelas abertas")
 
 
 def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
@@ -32,17 +50,41 @@ def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
         terminal = shutil.which("cmd.exe")
         if terminal is None:
             raise RuntimeError("cmd.exe não encontrado para abrir os observadores no Windows")
+        windows_terminal = shutil.which("wt.exe") or shutil.which("wt")
         script = Path(__file__).with_name("watch_windows.cmd")
         if not script.is_file():
             raise RuntimeError("script dos observadores do Windows ausente")
         for titulo, comando in comandos:
             janela_env = dict(env, LAB_WATCH_KIND=comando[-1],
-                              LAB_WATCH_PYTHON=sys.executable)
-            print(f"Abrindo terminal {titulo}...", flush=True)
-            processos.append(subprocess.Popen(
-                [terminal, "/k", str(script)], cwd=ROOT, env=janela_env,
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
-            ))
+                              LAB_WATCH_PYTHON=sys.executable,
+                              LAB_WATCH_TITLE=f"RFID {titulo}")
+            if windows_terminal:
+                args = [windows_terminal, "-w", "0", "new-tab", "--title", titulo,
+                        "--suppressApplicationTitle", "--startingDirectory", str(ROOT),
+                        "--inheritEnvironment", terminal, "/k", str(script)]
+                print(f"Abrindo aba {titulo} no Windows Terminal...", flush=True)
+                processos.append(subprocess.Popen(args, cwd=ROOT, env=janela_env))
+            else:
+                print(f"Abrindo janela {titulo} (Windows Terminal indisponível)...",
+                      flush=True)
+                processos.append(subprocess.Popen(
+                    [terminal, "/k", str(script)], cwd=ROOT, env=janela_env,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                ))
+        if windows_terminal:
+            ausentes = _aguardar_prontos(marker, ("mqtt", "logs", "db"))
+            for titulo, comando in comandos:
+                if comando[-1] not in ausentes:
+                    continue
+                print(f"Aba {titulo} não iniciou; abrindo janela de recuperação...", flush=True)
+                janela_env = dict(env, LAB_WATCH_KIND=comando[-1],
+                                  LAB_WATCH_PYTHON=sys.executable,
+                                  LAB_WATCH_TITLE=f"RFID {titulo}")
+                processos.append(subprocess.Popen(
+                    [terminal, "/k", str(script)], cwd=ROOT, env=janela_env,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                ))
+        _exigir_prontos(marker)
         return processos
 
     interface_grafica = bool(env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"))
@@ -62,6 +104,7 @@ def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
             else:
                 args = [generic, "-e", "bash", "-lc", linha]
             processos.append(subprocess.Popen(args, cwd=ROOT, env=env))
+        _exigir_prontos(marker)
         return processos
 
     tmux = shutil.which("tmux")
@@ -78,6 +121,7 @@ def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
         subprocess.run([tmux, "select-layout", "-t", nome, "tiled"], check=True)
         _TMUX_SESSION = nome
         print(f"Observação em tmux: tmux attach -t {nome}")
+        _exigir_prontos(marker)
         return processos
     raise RuntimeError("instale tmux ou execute com interface gráfica para abrir os observadores")
 

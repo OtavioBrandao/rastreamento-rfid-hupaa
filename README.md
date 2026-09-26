@@ -88,11 +88,13 @@ tail -n 3 data/raw_events.jsonl
 
 ```bash
 python -m pip install -r requirements.txt
-python -m tools.lab_launcher start --env local --source synthetic --passage
+python -m tools.lab_launcher
 ```
 
-O launcher prepara o cadastro e abre observação MQTT, logs do ingestor e
-leituras no banco. Sem flags, oferece um menu para teste local sintético,
+O launcher limpa a tela, mostra o menu, prepara o cadastro e abre observação
+MQTT, logs do ingestor e leituras no banco. O cenário sintético padrão publica
+100 mensagens de um item, da aproximação à passagem pelo portal. O menu oferece
+teste local sintético,
 local com leitor físico ou com broker e banco externos. Veja
 [instruções para Windows 11 e Ubuntu](docs/lab_test_launcher.md).
 
