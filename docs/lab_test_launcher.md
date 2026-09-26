@@ -18,11 +18,27 @@ deve reaproveitar os dados. O modo sem perguntas usa as flags equivalentes:
 python -m tools.lab_launcher
 python -m tools.lab_launcher start --env local --source synthetic --passage
 python -m tools.lab_launcher start --env local --source synthetic --count 2 --messages 100
+python -m tools.lab_launcher start --env local --source synthetic --scenario 2
+python -m tools.lab_launcher start --env managed --source synthetic --scenario 3 --env-file .env.cloud
 python -m tools.lab_launcher start --env local --source physical --reader-id reader-01
 python -m tools.lab_launcher start --env managed --source synthetic --env-file .env.cloud
 python -m tools.lab_launcher stop --env local
 python -m tools.lab_launcher stop --env local --clear-ports
 ```
+
+Depois da escolha do ambiente (1–4), o modo interativo pergunta qual roteiro
+executar. `--scenario 1|2|3` faz a mesma seleção sem interação. O roteiro 1
+mantém o ensaio original de uma tag (ou `--count` tags independentes) em A → B;
+`--single` mantém a tag na antena A sem passagem. Os roteiros 2 e 3 usam por
+padrão os EPCs terminados em **02** e **03** e exigem exatamente dois EPCs se
+`--epc` for usado. Neles, `--messages` indica leituras por travessia, com mínimo
+de 10; `--interval` define a pausa entre lados do portal. O roteiro 2 faz 02
+A → B, depois 02 B → A enquanto 03 A → B, e depois 02 A → B enquanto 03
+B → A. O roteiro 3 faz 02 A → B e a mantém lá; 03 atravessa A → B → A → B → A.
+Leituras de tags que se movem ao mesmo tempo são intercaladas; há 3,5 segundos
+entre fases para permitir novas passagens da mesma tag. Em modos físicos, o
+mesmo menu mostra o percurso como guia manual, sem publicar leituras sintéticas.
+O payload JSON e o cálculo de `event_id` do ingestor não foram alterados.
 
 `--reuse` reaproveita dados sem perguntar. `--fresh` executa
 `docker compose down -v` somente no modo local e apaga os

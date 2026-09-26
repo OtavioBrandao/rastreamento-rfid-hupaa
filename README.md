@@ -114,7 +114,7 @@ npm run dev
 # Abra http://localhost:5173/
 ```
 
-O Dashboard e os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), a [base da Etapa A](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
+O Dashboard e os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. No EASY, as leituras recentes das antenas aparecem separadas da última zona confirmada. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), os [roteiros e leituras ao vivo](docs/implementations/roteiros-laboratorio-mapa-ao-vivo.md), a [base da Etapa A](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
 
 ---
 

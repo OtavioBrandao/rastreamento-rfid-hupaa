@@ -12,6 +12,7 @@ export interface MapMarker {
   status?: AssetStatus
   dimmed?: boolean
   pulse?: boolean
+  pulseKey?: number
 }
 
 export function FloorMap({ mode, zones = [], mainZones = [], selectedZoneId = '', showZones = true, markers, onMarkerClick, onZoneClick }: { mode: 'hospital' | 'lab'; zones?: MapZone[]; mainZones?: MainZone[]; selectedZoneId?: string; showZones?: boolean; markers: MapMarker[]; onMarkerClick: (marker: MapMarker) => void; onZoneClick?: (id: string) => void }) {
@@ -39,6 +40,6 @@ export function FloorMap({ mode, zones = [], mainZones = [], selectedZoneId = ''
       </>}
     </svg>
     {mode === 'hospital' && <div className="sector-layer" aria-label="Três zonas principais provisórias">{mainZones.map((zone) => <button key={zone.id} type="button" className={`sector-pin ${selectedZoneId === zone.id ? 'sector-pin-selected' : ''}`} style={position(zone.x, zone.y)} aria-label={`${zone.name}: ${zone.description}`} aria-pressed={selectedZoneId === zone.id} onClick={() => onZoneClick?.(selectedZoneId === zone.id ? '' : zone.id)}>{zone.name}</button>)}</div>}
-    <div className="marker-layer">{markers.map((marker) => <button key={marker.id} type="button" className={`map-marker marker-${marker.kind} ${marker.status ? `marker-${marker.status}` : ''} ${marker.dimmed ? 'marker-dimmed' : ''} ${marker.pulse ? 'marker-pulse' : ''}`} style={position(marker.x, marker.y)} aria-label={`${marker.label}. ${marker.detail}`} title={`${marker.label} — ${marker.detail}`} onClick={() => onMarkerClick(marker)}><Icon name={marker.kind} size={20}/><span className="marker-tooltip"><strong>{marker.label}</strong><small>{marker.detail}</small></span></button>)}</div>
+    <div className="marker-layer">{markers.map((marker) => <button key={`${marker.id}-${marker.pulseKey ?? 0}`} type="button" className={`map-marker marker-${marker.kind} ${marker.status ? `marker-${marker.status}` : ''} ${marker.dimmed ? 'marker-dimmed' : ''} ${marker.pulse ? 'marker-pulse' : ''}`} style={position(marker.x, marker.y)} aria-label={`${marker.label}. ${marker.detail}`} title={`${marker.label} — ${marker.detail}`} onClick={() => onMarkerClick(marker)}><Icon name={marker.kind} size={20}/><span className="marker-tooltip"><strong>{marker.label}</strong><small>{marker.detail}</small></span></button>)}</div>
   </div>
 }
