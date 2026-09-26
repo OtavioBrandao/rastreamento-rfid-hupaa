@@ -56,7 +56,7 @@ def simulator(payload, settings):
 ADAPTERS = {"ez700": ez700, "simulator": simulator}
 
 
-def normalize(payload, topic, raw, settings):
+def normalize(payload, topic, raw, settings, received_at=None):
     reader_id = None
     adapter = settings.normalization_adapter
     try:
@@ -81,8 +81,16 @@ def normalize(payload, topic, raw, settings):
             raise ValueError("unidade de rssi desconhecida; use dBm ou unknown")
         if unit == "dBm" and rssi > 0:
             raise ValueError("rssi em dBm deve ser menor ou igual a zero")
-        timestamp = utc_timestamp(timestamp, epoch_ms=epoch_ms)
-        timestamp_format = "epoch_ms" if epoch_ms else "rfc3339"
+        if adapter == "ez700" and settings.ez700_timestamp_format == "counter":
+            if not isinstance(timestamp, str) or not re.fullmatch(r"[0-9]{1,12}", timestamp):
+                raise ValueError("contador EZ700 deve ser texto numérico")
+            if received_at is None:
+                raise ValueError("horário de recebimento obrigatório para contador EZ700")
+            timestamp = utc_timestamp(received_at)
+            timestamp_format = "counter"
+        else:
+            timestamp = utc_timestamp(timestamp, epoch_ms=epoch_ms)
+            timestamp_format = "epoch_ms" if epoch_ms else "rfc3339"
         identity = b"rfid-v1\0" + topic.encode() + b"\0" + adapter.encode() + b"\0" + timestamp_format.encode() + b"\0" + raw
         event = dict(event_id="sha256:" + hashlib.sha256(identity).hexdigest(),
                      epc=epc, antenna=antenna, rssi=rssi if unit == "dBm" else None,
@@ -90,7 +98,7 @@ def normalize(payload, topic, raw, settings):
                      metadata=dict(adapter=adapter, source_fields=extras,
                                    rssi_original=rssi, rssi_unit=unit,
                                    timestamp_original=payload.get("timestamp", payload.get("observed_at")),
-                                   timestamp_format="epoch_ms" if epoch_ms else "rfc3339"))
+                                   timestamp_format=timestamp_format))
         return event, [], reader_id, adapter
     except ValueError as error:
         return None, [str(error)], reader_id, adapter

@@ -84,6 +84,18 @@ make simulator-local
 tail -n 3 data/raw_events.jsonl
 ```
 
+### Teste de laboratório assistido:
+
+```bash
+python -m pip install -r requirements.txt
+python -m tools.lab_launcher start --env local --source synthetic --passage
+```
+
+O launcher prepara o cadastro e abre observação MQTT, logs do ingestor e
+leituras no banco. Sem flags, oferece um menu para teste local sintético,
+local com leitor físico ou com broker e banco externos. Veja
+[instruções para Windows 11 e Ubuntu](docs/lab_test_launcher.md).
+
 ### Iniciar a API FastAPI de cadastros:
 ```bash
 uvicorn api.main:app --reload

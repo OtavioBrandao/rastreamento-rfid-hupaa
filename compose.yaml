@@ -73,6 +73,12 @@ services:
   ingestor-local:
     <<: *python-service
     profiles: ["local"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "rfid_ingestion.health"]
+      interval: 10s
+      timeout: 8s
+      retries: 6
+      start_period: 10s
     environment:
       MQTT_MODE: local
       MQTT_HOST: mosquitto
@@ -123,6 +129,12 @@ services:
   ingestor-managed:
     <<: *python-service
     profiles: ["managed"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "rfid_ingestion.health"]
+      interval: 10s
+      timeout: 8s
+      retries: 6
+      start_period: 10s
     command: ["python", "-m", "rfid_ingestion"]
     environment:
       MQTT_MODE: cloud

@@ -43,6 +43,19 @@ class NormalizationTests(unittest.TestCase):
     def test_numeric_timestamp_requires_explicit_profile(self):
         self.assertIsNone(self.build(settings=Settings())["canonical_event"])
 
+    def test_ez700_counter_uses_receipt_time_and_preserves_counter(self):
+        payload = self.payload | {"timestamp": "1166264"}
+        received_at = datetime(2026, 9, 25, 12, 30, 0, tzinfo=timezone.utc)
+        settings = Settings.from_env({"EZ700_TIMESTAMP_FORMAT": "counter"})
+        event = self.build(payload, settings, received_at=received_at)
+        canonical = event["canonical_event"]
+        self.assertEqual(canonical["timestamp"], "2026-09-25T12:30:00.000000Z")
+        self.assertEqual(canonical["metadata"]["timestamp_original"], "1166264")
+        self.assertEqual(canonical["metadata"]["timestamp_format"], "counter")
+        later = self.build(payload, settings, received_at=received_at.replace(minute=31))
+        self.assertEqual(canonical["event_id"], later["canonical_event"]["event_id"])
+        self.assertIsNone(self.build(payload, Settings())["canonical_event"])
+
     def test_ez700_simulator_clock_requires_explicit_epoch_ms(self):
         with patch.dict("os.environ", {}, clear=True):
             parser = _parser()
