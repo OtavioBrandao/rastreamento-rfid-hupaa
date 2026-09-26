@@ -14,8 +14,8 @@ from api.router_associacao import router as router_associacao
 from api.router_busca_ativos import router as router_busca_ativos
 from api.router_equipamento import router as router_equipamento
 from api.router_hardware import router as router_hardware
-from api.router_localizacao import router as router_localizacao
 from api.router_leituras_laboratorio import router as router_leituras_laboratorio
+from api.router_localizacao import router as router_localizacao
 from api.router_tipos_equipamento import router as router_tipos_equipamento
 from api.router_topologia_portal import router as router_topologia_portal
 
