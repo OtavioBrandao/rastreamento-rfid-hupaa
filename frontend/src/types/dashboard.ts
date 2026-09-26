@@ -1,41 +1,48 @@
-export type DetectionStatus = 'recent' | 'outdated' | 'never'
-export type OperationalStatus = 'available' | 'attention' | 'offline' | 'critical'
+export type AssetStatus = 'disponivel' | 'atencao' | 'offline' | 'fora_de_servico' | 'nunca_detectado'
 
-export interface RfidReading {
-  antenna: string
-  portal: string
-  timestamp: string
+export interface AssetZone {
+  id: number
+  nome: string
+  referencia_planta: string | null
 }
 
 export interface EquipmentItem {
-  id: string
-  name: string
-  type: string
-  assetNumber: string
-  epc: string
-  zone: string | null
-  detectedAgo: string | null
-  status: DetectionStatus
-  operationalStatus: OperationalStatus
-  department: string
-  facility: string
-  room: string | null
-  manufacturer: string
-  serialNumber: string
-  lastInspection: string | null
-  nextMaintenance: string | null
-  readings: RfidReading[]
-  mapZoneId: string | null
-  mapX: number | null
-  mapY: number | null
+  id: number
+  nome: string
+  identificador_interno: string
+  tipo: string
+  tipo_id: number
+  epc: string | null
+  status: AssetStatus
+  ultima_zona: AssetZone | null
+  ultima_deteccao_em: string | null
+  localizacao_desatualizada: boolean | null
 }
 
-export interface DashboardData {
-  summary: {
-    registered: number
-    recent: number
-    outdated: number
-    never: number
-  }
-  equipment: EquipmentItem[]
+export interface AssetPage {
+  items: EquipmentItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface AssetFilters {
+  q?: string
+  tipo?: number
+  epc?: string
+  status?: AssetStatus
+  zona?: number
+  page?: number
+  page_size?: number
+  sort?: 'nome' | '-nome' | 'ultima_deteccao_em' | '-ultima_deteccao_em'
+}
+
+export interface FilterOption { id: number; nome: string }
+
+export interface OverviewSummary {
+  registered: number
+  disponivel: number
+  atencao: number
+  fora_de_servico: number
+  nunca_detectado: number
 }
