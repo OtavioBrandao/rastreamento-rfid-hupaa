@@ -70,8 +70,8 @@ docker compose up -d
 # 3. Carregar variáveis na sessão
 set -a; source .env.local; set +a
 
-# 4. Iniciar o ingestor (usando formato de timestamp para simulador)
-EZ700_TIMESTAMP_FORMAT=epoch_ms python -m rfid_ingestion
+# 4. Iniciar o ingestor (timestamps numéricos EZ700 usam a hora de recepção)
+python -m rfid_ingestion
 
 # Ou alternativamente via Make:
 make local-up
@@ -83,6 +83,20 @@ make status-local
 make simulator-local
 tail -n 3 data/raw_events.jsonl
 ```
+
+### Teste de laboratório assistido:
+
+```bash
+python -m pip install -r requirements.txt
+python -m tools.lab_launcher
+```
+
+O launcher limpa a tela, mostra o menu, prepara o cadastro e abre observação
+MQTT, logs do ingestor e leituras no banco. O cenário sintético padrão publica
+100 mensagens de um item, da aproximação à passagem pelo portal. O menu oferece
+teste local sintético,
+local com leitor físico ou com broker e banco externos. Veja
+[instruções para Windows 11 e Ubuntu](docs/lab_test_launcher.md).
 
 ### Iniciar a API FastAPI de cadastros:
 ```bash

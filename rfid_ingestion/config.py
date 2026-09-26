@@ -176,8 +176,8 @@ class Settings:
   def validate(self) -> None:
       if type(self.max_payload_bytes) is not int or self.max_payload_bytes < 1:
           raise ValueError("MQTT_MAX_PAYLOAD_BYTES deve ser inteiro positivo")
-      if self.ez700_timestamp_format not in ("rfc3339", "epoch_ms"):
-          raise ValueError("EZ700_TIMESTAMP_FORMAT deve ser rfc3339 ou epoch_ms")
+      if self.ez700_timestamp_format not in ("rfc3339", "epoch_ms", "counter"):
+          raise ValueError("EZ700_TIMESTAMP_FORMAT deve ser rfc3339, epoch_ms ou counter")
       if not isinstance(self.normalization_adapter, str) or not self.normalization_adapter:
           raise ValueError("RFID_DEFAULT_ADAPTER deve ser texto não vazio")
       if not isinstance(self.reader_adapters, dict) or any(

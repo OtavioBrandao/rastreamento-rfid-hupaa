@@ -230,3 +230,4 @@ data/*
 
 # Artefatos locais de revisão
 .review/
+.lab_launcher/

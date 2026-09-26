@@ -46,6 +46,21 @@ def test_same_side_even_different_antennas(side):
     assert detector.add(observation("b" if side == "a" else "a", 2)) is not None
 
 
+def test_slow_single_reading_observations_can_still_confirm_passage():
+    detector = PassageDetector(WINDOW, silence_grace=timedelta(milliseconds=1250))
+    for indice in range(70):
+        instante = indice * 1.7
+        detector.advance_time(instante)
+        assert detector.add(observation("a", instante),
+                            received_at_monotonic=instante) is None
+    instante = 70 * 1.7
+    detector.advance_time(instante)
+    passagem = detector.add(observation("b", instante),
+                            received_at_monotonic=instante)
+    assert passagem is not None
+    assert (passagem.first_side, passagem.second_side) == ("a", "b")
+
+
 def test_above_limit_expires_and_restarts_candidate():
     detector = PassageDetector(WINDOW)
     detector.add(observation("a", 0), received_at_monotonic=0)
