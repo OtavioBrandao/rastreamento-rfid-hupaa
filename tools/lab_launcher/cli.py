@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Annotated
 
+import click
 import typer
 from dotenv import dotenv_values
 from sqlalchemy.exc import SQLAlchemyError
@@ -28,7 +29,7 @@ from .docker_env import (
 )
 from .session import iniciar as iniciar_sessao
 from .session import parar as parar_sessao
-from .synthetic import epcs_padrao, publicar
+from .synthetic import epcs_padrao, publicar, roteiro
 from .terminals import abrir, encerrar
 from .verify import conferir, inicio
 
@@ -47,6 +48,7 @@ def _escolher(valor: str | None, pergunta: str, opcoes: tuple[str, ...]) -> str:
 
 def _cenario(env: str | None, source: str | None) -> tuple[str, str]:
     if env is None and source is None and sys.stdin.isatty():
+        click.clear()
         typer.echo("1. Local com dados sintéticos")
         typer.echo("2. Local com leitor físico")
         typer.echo("3. Broker e banco externos com leitor físico")
@@ -125,10 +127,9 @@ def start(
     serial: Annotated[str | None, typer.Option("--serial")] = None,
     timestamp_format: Annotated[str | None, typer.Option("--timestamp-format")] = None,
     passage: Annotated[bool, typer.Option("--passage/--single")] = True,
-    count: Annotated[int, typer.Option("--count", help="Quantidade de EPCs sintéticos")] = 3,
+    count: Annotated[int, typer.Option("--count", help="Quantidade de itens sintéticos")] = 1,
+    messages: Annotated[int, typer.Option("--messages", help="Mensagens por item")] = 100,
     interval: Annotated[float, typer.Option("--interval")] = 0.5,
-    repeats: Annotated[int, typer.Option("--repeats", help="Leituras por antena/EPC")] = 3,
-    burst_interval: Annotated[float, typer.Option("--burst-interval")] = 0.08,
     epc: Annotated[list[str] | None, typer.Option("--epc")] = None,
 ) -> None:
     processos = []
@@ -156,13 +157,16 @@ def start(
         if timestamp_format and timestamp_format not in ("counter", "rfc3339", "epoch_ms"):
             raise ValueError("--timestamp-format deve ser counter, rfc3339 ou epoch_ms")
         if origem == "synthetic":
-            if timestamp_format == "epoch_ms":
-                raise ValueError("dados sintéticos aceitam counter ou rfc3339")
+            if timestamp_format not in (None, "counter"):
+                raise ValueError("dados sintéticos reproduzem o timestamp counter do leitor")
             lista = [normalizar_epc(item) for item in (epc or epcs_padrao(count))]
             if len(set(lista)) != len(lista):
                 raise ValueError("não repita o mesmo EPC no teste sintético")
-            print(f"Plano sintético: {len(lista)} EPC(s), {repeats} leitura(s) por antena, "
-                  f"passagem={'sim' if passage else 'não'}")
+            etapas = roteiro(messages, passage)
+            print(f"Plano sintético: {len(lista)} item(ns), {messages} mensagens por item, "
+                  f"total {len(lista) * messages}")
+            for item in etapas:
+                print(f"  {item.nome}: {item.quantidade} mensagem(ns)")
         ambiente["EZ700_TIMESTAMP_FORMAT"] = timestamp_format or "counter"
         projeto = valores.get("COMPOSE_PROJECT_NAME", "rfid-hospital-local" if modo == "local"
                               else "rfid-hospital-managed")
@@ -219,7 +223,6 @@ def start(
             print("Abrindo observação MQTT, ingestor e banco...")
             marker = iniciar_sessao()
             processos = abrir(arquivo, modo, ingestor, ambiente, marker)
-            time.sleep(2)
         if origem == "synthetic":
             etapa = "publicação das leituras sintéticas"
             publisher = dict(valores)
@@ -231,19 +234,19 @@ def start(
             baseline = inicio(valores["APP_DATABASE_URL"])
             total = publicar(publisher, reader_id, epcs=lista, passagem=passage,
                              intervalo=interval, portal_id=portal_id,
-                             repeticoes=repeats, intervalo_rajada=burst_interval,
+                             mensagens=messages,
                              timestamp_format=ambiente["EZ700_TIMESTAMP_FORMAT"])
             print(f"{total} leitura(s) sintética(s) publicada(s)")
             etapa = "verificação da Sprint 2 no banco"
             conferir(valores["APP_DATABASE_URL"], baseline, lista,
-                     passagem=passage, repeticoes=repeats)
+                     passagem=passage, mensagens=messages)
         else:
             print("Pronto para leituras do leitor físico. Use 'stop' ao encerrar.")
         if interativo and not no_terminals:
             print("Acompanhando o teste. Pressione Ctrl+C para encerrar os serviços.")
             while marker is not None and marker.exists():
                 time.sleep(1)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, click.Abort):
         parar_sessao()
         encerrar(processos)
         if started and arquivo is not None and modo is not None and ambiente is not None:

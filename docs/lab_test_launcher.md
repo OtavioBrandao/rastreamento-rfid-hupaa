@@ -9,14 +9,15 @@ acompanhar a sequência MQTT → ingestão → `leituras_brutas`.
 
 ## O que foi implementado
 
-`python -m tools.lab_launcher start` mostra quatro escolhas: local com dados
+`python -m tools.lab_launcher` limpa a tela e mostra quatro escolhas: local com dados
 sintéticos, local com leitor físico, broker/banco externos com leitor físico e
 broker/banco externos com dados sintéticos. No modo local, também pergunta se
 deve reaproveitar os dados. O modo sem perguntas usa as flags equivalentes:
 
 ```bash
+python -m tools.lab_launcher
 python -m tools.lab_launcher start --env local --source synthetic --passage
-python -m tools.lab_launcher start --env local --source synthetic --count 5 --repeats 4
+python -m tools.lab_launcher start --env local --source synthetic --count 2 --messages 100
 python -m tools.lab_launcher start --env local --source physical --reader-id reader-01
 python -m tools.lab_launcher start --env managed --source synthetic --env-file .env.cloud
 python -m tools.lab_launcher stop --env local
@@ -32,30 +33,34 @@ essa confirmação. Não encerra o daemon Docker nem um processo sem PID acessí
 Se faltar permissão ou uma porta continuar indisponível, o teste é interrompido
 com erro em vez de alegar que a porta foi liberada. Contêineres do próprio
 projeto são reaproveitados. `--no-terminals` permite execução sem interface
-gráfica. `--count`, `--repeats`, `--burst-interval`, `--interval`, `--epc` e
-`--single` controlam as publicações sintéticas. O padrão usa três EPCs fixos
-de laboratório e publica três leituras em cada antena, totalizando 18
-mensagens. Para cada EPC, `--passage` publica uma rajada na porta 1 e outra na
-porta 2, nessa ordem. `--burst-interval` controla o intervalo dentro da rajada
-(80 ms por padrão); `--interval` controla a pausa entre antenas (500 ms por
-padrão), maior que a tolerância inicial de ambiguidade da direção (100 ms).
+gráfica. `--count`, `--messages`, `--interval`, `--epc` e `--single` controlam
+as publicações sintéticas. O padrão usa um EPC fixo de laboratório e publica
+**100 mensagens** em quatro etapas: 15 na aproximação da antena 1, 45 enquanto
+o item fica parado nessa antena, 10 ao sair da antena 1 e 30 ao atravessar a
+antena 2. A permanência dura cerca de sete segundos. `--interval` controla a
+pausa antes da antena 2 (500 ms por padrão), maior que a tolerância inicial de
+ambiguidade da direção (100 ms). `--count 2` simula dois itens e publica 100
+mensagens para cada um. Os valores de RSSI variam ilustrativamente entre
+-6700 e -5700, na faixa das leituras exibidas pelo leitor, sem calibração
+física do sinal.
 Os EPCs padrão são reutilizados entre execuções; `--epc` permite informar EPCs
 hexadecimais próprios. O seed associa os EPCs sintéticos a equipamentos de
 laboratório antes da publicação, para que passagem confirmada também gere
 histórico de movimentação e última zona. Vínculos existentes são preservados.
 O launcher consulta o banco após publicar e informa, por EPC, as leituras
 persistidas, a passagem, o movimento e a última zona. Se o resultado não surgir
-em 30 segundos, a etapa falha com o último estado observado. `--single` valida
-somente as leituras, sem esperar passagem.
+em 30 segundos, a etapa falha com o último estado observado. `--single` mantém
+o item na antena 1 e valida somente as leituras, sem esperar passagem.
 
 O launcher usa `--timestamp-format counter` por padrão tanto no teste físico
 quanto no sintético. O publicador sintético usa os campos JSON observados
-(`epc`, `timestamp`, `rssi`, `antenna`, `readerid`) com contador artificial
-crescente. Isso testa a normalização do contador sem afirmar unidade ou formato
-completo do relógio físico. `--timestamp-format rfc3339` testa o outro perfil;
-no modo físico também é possível usar `epoch_ms` se o leitor estiver configurado
-dessa forma. O contador original permanece na auditoria e o horário canônico
-vem do recebimento.
+(`epc`, `rssi`, `antenna`, `timestamp`) na mesma ordem do JSON capturado do leitor,
+em JSON compacto e sem `readerid` no corpo. O identificador do leitor vem do tópico MQTT. O
+`timestamp` é uma string numérica de sete dígitos, crescente durante o ensaio;
+seu valor é sintético e não presume a unidade do contador físico. No modo
+físico, `--timestamp-format` também aceita `rfc3339` e `epoch_ms` quando o
+leitor estiver configurado dessa forma. O contador original permanece na
+auditoria e o horário canônico vem do recebimento.
 
 O seed usa `reader-01` por padrão, cria um andar e setor exclusivos de laboratório,
 zonas A/B, portal, duas antenas e seus mapeamentos lógicos ativos. Pode ser
@@ -70,9 +75,12 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
 ## Pré-requisitos
 
 - Python 3.12 e `pip install -r requirements.txt` no host.
-- Windows 11: Docker Desktop com backend WSL2. O launcher abre três consoles
-  `cmd.exe` separados, evitando falhas de interpretação de argumentos no
-  Windows Terminal e mensagens do PSReadLine. O comando Python deve ser executado
+- Windows 11: Docker Desktop com backend WSL2. O launcher abre três abas
+  nomeadas **MQTT**, **Ingestor** e **Banco** no Windows Terminal. Se `wt.exe`
+  não estiver disponível, abre janelas `cmd.exe` com esses títulos. O launcher
+  espera cada observador iniciar e recupera em janela separada uma aba que
+  falhou; se ainda houver falha, informa o observador pelo nome. O comando
+  Python deve ser executado
   no Windows, no mesmo ambiente virtual usado para instalar as dependências.
 - Ubuntu 24.04: Docker Engine com plugin Compose e permissão para usar Docker.
   `gnome-terminal`, `konsole`, `xterm`, `x-terminal-emulator` ou `tmux` para os

@@ -25,6 +25,13 @@ def _ativo() -> bool:
     return marker is None or Path(marker).exists()
 
 
+def _pronto(kind: str) -> None:
+    marker = os.environ.get("LAB_SESSION_MARKER")
+    if marker:
+        path = Path(marker)
+        path.with_name(f"{path.stem}.{kind}.ready").touch()
+
+
 def mqtt_watch() -> None:
     source = dict(os.environ, MQTT_CLIENT_ID=f"lab-watch-{uuid4().hex[:12]}")
     settings = Settings.from_env(source)
@@ -37,6 +44,7 @@ def mqtt_watch() -> None:
             return
         c.subscribe(settings.mqtt_topic, qos=1)
         print(f"Inscrito em {settings.mqtt_topic}", flush=True)
+        _pronto("mqtt")
 
     def on_message(_client, _userdata, msg):
         print(f"{msg.topic} {msg.payload.decode('utf-8', errors='replace')}", flush=True)
@@ -87,6 +95,7 @@ def db_watch() -> None:
                     "JOIN equipamentos e ON e.id = h.equipamento_id "
                     "WHERE h.id > :ultimo ORDER BY h.id LIMIT 100"
                 ), {"ultimo": ultimo_movimento}).all()
+            _pronto("db")
             for linha in reversed(passagens):
                 estado = (linha.direcao_status, linha.direcao,
                           linha.zona_origem_id, linha.zona_destino_id)
@@ -121,6 +130,7 @@ def logs_watch() -> None:
     )
     try:
         while _ativo() and processo.poll() is None:
+            _pronto("logs")
             time.sleep(0.5)
     finally:
         if processo.poll() is None:

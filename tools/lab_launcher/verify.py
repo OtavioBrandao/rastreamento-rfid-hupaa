@@ -27,7 +27,7 @@ def inicio(database_url: str) -> Baseline:
 
 
 def conferir(database_url: str, baseline: Baseline, epcs: list[str], *,
-             passagem: bool, repeticoes: int, timeout: float = 30) -> None:
+             passagem: bool, mensagens: int, timeout: float = 30) -> None:
     engine = create_engine(database_url, pool_pre_ping=True)
     pendentes = set(epc.upper() for epc in epcs)
     ultimo_estado: dict[str, str] = {}
@@ -40,7 +40,7 @@ def conferir(database_url: str, baseline: Baseline, epcs: list[str], *,
                         "SELECT COUNT(*) FROM leituras_brutas "
                         "WHERE id > :inicio AND epc = :epc"
                     ), {"inicio": baseline.leitura_id, "epc": epc})
-                    esperado = repeticoes * (2 if passagem else 1)
+                    esperado = mensagens
                     if leituras < esperado:
                         estado = f"{leituras}/{esperado} leituras persistidas"
                     elif not passagem:
