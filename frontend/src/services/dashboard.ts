@@ -11,6 +11,12 @@ export async function getDashboard(state: DemoState = 'loaded'): Promise<Dashboa
   return dashboardFixture
 }
 
+// TODO(API): trocar pela consulta de equipamentos por zona da ISS-020.
+// A planta demonstrativa usa o mesmo catálogo local do dashboard.
+export function getDemoMapEquipment(): EquipmentItem[] {
+  return dashboardFixture.equipment
+}
+
 // Busca demonstrativa simples; não define o contrato nem a regra da ISS-019.
 export function filterFixtureEquipment(items: EquipmentItem[], query: string): EquipmentItem[] {
   const term = query.trim().toLocaleLowerCase('pt-BR')
