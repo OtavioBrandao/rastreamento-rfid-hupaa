@@ -103,8 +103,14 @@ testes. O launcher pede campos ausentes e oferece salvá-los no arquivo ignorado
 pelo Git. `DATABASE_URL` deve apontar para o banco de migrations/seed e
 `APP_DATABASE_URL` para o banco de ingestão. O modo `managed` nunca executa
 `down -v`. A operação não configura hotspot no notebook.
-Se a ACL do broker reservar credenciais distintas para publicação, passe
-`--publisher-env-file .env.cloud.reader-01` (arquivo local ignorado pelo Git).
+No cenário externo sintético, use uma credencial MQTT de publicação diferente
+da credencial de assinatura do ingestor. O launcher usa automaticamente
+`.env.cloud.reader-01` se existir; senão, o menu pede o caminho. Em execução
+sem menu, passe `--publisher-env-file .env.cloud.reader-01`. O arquivo é local
+e ignorado pelo Git. Configure nele `MQTT_USERNAME`, `MQTT_PASSWORD` e o
+`MQTT_TOPIC` exato autorizado para Publish. Conectar ao broker não comprova
+essa permissão: se não houver PUBACK QoS 1, o launcher informa se houve
+desconexão ou timeout e interrompe o teste.
 
 ## Sequência e limites
 

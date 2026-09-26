@@ -62,6 +62,8 @@ def test_publicador_emite_mesmo_epc_em_duas_portas(monkeypatch):
     pausas = []
 
     class Resultado:
+        rc = synthetic.mqtt.MQTT_ERR_SUCCESS
+
         def wait_for_publish(self, timeout):
             assert timeout == 10
 
@@ -118,6 +120,40 @@ def test_publicador_emite_mesmo_epc_em_duas_portas(monkeypatch):
         ]
 
 
+def test_publicador_indica_falta_de_puback_apos_desconexao(monkeypatch):
+    class Resultado:
+        rc = synthetic.mqtt.MQTT_ERR_SUCCESS
+
+        def wait_for_publish(self, timeout):
+            assert timeout == 10
+
+        def is_published(self):
+            return False
+
+    class Cliente:
+        def connect(self, *_args):
+            pass
+
+        def loop_start(self):
+            self.on_connect(self, None, None, SimpleNamespace(is_failure=False), None)
+
+        def publish(self, *_args, **_kwargs):
+            self.on_disconnect(self, None, None, None, None)
+            return Resultado()
+
+        def disconnect(self):
+            pass
+
+        def loop_stop(self):
+            pass
+
+    monkeypatch.setattr(synthetic, "create_client", lambda settings: Cliente())
+    with pytest.raises(RuntimeError, match="credencial do publicador tem permissão Publish"):
+        synthetic.publicar({"MQTT_HOST": "localhost", "MQTT_MODE": "local"},
+                           "reader-01", epcs=synthetic.epcs_padrao(1),
+                           passagem=True, intervalo=0.5)
+
+
 def test_epcs_padrao_sao_reutilizaveis_sem_colisao():
     assert synthetic.epcs_padrao(3) == synthetic.epcs_padrao(3)
     assert len(set(synthetic.epcs_padrao(3))) == 3
@@ -160,6 +196,32 @@ def test_menu_limpa_tela_e_oferece_os_cenarios(monkeypatch):
         monkeypatch.setattr(cli.typer, "prompt", lambda *args, escolha=escolha, **kwargs: escolha)
         assert cli._cenario(None, None) == esperado
     assert len(limpezas) == 4
+
+
+def test_modo_externo_sintetico_exige_perfil_de_publicacao(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "ROOT", tmp_path)
+    valores = {"MQTT_USERNAME": "ingestor", "MQTT_PASSWORD": "segredo-ingestor"}
+    with pytest.raises(ValueError, match="--publisher-env-file"):
+        cli._perfil_publicador("managed", valores, None, False)
+
+    perfil = tmp_path / ".env.cloud.reader-01"
+    perfil.write_text(
+        "MQTT_USERNAME=leitor\nMQTT_PASSWORD=segredo-leitor\n"
+        "MQTT_TOPIC=easy/dev/hupaa/portal-01/reader-01/readings\n",
+        encoding="utf-8",
+    )
+    publicado = cli._perfil_publicador("managed", valores, None, False)
+    assert publicado["MQTT_USERNAME"] == "leitor"
+    assert publicado["MQTT_TOPIC"] == "easy/dev/hupaa/portal-01/reader-01/readings"
+    assert valores["MQTT_USERNAME"] == "ingestor"
+
+    perfil.write_text(
+        "MQTT_USERNAME=ingestor\nMQTT_PASSWORD=segredo-ingestor\n"
+        "MQTT_TOPIC=easy/dev/hupaa/portal-01/reader-01/readings\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="separada do ingestor"):
+        cli._perfil_publicador("managed", valores, perfil, False)
 
 
 def test_detecta_processo_do_host_na_porta_mqtt(monkeypatch):

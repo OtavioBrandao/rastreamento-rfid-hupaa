@@ -69,6 +69,37 @@ def _cenario(env: str | None, source: str | None) -> tuple[str, str]:
     )
 
 
+def _perfil_publicador(modo: str, valores: dict[str, str], arquivo: Path | None,
+                      interativo: bool) -> dict[str, str]:
+    if modo == "managed" and arquivo is None:
+        padrao = ROOT / ".env.cloud.reader-01"
+        if padrao.exists():
+            arquivo = padrao
+        elif interativo:
+            arquivo = Path(typer.prompt("Arquivo da credencial MQTT de publicação",
+                                       default=str(padrao)))
+        else:
+            raise ValueError("teste externo sintético exige --publisher-env-file com "
+                             "credencial autorizada a publicar")
+    if arquivo is None:
+        return dict(valores)
+    if not arquivo.is_file():
+        raise ValueError(f"arquivo do publicador ausente: {arquivo}")
+    perfil = {chave: valor for chave, valor in dotenv_values(arquivo).items()
+              if valor is not None and chave.startswith("MQTT_")}
+    if modo == "managed":
+        if not perfil.get("MQTT_USERNAME") or not perfil.get("MQTT_PASSWORD"):
+            raise ValueError("perfil do publicador exige MQTT_USERNAME e MQTT_PASSWORD")
+        if perfil["MQTT_USERNAME"] == valores.get("MQTT_USERNAME"):
+            raise ValueError("use uma credencial MQTT de publicação separada do ingestor")
+        if not perfil.get("MQTT_TOPIC") or any(
+            coringa in perfil["MQTT_TOPIC"] for coringa in ("+", "#")
+        ):
+            raise ValueError("perfil do publicador exige MQTT_TOPIC exato, sem curingas")
+    print(f"Perfil MQTT de publicação: {arquivo.name}")
+    return dict(valores, **perfil)
+
+
 def _descricao_bloqueios(bloqueios) -> str:
     return ", ".join(
         f"{item.name} (PID {item.pid or '?'}, porta(s) {','.join(map(str, item.ports))})"
@@ -139,6 +170,7 @@ def start(
     started = False
     marker = None
     lista: list[str] = []
+    publisher: dict[str, str] | None = None
     etapa = "seleção do cenário"
     try:
         modo, origem = _cenario(env, source)
@@ -167,6 +199,8 @@ def start(
                   f"total {len(lista) * messages}")
             for item in etapas:
                 print(f"  {item.nome}: {item.quantidade} mensagem(ns)")
+            publisher = _perfil_publicador(modo, valores, publisher_env_file,
+                                           interativo)
         ambiente["EZ700_TIMESTAMP_FORMAT"] = timestamp_format or "counter"
         projeto = valores.get("COMPOSE_PROJECT_NAME", "rfid-hospital-local" if modo == "local"
                               else "rfid-hospital-managed")
@@ -225,12 +259,7 @@ def start(
             processos = abrir(arquivo, modo, ingestor, ambiente, marker)
         if origem == "synthetic":
             etapa = "publicação das leituras sintéticas"
-            publisher = dict(valores)
-            if publisher_env_file is not None:
-                if not publisher_env_file.exists():
-                    raise ValueError("arquivo de configuração do publicador ausente")
-                publisher.update({k: v for k, v in dotenv_values(publisher_env_file).items()
-                                  if v is not None and k.startswith("MQTT_")})
+            assert publisher is not None
             baseline = inicio(valores["APP_DATABASE_URL"])
             total = publicar(publisher, reader_id, epcs=lista, passagem=passage,
                              intervalo=interval, portal_id=portal_id,
