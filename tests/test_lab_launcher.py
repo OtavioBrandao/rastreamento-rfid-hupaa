@@ -118,6 +118,7 @@ def test_publicador_emite_mesmo_epc_em_duas_portas(monkeypatch):
         assert evento["canonical_event"]["metadata"]["timestamp_original"] == payload[
             "timestamp"
         ]
+        assert evento["canonical_event"]["metadata"]["timestamp_format"] == "received_at_utc"
 
 
 def test_publicador_indica_falta_de_puback_apos_desconexao(monkeypatch):
