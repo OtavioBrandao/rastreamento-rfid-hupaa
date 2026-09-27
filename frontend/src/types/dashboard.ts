@@ -4,6 +4,27 @@ export interface AssetZone {
   id: number
   nome: string
   referencia_planta: string | null
+  andar: string
+  setor: string
+  caminho: string
+}
+
+export interface MovementItem {
+  id: number
+  origem_registro: string
+  zona_origem: string | null
+  zona_destino: string
+  movimentada_em: string | null
+  registrado_em: string
+  justificativa: string | null
+}
+
+export interface MovementPage {
+  items: MovementItem[]
+  page: number
+  size: number
+  total: number
+  pages: number
 }
 
 export interface EquipmentItem {

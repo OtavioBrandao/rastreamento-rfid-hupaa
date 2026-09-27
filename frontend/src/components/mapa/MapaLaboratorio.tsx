@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { labInfrastructure } from '../../config/mapaConfig'
 import { getLabReadings, type LabReading } from '../../services/dashboard'
 import type { EquipmentItem } from '../../types/dashboard'
-import { StatusBadge } from '../DashboardParts'
+import { StatusBadge, detectionLabel } from '../DashboardParts'
 import { FloorMap, type MapMarker } from './FloorMap'
 
 const labZones = [
@@ -73,10 +73,10 @@ export function MapaLaboratorio({ items, epc, onSelect }: { items: EquipmentItem
     <div className="map-main"><section className="panel map-control-panel"><h2>Laboratório de Testes · EASY</h2><p className="map-help">O pulso mostra cada leitura recebida pela antena. O marcador do equipamento mostra a última zona confirmada por passagem; pode atualizar depois do pulso.</p></section><FloorMap mode="lab" markers={markers} onMarkerClick={(marker) => { if (marker.kind === 'equipment') setSelectedZone(marker.id) }}/>
     </div>
     <aside className="map-sidebar">
-      <section className="panel"><h2>Ativos nas salas</h2>{selectedZone && <button type="button" className="text-button" onClick={() => setSelectedZone('')}>Mostrar todas as salas</button>}{positioned.length ? <ul className="asset-list">{positioned.filter((item) => !selectedZone || item.ultima_zona?.referencia_planta === selectedZone).map((item) => <li key={item.id}><button type="button" onClick={() => onSelect(item)}>{item.nome}</button><small>{item.epc ?? 'Sem EPC'} · {item.ultima_zona?.nome}</small><StatusBadge status={item.status}/></li>)}</ul> : <p>Nenhum ativo com zona de laboratório mapeada.</p>}</section>
+      <section className="panel"><h2>Ativos nas salas</h2>{selectedZone && <button type="button" className="text-button" onClick={() => setSelectedZone('')}>Mostrar todas as salas</button>}{positioned.length ? <ul className="asset-list">{positioned.filter((item) => !selectedZone || item.ultima_zona?.referencia_planta === selectedZone).map((item) => <li key={item.id}><button type="button" onClick={() => onSelect(item)}>{item.nome}</button><small>{item.epc ?? 'Sem EPC'} · {item.ultima_zona?.caminho}</small><StatusBadge status={item.status}/></li>)}</ul> : <p>Nenhum ativo com zona de laboratório mapeada.</p>}</section>
       <section className="panel"><h2>Ainda não detectados</h2>{never.length ? <ul className="asset-list">{never.map((item) => <li key={item.id}><button type="button" onClick={() => onSelect(item)}>{item.nome}</button><small>{item.epc ?? 'Sem EPC'}</small></li>)}</ul> : <p>Nenhum ativo nesta condição.</p>}</section>
-      <section className="panel"><h2>Outras zonas</h2>{unmapped.length ? <ul className="asset-list">{unmapped.map((item) => <li key={item.id}><button type="button" onClick={() => onSelect(item)}>{item.nome}</button><small>{item.ultima_zona?.nome ?? 'Sem zona'}</small></li>)}</ul> : <p>Nenhum ativo nesta condição.</p>}</section>
-      <section className="panel lab-log" aria-label="Leituras das antenas"><h2>Leituras das antenas</h2>{loadingReadings && <p role="status">Carregando leituras...</p>}{readError && <p role="alert">Não foi possível atualizar as leituras. Tentando novamente...</p>}{readings.length ? <ol>{readings.map((reading) => <li key={reading.id}><strong>{reading.epc}</strong><p>Antena {reading.antena_porta === 1 ? 'A' : reading.antena_porta === 2 ? 'B' : reading.antena_porta} · {new Date(reading.recebido_em).toLocaleString('pt-BR')}</p></li>)}</ol> : !loadingReadings && <p>Nenhuma leitura recente para este filtro.</p>}</section>
+      <section className="panel"><h2>Outras zonas</h2>{unmapped.length ? <ul className="asset-list">{unmapped.map((item) => <li key={item.id}><button type="button" onClick={() => onSelect(item)}>{item.nome}</button><small>{item.ultima_zona?.caminho ?? 'Sem zona'}</small></li>)}</ul> : <p>Nenhum ativo nesta condição.</p>}</section>
+      <section className="panel lab-log" aria-label="Leituras das antenas"><h2>Leituras das antenas</h2>{loadingReadings && <p role="status">Carregando leituras...</p>}{readError && <p role="alert">Não foi possível atualizar as leituras. Tentando novamente...</p>}{readings.length ? <ol>{readings.map((reading) => <li key={reading.id}><strong>{reading.epc}</strong><p>Antena {reading.antena_porta === 1 ? 'A' : reading.antena_porta === 2 ? 'B' : reading.antena_porta} · {detectionLabel(reading.recebido_em)}</p></li>)}</ol> : !loadingReadings && <p>Nenhuma leitura recente para este filtro.</p>}</section>
     </aside>
   </div>
 }

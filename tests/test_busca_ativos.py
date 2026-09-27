@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from api.database import get_db
 from api.main import app
@@ -97,11 +98,16 @@ def test_paginacao_estados_e_epc_atual(db, catalog):
     assert never.localizacao_desatualizada is None
     outdated = search(db, status="atencao").items[0]
     assert outdated.localizacao_desatualizada is True
+    assert outdated.ultima_zona.andar == "Piso teste"
+    assert outdated.ultima_zona.setor == "Setor teste"
+    assert outdated.ultima_zona.caminho == "Piso teste → Setor teste → Zona B"
+    assert outdated.ultima_deteccao_em.utcoffset() == timedelta(0)
     assert search(db, status="fora_de_servico").items[0].id == catalog["ids"][3]
     assert search(db, sort="-nome").items[0].nome == "Maca D"
 
 
 def test_validacao_http(db, catalog):
+    db.execute(text("SET LOCAL TIME ZONE 'America/Maceio'"))
     app.dependency_overrides[get_db] = lambda: db
     app.dependency_overrides[get_recency_context] = lambda: (NOW, THRESHOLD)
     try:
@@ -115,5 +121,11 @@ def test_validacao_http(db, catalog):
             result = client.get("/api/ativos?status=nunca_detectado")
             assert result.status_code == 200
             assert result.json()["items"][0]["ultima_zona"] is None
+            detected = client.get("/api/ativos?zona=" + str(catalog["a"]))
+            assert detected.status_code == 200
+            assert detected.json()["items"][0]["ultima_zona"]["caminho"] == (
+                "Piso teste → Setor teste → Zona A"
+            )
+            assert detected.json()["items"][0]["ultima_deteccao_em"].endswith("Z")
     finally:
         app.dependency_overrides.clear()

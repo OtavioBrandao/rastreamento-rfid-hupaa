@@ -16,5 +16,7 @@ export function LocationBadge({ item }: { item: EquipmentItem }) {
 }
 
 export function detectionLabel(value: string | null) {
-  return value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : 'Sem detecção'
+  return value ? new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Maceio',
+  }).format(new Date(value)) : 'Sem detecção'
 }

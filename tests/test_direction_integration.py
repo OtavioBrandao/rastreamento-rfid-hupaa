@@ -5,9 +5,13 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
 
 import pytest
-from sqlalchemy import func, select
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
+from api.database import get_db
+from api.main import app
 from db.models import (
     Antena,
     AssociacaoTagEquipamento,
@@ -311,9 +315,34 @@ def test_full_pipeline_projects_only_confirmed_passages(
             assert movement["zona_origem_id"] == portal_setup["zone_a"]
             assert movement["zona_destino_id"] == portal_setup["zone_b"]
             assert movement["movimentada_em"] == row.detectada_em
+            assert row.detectada_em == datetime.fromisoformat(
+                second_time.replace("Z", "+00:00")
+            )
+            assert movement["registrado_em"] != movement["movimentada_em"]
         else:
             assert projected == (None, None, None, None)
             assert connection.scalar(select(func.count()).select_from(HistoricoMovimentacao)) == 0
+    if status == "confirmed":
+        def test_session():
+            with Session(pg_engine) as session:
+                session.execute(text("SET LOCAL TIME ZONE 'America/Maceio'"))
+                yield session
+
+        app.dependency_overrides[get_db] = test_session
+        try:
+            with TestClient(app) as client:
+                assets = client.get("/api/ativos").json()["items"]
+                found = next(item for item in assets if item["id"] == equipment)
+                assert found["ultima_zona"]["id"] == portal_setup["zone_b"]
+                assert found["ultima_zona"]["caminho"].endswith(" → zona B")
+                assert datetime.fromisoformat(found["ultima_deteccao_em"].replace("Z", "+00:00")) == (
+                    datetime.fromisoformat(second_time.replace("Z", "+00:00"))
+                )
+                movements = client.get(f"/equipamentos/{equipment}/movimentacoes").json()
+                assert movements["total"] == 1
+                assert movements["items"][0]["movimentada_em"] == found["ultima_deteccao_em"]
+        finally:
+            app.dependency_overrides.clear()
 
 
 def test_database_constraints_reject_invalid_state_and_fk(pg_engine, portal_setup):
