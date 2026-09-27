@@ -28,6 +28,7 @@ from api.schemas_equipamento import (
     EquipamentoResposta,
 )
 from api.schemas_movimentacao import MovimentacaoPagina, MovimentacaoResposta
+from api.timestamps import em_utc
 from db.models import Equipamento
 from rfid_location.recency import classify_recency, recency_threshold_from_env
 from rfid_movement import repository as movement_repository
@@ -62,7 +63,12 @@ def listar_movimentacoes(
     except ValueError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
     return MovimentacaoPagina(
-        items=[MovimentacaoResposta(**vars(item)) for item in result.items],
+        items=[MovimentacaoResposta(
+            **(vars(item) | {
+                "movimentada_em": em_utc(item.movimentada_em),
+                "registrado_em": em_utc(item.registrado_em),
+            })
+        ) for item in result.items],
         page=result.page, size=result.size, total=result.total, pages=result.pages,
     )
 
@@ -90,7 +96,7 @@ def _para_resposta(
         identificador_interno_normalizado=equipamento.identificador_interno_normalizado,
         descricao=equipamento.descricao,
         status=equipamento.status,
-        ultima_deteccao_em=equipamento.ultima_deteccao_em,
+        ultima_deteccao_em=em_utc(equipamento.ultima_deteccao_em),
         estado_recencia=classify_recency(
             equipamento.ultima_deteccao_em, *recency_context
         ),

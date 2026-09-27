@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from api.database import get_db
 from api.epc import EpcInvalido, normalizar_epc
 from api.laboratorio import PORTAL_LABORATORIO
+from api.timestamps import em_utc
 from db.models import Antena, LeituraBruta, Portal
 
 router = APIRouter(prefix="/api/laboratorio", tags=["laboratório"])
@@ -41,7 +42,7 @@ def leituras_laboratorio(
     return {
         "items": [
             {"id": linha.id, "epc": linha.epc, "antena_porta": linha.porta_numero,
-             "recebido_em": linha.recebido_em.isoformat()}
+             "recebido_em": em_utc(linha.recebido_em).isoformat()}
             for linha in linhas
         ],
         "next_id": linhas[-1].id if linhas else after_id,
