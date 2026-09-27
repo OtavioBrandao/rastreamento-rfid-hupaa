@@ -41,6 +41,135 @@ def test_seed_laboratorio_reexecutavel(db):
     assert db.scalar(select(func.count()).select_from(MapeamentoAntenaPortal)) == 2
     lados = db.scalars(select(MapeamentoAntenaPortal.lado).order_by(MapeamentoAntenaPortal.lado))
     assert list(lados) == ["a", "b"]
+    assert {zona.nome: zona.referencia_planta for zona in db.scalars(select(Zona))} == {
+        "Zona A": "sala-a", "Zona B": "sala-b"}
+
+
+@pytest.mark.parametrize("cenario,esperado", [
+    (2, [("02", "a_para_b"), ("02", "b_para_a"), ("03", "a_para_b"),
+         ("02", "a_para_b"), ("03", "b_para_a")]),
+    (3, [("02", "a_para_b"), ("03", "a_para_b"), ("03", "b_para_a"),
+         ("03", "a_para_b"), ("03", "b_para_a")]),
+])
+def test_roteiros_multitag_intercalam_leituras_e_direcoes(cenario, esperado):
+    epcs = synthetic.epcs_padrao(3)[1:]
+    plano = synthetic.programa_multitag(cenario, epcs, 10, 0.5)
+    assert len(plano) == 50
+    assert all(leitura.porta in (1, 2) for leitura in plano)
+    assert sum(leitura.pausa_antes >= 3.5 for leitura in plano) == (2 if cenario == 2 else 3)
+    trajetos = {}
+    for leitura in plano:
+        sufixo = leitura.epc[-2:]
+        portas = trajetos.setdefault(sufixo, [])
+        if not portas or portas[-1] != leitura.porta:
+            portas.append(leitura.porta)
+    direcoes = sorted((epc, "a_para_b" if a == 1 else "b_para_a")
+                      for epc, portas in trajetos.items()
+                      for a, b in zip(portas, portas[1:]))
+    assert direcoes == sorted(esperado)
+    if cenario == 2:
+        assert [leitura.epc for leitura in plano[10:14]] == [epcs[0], epcs[1]] * 2
+    else:
+        assert trajetos["02"] == [1, 2]
+
+
+def test_publicador_multitag_preserva_payload_e_contador(monkeypatch):
+    enviados = []
+
+    class Ack:
+        rc = synthetic.mqtt.MQTT_ERR_SUCCESS
+
+        def wait_for_publish(self, timeout):
+            assert timeout == 10
+
+        def is_published(self):
+            return True
+
+    class Client:
+        def connect(self, *_args):
+            pass
+
+        def loop_start(self):
+            self.on_connect(self, None, None, SimpleNamespace(is_failure=False), None)
+
+        def publish(self, _topic, payload, qos):
+            assert qos == 1
+            enviados.append(json.loads(payload))
+            return Ack()
+
+        def disconnect(self):
+            pass
+
+        def loop_stop(self):
+            pass
+
+    monkeypatch.setattr(synthetic, "create_client", lambda *_args: Client())
+    monkeypatch.setattr(synthetic.time, "sleep", lambda *_args: None)
+    epcs = synthetic.epcs_padrao(3)[1:]
+    total = synthetic.publicar(
+        {"MQTT_HOST": "localhost", "MQTT_PORT": "1883", "MQTT_MODE": "local"},
+        "reader-01", epcs=epcs, passagem=True, intervalo=0.5, mensagens=10,
+        contador_inicial=1_234_567, cenario=2)
+    assert total == 50
+    assert all(list(payload) == ["epc", "rssi", "antenna", "timestamp"] for payload in enviados)
+    assert [payload["timestamp"] for payload in enviados] == [str(1_234_567 + i) for i in range(50)]
+    assert {payload["epc"] for payload in enviados} == set(epcs)
+
+
+def test_verificador_multitag_confere_direcoes_e_zona_final(monkeypatch):
+    epcs = synthetic.epcs_padrao(3)[1:]
+    programa = synthetic.programa_multitag(2, epcs, 10, 0.5)
+
+    class Resultado:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def all(self):
+            return self.rows
+
+        def one_or_none(self):
+            return self.rows[0] if self.rows else None
+
+    class Conexao:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def scalar(self, _query, params):
+            return 30 if params["epc"] == epcs[0] else 20
+
+        def execute(self, query, params):
+            if "FROM passagens p" in str(query):
+                direcoes = (["a_para_b", "b_para_a", "a_para_b"]
+                            if params["epc"] == epcs[0] else ["a_para_b", "b_para_a"])
+                return Resultado([SimpleNamespace(id=i + 1, direcao_status="confirmed",
+                                                  direcao=direcao,
+                                                  zona_destino_id=2 if direcao == "a_para_b" else 1)
+                                  for i, direcao in enumerate(direcoes)])
+            return Resultado([SimpleNamespace(id=10, equipamento_id=20,
+                                              ultima_zona_id=2 if params["id"] == 3 else 1)])
+
+    class Engine:
+        def connect(self):
+            return Conexao()
+
+        def dispose(self):
+            pass
+
+    monkeypatch.setattr(verify, "create_engine", lambda *_args, **_kwargs: Engine())
+    verify.conferir("db-local-de-teste", verify.Baseline(0, 0), epcs,
+                    passagem=True, mensagens=10, contador_inicial=1_234_567,
+                    programa=programa)
+
+
+def test_menu_roteiros_disponivel_em_todos_os_modos(monkeypatch):
+    monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: "2")
+    assert cli._roteiro_escolhido(None, True) == 2
+    assert cli._roteiro_escolhido(None, False) == 1
+    with pytest.raises(ValueError, match="roteiro de 1 a 3"):
+        cli._roteiro_escolhido(4, False)
 
 
 def test_epcs_sinteticos_criam_vinculos_reutilizaveis(db):

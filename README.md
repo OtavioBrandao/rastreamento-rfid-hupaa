@@ -25,6 +25,7 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Inferência de Direção (ISS-016):** Interpretação da ordem temporal A→B/B→A com topologia histórica, zonas de origem/destino e estados `confirmed`, `ambiguous` e `unknown`. Tolerância temporal inicial configurável de 100 ms, ainda sem validação física.
 - **Histórico de Movimentações (ISS-018):** Ledger append-only, resolução temporal EPC → equipamento, correção manual e consulta cronológica paginada.
 - **Última Zona do Equipamento (ISS-017):** Passagem confirmada grava histórico e atualiza a projeção em uma transação; eventos atrasados não fazem a zona regredir e a reconciliação recupera falhas após o commit da direção.
+- **Busca operacional (ISS-019):** `GET /api/ativos` filtra por nome/patrimônio, tipo, EPC, status e última zona com paginação; dashboard e mapas consultam esta API. Consulte [contrato e limites](docs/implementations/iss-019-busca-ativos.md).
 
 ### ⏳ Próximos Passos (Backlog Imediato):
 - **Validação física:** Calibrar debounce, janela de passagem e tolerância de direção no HUPAA.
@@ -113,7 +114,7 @@ npm run dev
 # Abra http://localhost:5173/
 ```
 
-O Dashboard e os mapas HUPAA/EASY usam dados fictícios isolados e ainda não consultam a API. O laboratório oferece simulação local de leituras. Veja a [base da Etapa A](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
+O Dashboard e os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. No EASY, as leituras recentes das antenas aparecem separadas da última zona confirmada. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), os [roteiros e leituras ao vivo](docs/implementations/roteiros-laboratorio-mapa-ao-vivo.md), a [base da Etapa A](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
 
 ---
 
@@ -164,6 +165,7 @@ A documentação detalhada foi reorganizada segundo a **[Issue #51](docs/impleme
   - [ISS-016: Inferência de Direção](docs/implementations/iss-016-inferencia-direcao.md)
   - [ISS-018: Histórico de Movimentações](docs/implementations/iss-018-historico-movimentacoes.md)
   - [ISS-017: Última Localização](docs/implementations/iss-017-ultima-localizacao.md)
+  - [ISS-019: Busca operacional de ativos](docs/implementations/iss-019-busca-ativos.md)
 - **Experimentos e Evidências:**
   - [Índice de Evidências e Matriz de Testes](docs/experiments/README.md)
   - [Evidências MQTT e Rede](docs/experiments/mqtt/)

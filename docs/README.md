@@ -43,10 +43,11 @@ O projeto prioriza a confiabilidade da ingestão e da persistência antes da ló
 - **Inferência de direção (ISS-016):** Passagens são enriquecidas com A→B/B→A, zonas de origem/destino, status categórico e regra auditável, respeitando topologia histórica e tolerância temporal.
 - **Histórico de movimentações (ISS-018):** Ledger append-only com EPC, evidências, tempos de evento/processamento, correção manual e consulta paginada.
 - **Última zona (ISS-017):** Integra histórico e projeção de equipamento na mesma transação, com event time, lock e reconciliação de passagens confirmadas.
+- **Busca operacional (ISS-019):** API paginada por nome/patrimônio, tipo, EPC, estado derivado e última zona, consumida pelo dashboard e pelos mapas. Veja [contrato e validação](implementations/iss-019-busca-ativos.md).
 
 ### ⏳ O que está PLANEJADO (Próximos passos):
 - **Validação física:** Ajuste dos parâmetros e verificação da sequência de leituras com hardware real no HUPAA.
-- **Painel/Dashboard web e relatórios gerenciais:** Interface visual para busca e monitoramento em tempo real.
+- **Relatórios gerenciais e atualização em tempo real:** A busca e os mapas consultam a API; agregados históricos e atualização contínua ainda não foram implementados.
 
 ---
 

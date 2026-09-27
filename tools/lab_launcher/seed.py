@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from api.database import SessionLocal
 from api.epc import normalizar_epc
+from api.laboratorio import PORTAL_LABORATORIO
 from api.normalizacao import normalizar_nome
 from api.seed_localizacao_piloto import ConfigLocalizacaoPiloto
 from api.seed_localizacao_piloto import semear as semear_zonas
@@ -35,7 +36,7 @@ from rfid_ingestion.topics import reading_topic
 ANDAR = "Laboratório RFID"
 SETOR = "Bancada de testes"
 ZONAS = ("Zona A", "Zona B")
-PORTAL = "Portal de teste RFID"
+PORTAL = PORTAL_LABORATORIO
 TIPO_SINTETICO = "Equipamento sintético de laboratório RFID"
 
 
@@ -59,6 +60,12 @@ def semear(session: Session, reader_id: str = "reader-01", serial: str | None = 
     }
     if not setor.ativo or any(not zona.ativo for zona in zonas.values()):
         raise ValueError("setor ou zona de laboratório inativo")
+    for nome, referencia in (("Zona A", "sala-a"), ("Zona B", "sala-b")):
+        zona = zonas[nome]
+        if zona.referencia_planta not in (None, referencia):
+            raise ValueError(f"{nome} tem referência de planta divergente")
+        zona.referencia_planta = referencia
+    session.flush()
 
     resumo = {"zonas": "conferidas", "leitor": "reutilizado", "portal": "reutilizado"}
     leitor = session.scalar(select(Leitor).where(Leitor.reader_id == reader_id))

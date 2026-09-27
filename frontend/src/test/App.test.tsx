@@ -1,100 +1,90 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
-import { StatusBadge } from '../components/DashboardParts'
-import type { DetectionStatus } from '../types/dashboard'
+import type { EquipmentItem } from '../types/dashboard'
 
-beforeEach(() => { window.history.replaceState(null, '', '/'); window.location.hash = '' })
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
-
-describe('sinais de recência', () => {
-  it.each<[DetectionStatus, string]>([['recent', 'Recente'], ['outdated', 'Desatualizada'], ['never', 'Nunca detectado']])('combina símbolo e texto para %s', (status, label) => {
-    const { container } = render(<StatusBadge status={status}/>)
-    expect(container.querySelector('.status-badge')).toHaveTextContent(label)
-    expect(container.querySelector('[aria-hidden="true"]')).toBeInTheDocument()
-  })
+const item = (id: number, overrides: Partial<EquipmentItem> = {}): EquipmentItem => ({
+  id, nome: `Maca ${id}`, identificador_interno: `PAT-${id}`, tipo: 'Maca', tipo_id: 1,
+  epc: `E2000017221101441890A00${id}`, status: 'disponivel',
+  ultima_zona: { id: 1, nome: 'Zona 1', referencia_planta: 'zona-1' },
+  ultima_deteccao_em: '2026-09-26T12:00:00Z', localizacao_desatualizada: false, ...overrides,
 })
+const assets = [item(1, { status: 'atencao', localizacao_desatualizada: true }), item(2, {
+  status: 'nunca_detectado', ultima_zona: null, ultima_deteccao_em: null,
+  localizacao_desatualizada: null,
+}), item(3, { ultima_zona: { id: 3, nome: 'Zona A', referencia_planta: 'sala-a' } })]
+let calls: string[]
+let paginationMode: boolean
 
-describe('dashboard e mapas demonstrativos', () => {
-  it('preserva resumo, última zona e recência da Etapa A', async () => {
-    render(<App/>)
-    expect(screen.getByText('Rastreamento RFID')).toBeInTheDocument()
-    expect(screen.getByText('HUPAA · UFAL')).toBeInTheDocument()
-    expect(await screen.findByText('Total de equipamentos')).toBeInTheDocument()
-    expect(screen.getByText('Disponíveis')).toBeInTheDocument()
-    expect(screen.getAllByText('Atenção necessária').length).toBeGreaterThan(0)
-    const row = within(screen.getByRole('table')).getByRole('button', { name: /Cadeira de Rodas 12/ }).closest('tr')!
-    expect(row).toHaveTextContent('4º andar › Centro Cirúrgico')
-    expect(row).toHaveTextContent('Recente')
-  })
+beforeEach(() => {
+  window.history.replaceState(null, '', '/')
+  window.location.hash = ''
+  calls = []
+  paginationMode = false
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    calls.push(String(input))
+    const url = new URL(String(input), 'http://localhost')
+    let body: unknown
+    if (url.pathname === '/api/ativos') {
+      const epc = url.searchParams.get('epc')
+      const page = Number(url.searchParams.get('page') ?? '1')
+      const filtered = epc ? assets.filter((asset) => asset.epc === epc) : assets
+      const paginated = paginationMode && url.searchParams.get('page_size') === '20'
+      body = { items: paginated && page === 2 ? [item(99)] : page > 1 ? [] : filtered,
+        total: paginated ? 21 : filtered.length, page,
+        page_size: Number(url.searchParams.get('page_size') ?? '20') }
+    } else if (url.pathname === '/api/laboratorio/leituras') {
+      body = { items: url.searchParams.get('after_id') === '0' ? [{ id: 8, epc: assets[2].epc,
+        antena_porta: 1, recebido_em: '2026-09-26T12:00:00Z' }] : [], next_id: 8 }
+    } else if (url.pathname === '/tipos-equipamento') body = { items: [{ id: 1, nome: 'Maca' }] }
+    else body = [{ setores: [{ zonas: [{ id: 1, nome: 'Zona 1' }] }] }]
+    return { ok: true, json: async () => body }
+  }))
+})
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
-  it('não inventa zona para equipamento nunca detectado e abre o detalhe', async () => {
+describe('integração da busca', () => {
+  it('mostra a badge de localização na tabela e no detalhe; preserva null', async () => {
     render(<App/>)
-    const button = await screen.findByRole('button', { name: /Carrinho de Emergência 03/ })
-    const row = button.closest('tr')!
-    expect(row).toHaveTextContent('Nenhuma localização registrada')
-    expect(row).toHaveTextContent('Nunca detectado')
-    fireEvent.click(button)
-    const dialog = screen.getByRole('dialog')
-    expect(dialog).toHaveTextContent('Nenhuma localização registrada')
-    expect(dialog).toHaveTextContent('Nenhuma leitura registrada')
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-
-  it('preserva estados vazio e erro', async () => {
-    window.history.replaceState(null, '', '/?estado=vazio')
-    const { unmount } = render(<App/>)
-    expect(await screen.findByText('Nenhum equipamento cadastrado')).toBeInTheDocument()
-    expect(screen.getByText('Total de equipamentos')).toBeInTheDocument()
-    unmount()
-    window.history.replaceState(null, '', '/?estado=erro')
-    render(<App/>)
-    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível carregar as informações.')
-    expect(screen.queryByRole('button', { name: /Cadeira de Rodas 12/ })).not.toBeInTheDocument()
-  })
-
-  it('busca pelo patrimônio sem alterar os dados de demonstração', async () => {
-    render(<App/>)
-    await screen.findByText('Total de equipamentos')
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'PAT-3170' } })
+    const table = await screen.findByRole('table')
+    expect(within(table).getByText('Localização pode estar desatualizada')).toBeInTheDocument()
+    expect(within(table).getByText('Nenhuma localização registrada')).toBeInTheDocument()
+    fireEvent.click(within(table).getByRole('button', { name: /Maca 1/ }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Localização pode estar desatualizada')
+    fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }))
+    fireEvent.change(screen.getByRole('searchbox', { name: 'EPC' }), { target: { value: assets[0].epc } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
-    const table = screen.getByRole('table')
-    expect(within(table).getByRole('button', { name: /Maca 07/ })).toBeInTheDocument()
-    expect(within(table).queryByRole('button', { name: /Cadeira de Rodas 12/ })).not.toBeInTheDocument()
+    await waitFor(() => expect(calls.some((url) => url.includes(`epc=${assets[0].epc}`))).toBe(true))
   })
 
-  it('alterna mapas sem reload e abre o mesmo detalhe pelo marcador', async () => {
+  it('filtra EPC nos dois modos e não plota ativo nunca detectado', async () => {
     render(<App/>)
     fireEvent.click(screen.getByRole('link', { name: 'Mapa / Planta' }))
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Mapa / Planta' })).toBeInTheDocument())
-    expect(screen.getByRole('tabpanel', { name: 'Mapa do Hospital (HUPAA)' })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /^Zona [123]:/ })).toHaveLength(3)
-    expect(screen.getByText(/Estas cores descrevem espaços e circulação/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Antena Atendimento/ })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Mostrar equipamentos fictícios' }))
-    fireEvent.click(screen.getByRole('button', { name: /Monitor Multiparamétrico 05.*PAT-2205/ }))
-    expect(screen.getByRole('dialog')).toHaveTextContent('Monitor Multiparamétrico 05')
-    fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }))
+    expect(await screen.findByRole('heading', { name: 'Ainda não detectados' })).toBeInTheDocument()
+    expect(screen.getByText('Maca 2')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /1 equipamento.*Última zona/ })).toHaveLength(1)
     fireEvent.click(screen.getByRole('tab', { name: 'Laboratório de Testes (EASY)' }))
     expect(screen.getByRole('tabpanel', { name: 'Laboratório de Testes (EASY)' })).toBeInTheDocument()
-    expect(window.location.hash).toBe('#/mapa')
+    expect(await within(screen.getByRole('region', { name: 'Leituras das antenas' })).findByText(assets[2].epc!)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /1 equipamento.*Última zona: Sala A/ })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: /Antena A.*Sala A/ })).toHaveClass('marker-pulse'))
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Consultar EPC' }), { target: { value: 'FFFFFFFFFFFFFFFFFFFFFFFF' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar tag' }))
+    expect(await screen.findByText('Nenhum ativo associado a este EPC.')).toBeInTheDocument()
   })
 
-  it('filtra marcadores no hospital e registra leitura simulada no laboratório', async () => {
+  it('usa a paginação real do servidor', async () => {
+    paginationMode = true
     render(<App/>)
-    fireEvent.click(screen.getByRole('link', { name: 'Mapa / Planta' }))
-    await waitFor(() => expect(screen.getByRole('tabpanel', { name: 'Mapa do Hospital (HUPAA)' })).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Mostrar equipamentos fictícios' }))
-    const zoneSelect = screen.getByRole('combobox', { name: 'Zona principal' })
-    fireEvent.change(zoneSelect, { target: { value: 'zona-2' } })
-    expect(screen.getByText('4 de 8 exemplos associados à planta. Ative a camada para vê-los.')).toBeInTheDocument()
-    const mapMarker = screen.getByRole('button', { name: /Bomba de Infusão 14.*PAT-2104/ })
-    expect(mapMarker).toHaveClass('marker-dimmed')
-    fireEvent.click(screen.getByRole('tab', { name: 'Laboratório de Testes (EASY)' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Leitura na Sala A' }))
-    expect(screen.getByText('E2000017221101441890A001')).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: 'Log de leituras' })).getByText('Sala A')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Antena A. Sala A' })).toHaveClass('marker-pulse')
+    await screen.findByRole('table')
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima' }))
+    expect(await screen.findByRole('button', { name: /Maca 99/ })).toBeInTheDocument()
+    expect(calls.some((url) => url.includes('page=2') && url.includes('page_size=20'))).toBe(true)
+  })
+
+  it('exibe erro recuperável quando a API falha', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503 })))
+    render(<App/>)
+    expect(await screen.findByText('Não foi possível carregar os equipamentos.')).toBeInTheDocument()
   })
 })
