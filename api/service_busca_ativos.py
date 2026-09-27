@@ -6,7 +6,8 @@ from sqlalchemy import and_, false, func, or_
 from sqlalchemy.orm import Session, contains_eager
 
 from api.schemas_busca_ativos import AtivoBusca, BuscaAtivosPagina, ZonaBusca
-from db.models import AssociacaoTagEquipamento, Equipamento, Tag
+from api.timestamps import em_utc
+from db.models import AssociacaoTagEquipamento, Equipamento, Setor, Tag, Zona
 from rfid_location.recency import classify_recency
 
 PAGE_SIZE_DEFAULT = 20
@@ -44,7 +45,12 @@ def buscar(
         )
         .outerjoin(Tag, Tag.id == AssociacaoTagEquipamento.tag_id)
         .outerjoin(Equipamento.ultima_zona)
-        .options(contains_eager(Equipamento.tipo), contains_eager(Equipamento.ultima_zona))
+        .options(
+            contains_eager(Equipamento.tipo),
+            contains_eager(Equipamento.ultima_zona)
+            .joinedload(Zona.setor)
+            .joinedload(Setor.andar),
+        )
     )
     if q is not None:
         pattern = f"%{_escape_like(q)}%"
@@ -105,9 +111,11 @@ def buscar(
             epc=active_epc,
             status=visual_status,
             ultima_zona=ZonaBusca(
-                id=zone.id, nome=zone.nome, referencia_planta=zone.referencia_planta
+                id=zone.id, nome=zone.nome, referencia_planta=zone.referencia_planta,
+                setor=zone.setor.nome, andar=zone.setor.andar.nome,
+                caminho=f"{zone.setor.andar.nome} → {zone.setor.nome} → {zone.nome}",
             ) if zone else None,
-            ultima_deteccao_em=equipment.ultima_deteccao_em,
+            ultima_deteccao_em=em_utc(equipment.ultima_deteccao_em),
             localizacao_desatualizada=None if recency == "nunca_detectada"
             else recency == "desatualizada",
         ))

@@ -14,11 +14,11 @@ export function DashboardOverview({ data, summary, onSelect, onPage }: {
   </div></section><section className="panel inventory-panel" aria-labelledby="inventory-title">
     <div className="panel-heading"><div><p className="eyebrow">INVENTÁRIO</p><h2 id="inventory-title">Equipamentos</h2></div><span>{data.total} encontrados</span></div>
     {data.items.length ? <div className="table-wrap"><table className="equipment-table">
-      <thead><tr><th>Equipamento</th><th>Tipo / EPC</th><th>Última zona</th><th>Status</th><th>Última detecção</th></tr></thead>
+      <thead><tr><th>Equipamento</th><th>Tipo / EPC</th><th>Última zona</th><th>Status</th><th>Última detecção (horário de Maceió)</th></tr></thead>
       <tbody>{data.items.map((item) => <tr key={item.id}>
         <td><button className="table-item-button" type="button" onClick={() => onSelect(item)}>{item.nome}<small>{item.identificador_interno}</small></button></td>
         <td>{item.tipo}<small>{item.epc ?? 'Sem EPC associado'}</small></td>
-        <td>{item.ultima_zona?.nome ?? 'Nenhuma localização registrada'}</td>
+        <td>{item.ultima_zona?.caminho ?? 'Nenhuma localização registrada'}</td>
         <td><StatusBadge status={item.status}/><LocationBadge item={item}/></td>
         <td>{detectionLabel(item.ultima_deteccao_em)}</td>
       </tr>)}</tbody>

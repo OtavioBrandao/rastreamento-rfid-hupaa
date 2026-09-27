@@ -26,6 +26,7 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Histórico de Movimentações (ISS-018):** Ledger append-only, resolução temporal EPC → equipamento, correção manual e consulta cronológica paginada.
 - **Última Zona do Equipamento (ISS-017):** Passagem confirmada grava histórico e atualiza a projeção em uma transação; eventos atrasados não fazem a zona regredir e a reconciliação recupera falhas após o commit da direção.
 - **Busca operacional (ISS-019):** `GET /api/ativos` filtra por nome/patrimônio, tipo, EPC, status e última zona com paginação; dashboard e mapas consultam esta API. Consulte [contrato e limites](docs/implementations/iss-019-busca-ativos.md).
+- **Última localização na interface (ISS-021):** tabela e detalhe exibem andar → setor → zona e horário no fuso `America/Maceio`; o detalhe consulta o histórico paginado. Veja o [contrato e a validação](docs/implementations/iss-021-ultima-localizacao-interface.md).
 
 ### ⏳ Próximos Passos (Backlog Imediato):
 - **Validação física:** Calibrar debounce, janela de passagem e tolerância de direção no HUPAA.
@@ -166,6 +167,7 @@ A documentação detalhada foi reorganizada segundo a **[Issue #51](docs/impleme
   - [ISS-018: Histórico de Movimentações](docs/implementations/iss-018-historico-movimentacoes.md)
   - [ISS-017: Última Localização](docs/implementations/iss-017-ultima-localizacao.md)
   - [ISS-019: Busca operacional de ativos](docs/implementations/iss-019-busca-ativos.md)
+  - [ISS-021: Última localização e horário na interface](docs/implementations/iss-021-ultima-localizacao-interface.md)
 - **Experimentos e Evidências:**
   - [Índice de Evidências e Matriz de Testes](docs/experiments/README.md)
   - [Evidências MQTT e Rede](docs/experiments/mqtt/)

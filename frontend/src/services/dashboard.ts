@@ -1,4 +1,4 @@
-import type { AssetFilters, AssetPage, AssetStatus, FilterOption, OverviewSummary } from '../types/dashboard'
+import type { AssetFilters, AssetPage, AssetStatus, FilterOption, MovementPage, OverviewSummary } from '../types/dashboard'
 
 const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
@@ -14,6 +14,10 @@ export function getAssets(filters: AssetFilters = {}, signal?: AbortSignal): Pro
     if (value !== undefined && value !== '') params.set(key, String(value))
   }
   return readJson<AssetPage>(`/api/ativos?${params}`, signal)
+}
+
+export function getMovements(equipmentId: number, page = 1, signal?: AbortSignal): Promise<MovementPage> {
+  return readJson<MovementPage>(`/equipamentos/${equipmentId}/movimentacoes?page=${page}&size=20`, signal)
 }
 
 export async function getAllAssets(filters: AssetFilters = {}, signal?: AbortSignal) {

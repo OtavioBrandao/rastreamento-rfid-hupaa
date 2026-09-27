@@ -1276,6 +1276,28 @@ button,a {
   line-height:1.4;
   overflow-wrap:anywhere
 }
+.movement-history ol {
+  list-style:none;
+  margin:14px 0;
+  padding:0
+}
+.movement-history li {
+  display:grid;
+  gap:4px;
+  padding:12px 0;
+  border-bottom:1px solid var(--line);
+  font-size:.78rem
+}
+.movement-history li span,.movement-history li small {
+  color:#60777a
+}
+.movement-history nav {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-top:14px;
+  font-size:.76rem
+}
 .reading-list {
   list-style:none;
   padding:0;
