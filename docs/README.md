@@ -44,6 +44,7 @@ O projeto prioriza a confiabilidade da ingestão e da persistência antes da ló
 - **Histórico de movimentações (ISS-018):** Ledger append-only com EPC, evidências, tempos de evento/processamento, correção manual e consulta paginada.
 - **Última zona (ISS-017):** Integra histórico e projeção de equipamento na mesma transação, com event time, lock e reconciliação de passagens confirmadas.
 - **Busca operacional (ISS-019):** API paginada por nome/patrimônio, tipo, EPC, estado derivado e última zona, consumida pelo dashboard e pelos mapas. Veja [contrato e validação](implementations/iss-019-busca-ativos.md).
+- **Ativos por zona (ISS-020):** a consulta existente retorna equipamentos por última zona materializada, com recência e paginação. Veja [semântica e cenário de teste](implementations/iss-020-ativos-por-zona.md).
 
 ### ⏳ O que está PLANEJADO (Próximos passos):
 - **Validação física:** Ajuste dos parâmetros e verificação da sequência de leituras com hardware real no HUPAA.
