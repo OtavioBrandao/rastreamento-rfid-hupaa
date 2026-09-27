@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from api.router_associacao import router as router_associacao
 from api.router_busca_ativos import router as router_busca_ativos
+from api.router_dashboard import router as router_dashboard
 from api.router_equipamento import router as router_equipamento
 from api.router_hardware import router as router_hardware
 from api.router_leituras_laboratorio import router as router_leituras_laboratorio
@@ -32,6 +33,7 @@ app = FastAPI(
 app.include_router(router_tipos_equipamento)
 app.include_router(router_equipamento)
 app.include_router(router_busca_ativos)
+app.include_router(router_dashboard)
 app.include_router(router_leituras_laboratorio)
 app.include_router(router_associacao)
 app.include_router(router_localizacao)

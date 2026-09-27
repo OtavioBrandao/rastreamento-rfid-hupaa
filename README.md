@@ -106,7 +106,7 @@ uvicorn api.main:app --reload
 # Acesse a documentação interativa em http://127.0.0.1:8000/docs
 ```
 
-### Iniciar o frontend demonstrativo (Etapa A da ISS-032):
+### Iniciar o frontend operacional (ISS-032B):
 
 ```bash
 cd frontend
@@ -115,7 +115,7 @@ npm run dev
 # Abra http://localhost:5173/
 ```
 
-O Dashboard e os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. No EASY, as leituras recentes das antenas aparecem separadas da última zona confirmada. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), os [roteiros e leituras ao vivo](docs/implementations/roteiros-laboratorio-mapa-ao-vivo.md), a [base da Etapa A](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
+O Dashboard consulta `GET /api/ativos`, `/api/dashboard/resumo` e `/api/dashboard/atividade`; os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. No EASY, as leituras recentes das antenas aparecem separadas da última zona confirmada. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), os [roteiros e leituras ao vivo](docs/implementations/roteiros-laboratorio-mapa-ao-vivo.md), a [integração do painel](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
 
 ---
 
