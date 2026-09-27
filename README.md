@@ -100,11 +100,19 @@ teste local sintético,
 local com leitor físico ou com broker e banco externos. Veja
 [instruções para Windows 11 e Ubuntu](docs/lab_test_launcher.md).
 
-### Iniciar a API FastAPI de cadastros:
+### Iniciar a API FastAPI:
 ```bash
-uvicorn api.main:app --reload
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --env-file .env.cloud
 # Acesse a documentação interativa em http://127.0.0.1:8000/docs
 ```
+
+O comando acima mantém o fluxo com banco e broker externos já configurados em
+`.env.cloud` (arquivo local, ignorado pelo Git). Para revisar uma branch em um
+worktree sem copiar esse arquivo nem a `.venv`, execute o Python da instalação
+existente a partir da pasta original e acrescente
+`--app-dir <caminho-do-worktree>`; o `--env-file .env.cloud` continua apontando
+para o arquivo da pasta original. O frontend deve ser iniciado no mesmo worktree
+para servir o código correspondente ao backend.
 
 ### Iniciar o frontend operacional (ISS-032B):
 
