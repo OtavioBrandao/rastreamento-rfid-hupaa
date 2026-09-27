@@ -100,13 +100,21 @@ teste local sintético,
 local com leitor físico ou com broker e banco externos. Veja
 [instruções para Windows 11 e Ubuntu](docs/lab_test_launcher.md).
 
-### Iniciar a API FastAPI de cadastros:
+### Iniciar a API FastAPI:
 ```bash
-uvicorn api.main:app --reload
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --env-file .env.cloud
 # Acesse a documentação interativa em http://127.0.0.1:8000/docs
 ```
 
-### Iniciar o frontend demonstrativo (Etapa A da ISS-032):
+O comando acima mantém o fluxo com banco e broker externos já configurados em
+`.env.cloud` (arquivo local, ignorado pelo Git). Para revisar uma branch em um
+worktree sem copiar esse arquivo nem a `.venv`, execute o Python da instalação
+existente a partir da pasta original e acrescente
+`--app-dir <caminho-do-worktree>`; o `--env-file .env.cloud` continua apontando
+para o arquivo da pasta original. O frontend deve ser iniciado no mesmo worktree
+para servir o código correspondente ao backend.
+
+### Iniciar o frontend operacional (ISS-032B):
 
 ```bash
 cd frontend
@@ -115,7 +123,7 @@ npm run dev
 # Abra http://localhost:5173/
 ```
 
-O Dashboard e os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. No EASY, as leituras recentes das antenas aparecem separadas da última zona confirmada. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), os [roteiros e leituras ao vivo](docs/implementations/roteiros-laboratorio-mapa-ao-vivo.md), a [base da Etapa A](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
+O Dashboard consulta `GET /api/ativos`, `/api/dashboard/resumo` e `/api/dashboard/atividade`; os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. No EASY, as leituras recentes das antenas aparecem separadas da última zona confirmada. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), os [roteiros e leituras ao vivo](docs/implementations/roteiros-laboratorio-mapa-ao-vivo.md), a [integração do painel](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
 
 ---
 
