@@ -18,6 +18,8 @@ const assets = [item(1, { status: 'atencao', localizacao_desatualizada: true }),
 let calls: string[]
 let paginationMode: boolean
 let historyFailure: boolean
+let assetsFailure: boolean
+let activityFailure: boolean
 
 beforeEach(() => {
   window.history.replaceState(null, '', '/')
@@ -25,10 +27,14 @@ beforeEach(() => {
   calls = []
   paginationMode = false
   historyFailure = false
+  assetsFailure = false
+  activityFailure = false
   vi.stubGlobal('fetch', vi.fn(async (input: string) => {
     calls.push(String(input))
     const url = new URL(String(input), 'http://localhost')
     if (historyFailure && url.pathname.endsWith('/movimentacoes')) return { ok: false, status: 503 }
+    if (assetsFailure && url.pathname === '/api/ativos') return { ok: false, status: 503 }
+    if (activityFailure && url.pathname === '/api/dashboard/atividade') return { ok: false, status: 503 }
     let body: unknown
     if (url.pathname === '/api/ativos') {
       const epc = url.searchParams.get('epc')
@@ -38,6 +44,12 @@ beforeEach(() => {
       body = { items: paginated && page === 2 ? [item(99)] : page > 1 ? [] : filtered,
         total: paginated ? 21 : filtered.length, page,
         page_size: Number(url.searchParams.get('page_size') ?? '20') }
+    } else if (url.pathname === '/api/dashboard/resumo') {
+      body = { registered: 3, disponivel: 1, atencao: 1, fora_de_servico: 0, nunca_detectado: 1 }
+    } else if (url.pathname === '/api/dashboard/atividade') {
+      body = { items: [{ id: 10, equipamento_id: 1, equipamento_nome: 'Maca 1',
+        zona_origem: 'Zona 0', zona_destino: 'Zona 1',
+        movimentada_em: '2026-09-26T12:00:00Z', origem_registro: 'passagem_automatica' }] }
     } else if (url.pathname === '/api/laboratorio/leituras') {
       body = { items: url.searchParams.get('after_id') === '0' ? [{ id: 8, epc: assets[2].epc,
         antena_porta: 1, recebido_em: '2026-09-26T12:00:00Z' }] : [], next_id: 8 }
@@ -59,6 +71,10 @@ describe('integração da busca', () => {
     const table = await screen.findByRole('table')
     expect(within(table).getByText('Localização pode estar desatualizada')).toBeInTheDocument()
     expect(within(table).getByText('Nenhuma localização registrada')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Movimentações recentes' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Movimentações recentes' })).toHaveTextContent('Maca 1 · Zona 0 → Zona 1')
+    expect(calls.filter((url) => url.includes('/api/dashboard/resumo'))).toHaveLength(1)
+    expect(calls.filter((url) => url.includes('/api/dashboard/atividade'))).toHaveLength(1)
     expect(within(table).getByText('2º andar → Bloco B → Zona 1')).toBeInTheDocument()
     expect(within(table).getAllByText(/26\/09\/2026.*09:00/).length).toBeGreaterThan(0)
     fireEvent.click(within(table).getByRole('button', { name: /Maca 1/ }))
@@ -103,6 +119,56 @@ describe('integração da busca', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503 })))
     render(<App/>)
     expect(await screen.findByText('Não foi possível carregar os equipamentos.')).toBeInTheDocument()
+  })
+
+  it('limpa a lista antiga ao falhar uma busca e recupera no retry', async () => {
+    render(<App/>)
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    assetsFailure = true
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Nome ou patrimônio' }), { target: { value: 'Maca' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
+    expect(await screen.findByText('Não foi possível carregar os equipamentos.')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    assetsFailure = false
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+  })
+
+  it('ignora resposta atrasada de uma busca anterior após erro', async () => {
+    render(<App/>)
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    const originalFetch = globalThis.fetch
+    let releaseOld!: (value: { ok: boolean; json: () => Promise<unknown> }) => void
+    vi.stubGlobal('fetch', vi.fn((input: string, init?: RequestInit) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (url.pathname === '/api/ativos' && url.searchParams.get('q') === 'Antiga') {
+        return new Promise((resolve) => { releaseOld = resolve })
+      }
+      if (url.pathname === '/api/ativos' && url.searchParams.get('q') === 'Nova') {
+        return Promise.resolve({ ok: false, status: 503 })
+      }
+      return originalFetch(input, init)
+    }))
+    const search = screen.getByRole('searchbox', { name: 'Nome ou patrimônio' })
+    fireEvent.change(search, { target: { value: 'Antiga' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
+    await waitFor(() => expect(releaseOld).toBeDefined())
+    fireEvent.change(search, { target: { value: 'Nova' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
+    expect(await screen.findByText('Não foi possível carregar os equipamentos.')).toBeInTheDocument()
+    releaseOld({ ok: true, json: async () => ({ items: assets, total: 3, page: 1, page_size: 20 }) })
+    await waitFor(() => expect(screen.queryByRole('table')).not.toBeInTheDocument())
+  })
+
+  it('exibe erro da atividade e recupera sem dados antigos', async () => {
+    activityFailure = true
+    render(<App/>)
+    const region = screen.getByRole('region', { name: 'Movimentações recentes' })
+    expect(await within(region).findByText(/Não foi possível carregar as movimentações/)).toBeInTheDocument()
+    expect(region).not.toHaveTextContent('Zona 0 → Zona 1')
+    activityFailure = false
+    fireEvent.click(within(region).getByRole('button', { name: 'Tentar novamente' }))
+    await waitFor(() => expect(region).toHaveTextContent('Maca 1 · Zona 0 → Zona 1'))
   })
 
   it('não exibe histórico antigo quando a consulta falha e permite nova tentativa', async () => {

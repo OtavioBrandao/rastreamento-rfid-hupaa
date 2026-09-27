@@ -630,6 +630,8 @@ class HistoricoMovimentacao(Base):
     __table_args__ = (
         Index("ix_historico_equipamento_registrado_em", "equipamento_id", "registrado_em"),
         Index("ix_historico_equipamento_movimentada_id", "equipamento_id", "movimentada_em", "id"),
+        Index("ix_historico_atividade_recente", "movimentada_em", "id",
+              postgresql_where=movimentada_em.is_not(None)),
         Index("uq_historico_passagem_automatica", "passagem_id", unique=True,
               postgresql_where=(origem_registro == "passagem_automatica")),
         CheckConstraint(
