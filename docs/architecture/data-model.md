@@ -33,7 +33,7 @@ Documento de apoio à issue de modelagem (Épico E1, Must, RF-001 a RF-023, RNF-
 
 > RF-012 usa uma projeção diretamente no equipamento. `ultima_movimentacao_id` aponta para a fonte auditável, inclusive após correção manual, quando `ultima_passagem_id` é NULL. `registrado_em` do movimento é o tempo de processamento; `updated_at` do equipamento também muda por edições cadastrais.
 
-**Índices:** `ultima_zona_id` (busca por localização, RF-014/015), `status`.
+**Índices:** `tipo_id`, `ultima_zona_id` (busca por localização, RF-014/015), `ultima_deteccao_em` (recência, ISS-019) e `status`. O EPC da associação ativa é resolvido pelo índice único de `tags.epc` e `uq_tag_ativa`.
 
 ### `tags`
 | Coluna | Tipo | Regra |

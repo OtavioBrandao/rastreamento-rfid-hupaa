@@ -760,6 +760,42 @@ button,a {
   width:100%;
   height:100%
 }
+.status-disponivel {
+  color:#075d89;
+  background:#e5f3fb;
+  border-color:#b9dbed
+}
+.status-atencao {
+  color:#885406;
+  background:#fff5df;
+  border-color:#f3dfaf
+}
+.status-nunca_detectado,.status-offline {
+  color:#526772;
+  background:#edf2f4;
+  border-color:#dce5e8
+}
+.status-fora_de_servico {
+  color:#a33030;
+  background:#ffefed;
+  border-color:#f4d0cc
+}
+.asset-filters { display:flex; flex-wrap:wrap; gap:12px; align-items:end; padding:18px; margin-bottom:20px }
+.asset-filters label { display:grid; gap:5px; min-width:150px; flex:1; font-size:.82rem; font-weight:700 }
+.asset-filters input,.asset-filters select { width:100%; min-height:40px; border:1px solid #bdccca; border-radius:7px; padding:7px; background:#fff }
+.asset-filters button,.pagination button { min-height:40px; padding:7px 15px; border:1px solid #a9c4c6; border-radius:7px; background:#eef6f6; cursor:pointer }
+.asset-filters button:disabled,.pagination button:disabled { opacity:.5; cursor:default }
+.pagination { display:flex; justify-content:center; align-items:center; gap:16px; padding:16px }
+.equipment-table td .status-badge { margin:2px 3px 2px 0; white-space:normal }
+.asset-list { list-style:none; padding:0; margin:12px 0; display:grid; gap:10px }
+.asset-list li { display:grid; gap:4px; border-bottom:1px solid #dce7e4; padding:8px 0 }
+.asset-list button { border:0; background:none; padding:0; color:#075d89; font-weight:700; text-align:left; cursor:pointer }
+.asset-list small { color:#526772 }
+.asset-list .status-badge { width:max-content }
+.table-skeleton,.map-skeleton { padding:24px; display:grid; gap:14px }
+.table-skeleton span,.map-skeleton span { display:block; height:24px; border-radius:6px; background:#e4eeee; animation:skeleton-pulse 1.2s ease-in-out infinite alternate }
+.map-skeleton span:first-child { height:180px }
+@keyframes skeleton-pulse { to { opacity:.45 } }
 .marker-layer,.sector-layer {
   pointer-events:none
 }
@@ -828,13 +864,13 @@ button,a {
 .marker-equipment {
   background:var(--available)
 }
-.marker-attention {
+.marker-attention,.marker-atencao {
   background:var(--attention)
 }
 .marker-offline {
   background:var(--offline)
 }
-.marker-critical {
+.marker-critical,.marker-fora_de_servico {
   background:var(--critical)
 }
 .marker-antenna {

@@ -28,6 +28,45 @@ class Etapa:
     rssi_final: int
 
 
+@dataclass(frozen=True)
+class LeituraPlanejada:
+    epc: str
+    porta: int
+    pausa_antes: float
+    rssi: int
+
+
+def programa_multitag(cenario: int, epcs: list[str], mensagens: int,
+                      intervalo: float) -> tuple[LeituraPlanejada, ...]:
+    """Percursos em fases; leituras de tags simultâneas são intercaladas."""
+    if cenario not in (2, 3) or len(epcs) != 2:
+        raise ValueError("roteiros 2 e 3 exigem exatamente dois EPCs")
+    if not 10 <= mensagens <= 1000:
+        raise ValueError("cada travessia exige entre 10 e 1000 mensagens por EPC")
+    if not math.isfinite(intervalo) or intervalo < 0:
+        raise ValueError("intervalo entre antenas deve ser finito e não negativo")
+    a, b = epcs
+    fases = (
+        (((a, 1, 2),), ((a, 2, 1), (b, 1, 2)),
+         ((a, 1, 2), (b, 2, 1))) if cenario == 2 else
+        (((a, 1, 2), (b, 1, 2)), ((b, 2, 1),),
+         ((b, 1, 2),), ((b, 2, 1),))
+    )
+    origem = mensagens // 2
+    destino = mensagens - origem
+    resultado: list[LeituraPlanejada] = []
+    for indice_fase, fase in enumerate(fases):
+        for indice in range(origem):
+            for epc, porta_origem, _ in fase:
+                pausa = 3.5 if indice_fase and indice == 0 and epc == fase[0][0] else 0.10
+                resultado.append(LeituraPlanejada(epc, porta_origem, pausa, -6000))
+        for indice in range(destino):
+            for epc, _, porta_destino in fase:
+                pausa = intervalo if indice == 0 and epc == fase[0][0] else 0.10
+                resultado.append(LeituraPlanejada(epc, porta_destino, pausa, -5700))
+    return tuple(resultado)
+
+
 def roteiro(mensagens: int, passagem: bool) -> tuple[Etapa, ...]:
     """Cenário ilustrativo: aproximação, permanência e travessia do portal."""
     if passagem and mensagens < 10:
@@ -71,16 +110,17 @@ def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
              passagem: bool, intervalo: float, portal_id: str = "portal-01",
              mensagens: int = 100,
              timestamp_format: str = "counter",
-             contador_inicial: int | None = None) -> int:
+             contador_inicial: int | None = None, cenario: int = 1) -> int:
     if not math.isfinite(intervalo) or intervalo < 0:
         raise ValueError("intervalo entre antenas deve ser finito e não negativo")
     if timestamp_format != "counter":
         raise ValueError("o JSON sintético do leitor exige timestamp no formato counter")
     if not epcs:
         raise ValueError("informe EPCs hexadecimais válidos")
-    etapas = roteiro(mensagens, passagem)
+    etapas = roteiro(mensagens, passagem) if cenario == 1 else ()
     epcs = [normalizar_epc(epc) for epc in epcs]
-    total_esperado = len(epcs) * mensagens
+    programa = programa_multitag(cenario, epcs, mensagens, intervalo) if cenario != 1 else ()
+    total_esperado = len(programa) if programa else len(epcs) * mensagens
     contador = novo_contador(total_esperado) if contador_inicial is None else contador_inicial
     if contador < 1_000_000 or contador + total_esperado > 10_000_000:
         raise ValueError("intervalo do contador sintético deve ter sete dígitos")
@@ -116,6 +156,28 @@ def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
         if erro:
             raise RuntimeError(erro[0])
         total = 0
+        def emitir(epc: str, porta: int, rssi: int) -> None:
+            nonlocal total
+            payload = {"epc": epc, "rssi": rssi, "antenna": porta,
+                       "timestamp": str(contador + total)}
+            result = client.publish(topic, json.dumps(payload, separators=(",", ":")), qos=1)
+            if result.rc != mqtt.MQTT_ERR_SUCCESS:
+                raise RuntimeError(f"MQTT não enfileirou a leitura para {topic}: "
+                                   f"{mqtt.error_string(result.rc)}")
+            try:
+                result.wait_for_publish(timeout=10)
+            except RuntimeError:
+                raise RuntimeError(_falha_puback(topic, desconectado.is_set())) from None
+            if not result.is_published():
+                raise RuntimeError(_falha_puback(topic, desconectado.is_set()))
+            total += 1
+            print(f"Mensagem {total}/{total_esperado}: EPC {epc}, antena {porta}", flush=True)
+
+        if programa:
+            for leitura in programa:
+                time.sleep(leitura.pausa_antes)
+                emitir(leitura.epc, leitura.porta, leitura.rssi)
+            return total
         for epc in epcs:
             for etapa in etapas:
                 if etapa.porta == 2:
@@ -125,30 +187,10 @@ def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
                 print(f"EPC {epc}: {etapa.nome}, {etapa.quantidade} mensagem(ns)",
                       flush=True)
                 for indice in range(etapa.quantidade):
-                    timestamp = str(contador + total)
                     fracao = indice / max(etapa.quantidade - 1, 1)
                     rssi = round(etapa.rssi_inicial
                                  + (etapa.rssi_final - etapa.rssi_inicial) * fracao)
-                    payload = {
-                        "epc": epc,
-                        "rssi": rssi,
-                        "antenna": etapa.porta,
-                        "timestamp": timestamp,
-                    }
-                    result = client.publish(topic, json.dumps(payload, separators=(",", ":")),
-                                            qos=1)
-                    if result.rc != mqtt.MQTT_ERR_SUCCESS:
-                        raise RuntimeError(f"MQTT não enfileirou a leitura para {topic}: "
-                                           f"{mqtt.error_string(result.rc)}")
-                    try:
-                        result.wait_for_publish(timeout=10)
-                    except RuntimeError:
-                        raise RuntimeError(_falha_puback(topic, desconectado.is_set())) from None
-                    if not result.is_published():
-                        raise RuntimeError(_falha_puback(topic, desconectado.is_set()))
-                    total += 1
-                    print(f"Mensagem {total}/{len(epcs) * mensagens}: EPC {epc}, "
-                          f"antena {etapa.porta}, {etapa.nome}", flush=True)
+                    emitir(epc, etapa.porta, rssi)
                     if indice + 1 < etapa.quantidade:
                         time.sleep(etapa.pausa)
         return total

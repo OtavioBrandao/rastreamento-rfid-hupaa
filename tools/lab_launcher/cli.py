@@ -29,7 +29,7 @@ from .docker_env import (
 )
 from .session import iniciar as iniciar_sessao
 from .session import parar as parar_sessao
-from .synthetic import epcs_padrao, novo_contador, publicar, roteiro
+from .synthetic import epcs_padrao, novo_contador, programa_multitag, publicar, roteiro
 from .terminals import abrir, encerrar
 from .verify import conferir, inicio
 
@@ -67,6 +67,18 @@ def _cenario(env: str | None, source: str | None) -> tuple[str, str]:
         _escolher(env, "Ambiente", ("local", "managed")),
         _escolher(source, "Origem", ("physical", "synthetic")),
     )
+
+
+def _roteiro_escolhido(valor: int | None, interativo: bool) -> int:
+    if valor is None and interativo:
+        typer.echo("1. Uma tag: aproximação A, permanência e passagem A → B")
+        typer.echo("2. Tags 02 e 03: vai e vem; cruzamento simultâneo em sentidos opostos")
+        typer.echo("3. Tag 02 permanece em B; tag 03 vai e volta entre A e B")
+        valor = int(typer.prompt("Escolha o roteiro (1-3)", default="1"))
+    escolhido = valor or 1
+    if escolhido not in (1, 2, 3):
+        raise ValueError("escolha um roteiro de 1 a 3")
+    return escolhido
 
 
 def _perfil_publicador(modo: str, valores: dict[str, str], arquivo: Path | None,
@@ -158,8 +170,9 @@ def start(
     serial: Annotated[str | None, typer.Option("--serial")] = None,
     timestamp_format: Annotated[str | None, typer.Option("--timestamp-format")] = None,
     passage: Annotated[bool, typer.Option("--passage/--single")] = True,
+    scenario: Annotated[int | None, typer.Option("--scenario", help="Roteiro 1, 2 ou 3")] = None,
     count: Annotated[int, typer.Option("--count", help="Quantidade de itens sintéticos")] = 1,
-    messages: Annotated[int, typer.Option("--messages", help="Mensagens por item")] = 100,
+    messages: Annotated[int, typer.Option("--messages", help="Leituras por item/travessia")] = 100,
     interval: Annotated[float, typer.Option("--interval")] = 0.5,
     epc: Annotated[list[str] | None, typer.Option("--epc")] = None,
 ) -> None:
@@ -176,6 +189,11 @@ def start(
         modo, origem = _cenario(env, source)
         print(f"Cenário: ambiente {modo}; origem {origem}; leitor {reader_id}")
         interativo = sys.stdin.isatty()
+        roteiro_id = _roteiro_escolhido(scenario, interativo)
+        if roteiro_id != 1 and not passage:
+            raise ValueError("--single só é compatível com o roteiro 1")
+        if roteiro_id != 1 and count != 1:
+            raise ValueError("--count só é compatível com o roteiro 1; use --epc duas vezes")
         if fresh and reuse:
             raise ValueError("escolha --fresh ou --reuse")
         if modo == "local" and not fresh and not reuse and interativo:
@@ -191,16 +209,30 @@ def start(
         if origem == "synthetic":
             if timestamp_format not in (None, "counter"):
                 raise ValueError("dados sintéticos reproduzem o timestamp counter do leitor")
-            lista = [normalizar_epc(item) for item in (epc or epcs_padrao(count))]
+            padrao = epcs_padrao(count) if roteiro_id == 1 else epcs_padrao(3)[1:]
+            lista = [normalizar_epc(item) for item in (epc or padrao)]
             if len(set(lista)) != len(lista):
                 raise ValueError("não repita o mesmo EPC no teste sintético")
-            etapas = roteiro(messages, passage)
-            print(f"Plano sintético: {len(lista)} item(ns), {messages} mensagens por item, "
-                  f"total {len(lista) * messages}")
-            for item in etapas:
-                print(f"  {item.nome}: {item.quantidade} mensagem(ns)")
+            if roteiro_id == 1:
+                etapas = roteiro(messages, passage)
+                total_planejado = len(lista) * messages
+                print(f"Plano sintético: {len(lista)} item(ns), {messages} mensagens por item, "
+                      f"total {total_planejado}")
+                for item in etapas:
+                    print(f"  {item.nome}: {item.quantidade} mensagem(ns)")
+            else:
+                programa = programa_multitag(roteiro_id, lista, messages, interval)
+                total_planejado = len(programa)
+                print(f"Roteiro {roteiro_id}: {messages} leituras por travessia; "
+                      f"{total_planejado} leituras no total; EPCs {', '.join(lista)}")
             publisher = _perfil_publicador(modo, valores, publisher_env_file,
                                            interativo)
+        elif roteiro_id != 1:
+            print("Roteiro de movimentação manual (o leitor físico fornece as leituras):")
+            if roteiro_id == 2:
+                print("  Tag 02: A → B; depois B → A enquanto tag 03 faz A → B; repetir.")
+            else:
+                print("  Tag 02: A → B e permanecer. Tag 03: A ↔ B repetidamente.")
         ambiente["EZ700_TIMESTAMP_FORMAT"] = timestamp_format or "counter"
         projeto = valores.get("COMPOSE_PROJECT_NAME", "rfid-hospital-local" if modo == "local"
                               else "rfid-hospital-managed")
@@ -261,17 +293,18 @@ def start(
             etapa = "publicação das leituras sintéticas"
             assert publisher is not None
             baseline = inicio(valores["APP_DATABASE_URL"])
-            contador_inicial = novo_contador(len(lista) * messages)
+            contador_inicial = novo_contador(total_planejado)
             total = publicar(publisher, reader_id, epcs=lista, passagem=passage,
                              intervalo=interval, portal_id=portal_id,
                              mensagens=messages,
                              timestamp_format=ambiente["EZ700_TIMESTAMP_FORMAT"],
-                             contador_inicial=contador_inicial)
+                             contador_inicial=contador_inicial, cenario=roteiro_id)
             print(f"{total} leitura(s) sintética(s) publicada(s)")
             etapa = "verificação da Sprint 2 no banco"
             conferir(valores["APP_DATABASE_URL"], baseline, lista,
                      passagem=passage, mensagens=messages,
-                     contador_inicial=contador_inicial)
+                     contador_inicial=contador_inicial,
+                     programa=programa if roteiro_id != 1 else None)
         else:
             print("Pronto para leituras do leitor físico. Use 'stop' ao encerrar.")
         if interativo and not no_terminals:
