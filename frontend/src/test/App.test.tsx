@@ -6,24 +6,29 @@ import type { EquipmentItem } from '../types/dashboard'
 const item = (id: number, overrides: Partial<EquipmentItem> = {}): EquipmentItem => ({
   id, nome: `Maca ${id}`, identificador_interno: `PAT-${id}`, tipo: 'Maca', tipo_id: 1,
   epc: `E2000017221101441890A00${id}`, status: 'disponivel',
-  ultima_zona: { id: 1, nome: 'Zona 1', referencia_planta: 'zona-1' },
+  ultima_zona: { id: 1, nome: 'Zona 1', referencia_planta: 'zona-1',
+    andar: '2º andar', setor: 'Bloco B', caminho: '2º andar → Bloco B → Zona 1' },
   ultima_deteccao_em: '2026-09-26T12:00:00Z', localizacao_desatualizada: false, ...overrides,
 })
 const assets = [item(1, { status: 'atencao', localizacao_desatualizada: true }), item(2, {
   status: 'nunca_detectado', ultima_zona: null, ultima_deteccao_em: null,
   localizacao_desatualizada: null,
-}), item(3, { ultima_zona: { id: 3, nome: 'Zona A', referencia_planta: 'sala-a' } })]
+}), item(3, { ultima_zona: { id: 3, nome: 'Zona A', referencia_planta: 'sala-a',
+  andar: '2º andar', setor: 'Bloco B', caminho: '2º andar → Bloco B → Zona A' } })]
 let calls: string[]
 let paginationMode: boolean
+let historyFailure: boolean
 
 beforeEach(() => {
   window.history.replaceState(null, '', '/')
   window.location.hash = ''
   calls = []
   paginationMode = false
+  historyFailure = false
   vi.stubGlobal('fetch', vi.fn(async (input: string) => {
     calls.push(String(input))
     const url = new URL(String(input), 'http://localhost')
+    if (historyFailure && url.pathname.endsWith('/movimentacoes')) return { ok: false, status: 503 }
     let body: unknown
     if (url.pathname === '/api/ativos') {
       const epc = url.searchParams.get('epc')
@@ -36,6 +41,11 @@ beforeEach(() => {
     } else if (url.pathname === '/api/laboratorio/leituras') {
       body = { items: url.searchParams.get('after_id') === '0' ? [{ id: 8, epc: assets[2].epc,
         antena_porta: 1, recebido_em: '2026-09-26T12:00:00Z' }] : [], next_id: 8 }
+    } else if (url.pathname.match(/^\/equipamentos\/\d+\/movimentacoes$/)) {
+      body = { items: [{ id: 10, origem_registro: 'automatico', zona_origem: 'Zona 0',
+        zona_destino: 'Zona 1', movimentada_em: '2026-09-26T12:00:00Z',
+        registrado_em: '2026-09-26T12:10:00Z', justificativa: null }],
+        page: 1, size: 20, total: 1, pages: 1 }
     } else if (url.pathname === '/tipos-equipamento') body = { items: [{ id: 1, nome: 'Maca' }] }
     else body = [{ setores: [{ zonas: [{ id: 1, nome: 'Zona 1' }] }] }]
     return { ok: true, json: async () => body }
@@ -49,8 +59,15 @@ describe('integração da busca', () => {
     const table = await screen.findByRole('table')
     expect(within(table).getByText('Localização pode estar desatualizada')).toBeInTheDocument()
     expect(within(table).getByText('Nenhuma localização registrada')).toBeInTheDocument()
+    expect(within(table).getByText('2º andar → Bloco B → Zona 1')).toBeInTheDocument()
+    expect(within(table).getAllByText(/26\/09\/2026.*09:00/).length).toBeGreaterThan(0)
     fireEvent.click(within(table).getByRole('button', { name: /Maca 1/ }))
     expect(screen.getByRole('dialog')).toHaveTextContent('Localização pode estar desatualizada')
+    expect(screen.getByRole('dialog')).toHaveTextContent('2º andar → Bloco B → Zona 1')
+    fireEvent.click(screen.getByRole('button', { name: 'Ver histórico completo' }))
+    expect(await screen.findByText('Zona 0 → Zona 1')).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toHaveTextContent('26/09/2026')
+    expect(calls.some((url) => url.includes('/equipamentos/1/movimentacoes?page=1&size=20'))).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }))
     fireEvent.change(screen.getByRole('searchbox', { name: 'EPC' }), { target: { value: assets[0].epc } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
@@ -86,5 +103,18 @@ describe('integração da busca', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503 })))
     render(<App/>)
     expect(await screen.findByText('Não foi possível carregar os equipamentos.')).toBeInTheDocument()
+  })
+
+  it('não exibe histórico antigo quando a consulta falha e permite nova tentativa', async () => {
+    render(<App/>)
+    const table = await screen.findByRole('table')
+    fireEvent.click(within(table).getByRole('button', { name: /Maca 1/ }))
+    historyFailure = true
+    fireEvent.click(screen.getByRole('button', { name: 'Ver histórico completo' }))
+    expect(await screen.findByText(/Não foi possível carregar o histórico/)).toBeInTheDocument()
+    expect(screen.queryByText('Zona 0 → Zona 1')).not.toBeInTheDocument()
+    historyFailure = false
+    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
+    expect(await screen.findByText('Zona 0 → Zona 1')).toBeInTheDocument()
   })
 })

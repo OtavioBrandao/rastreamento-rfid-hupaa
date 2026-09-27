@@ -14,6 +14,9 @@ class ZonaBusca(BaseModel):
     id: int
     nome: str
     referencia_planta: str | None
+    setor: str
+    andar: str
+    caminho: str
 
 
 class AtivoBusca(BaseModel):

@@ -40,7 +40,7 @@ GET /api/ativos?tipo=2&zona=4&status=atencao&page=1&page_size=20
     "tipo_id": 2,
     "epc": "E2000017221101441890A003",
     "status": "atencao",
-    "ultima_zona": {"id": 4, "nome": "Centro Cirúrgico", "referencia_planta": "zona-2"},
+    "ultima_zona": {"id": 4, "nome": "Centro Cirúrgico", "referencia_planta": "zona-2", "andar": "2º andar", "setor": "Bloco B", "caminho": "2º andar → Bloco B → Centro Cirúrgico"},
     "ultima_deteccao_em": "2026-09-26T12:00:00Z",
     "localizacao_desatualizada": true
   }],
@@ -49,6 +49,9 @@ GET /api/ativos?tipo=2&zona=4&status=atencao&page=1&page_size=20
   "page_size": 20
 }
 ```
+
+Os campos `andar`, `setor` e `caminho` foram acrescentados na ISS-021; veja
+[o contrato temporal e o acesso ao histórico](iss-021-ultima-localizacao-interface.md).
 
 Um EPC válido sem vínculo ativo retorna `200` e `{"items": [], "total": 0,
 "page": 1, "page_size": 20}`. Dados com formato inválido, filtros fora da faixa,
