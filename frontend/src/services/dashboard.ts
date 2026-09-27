@@ -1,4 +1,4 @@
-import type { AssetFilters, AssetPage, AssetStatus, FilterOption, MovementPage, OverviewSummary } from '../types/dashboard'
+import type { ActivityItem, AssetFilters, AssetPage, FilterOption, MovementPage, OverviewSummary } from '../types/dashboard'
 
 const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
@@ -56,13 +56,11 @@ export async function getZones(signal?: AbortSignal): Promise<FilterOption[]> {
   return result.flatMap((floor) => floor.setores.flatMap((sector) => sector.zonas))
 }
 
-export async function getOverviewSummary(signal?: AbortSignal): Promise<OverviewSummary> {
-  const statuses: AssetStatus[] = ['disponivel', 'atencao', 'fora_de_servico', 'nunca_detectado']
-  const results = await Promise.all([
-    getAssets({ page_size: 1 }, signal),
-    ...statuses.map((status) => getAssets({ status, page_size: 1 }, signal)),
-  ])
-  return { registered: results[0].total,
-    disponivel: results[1].total, atencao: results[2].total,
-    fora_de_servico: results[3].total, nunca_detectado: results[4].total }
+export function getOverviewSummary(signal?: AbortSignal): Promise<OverviewSummary> {
+  return readJson('/api/dashboard/resumo', signal)
+}
+
+export async function getRecentActivity(signal?: AbortSignal): Promise<ActivityItem[]> {
+  const result = await readJson<{ items: ActivityItem[] }>('/api/dashboard/atividade?limit=8', signal)
+  return result.items
 }

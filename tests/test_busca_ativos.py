@@ -14,6 +14,7 @@ from db.models import (
     Andar,
     AssociacaoTagEquipamento,
     Equipamento,
+    HistoricoMovimentacao,
     Setor,
     Tag,
     TipoEquipamento,
@@ -65,6 +66,35 @@ def catalog(db):
 
 def search(db, **filters):
     return buscar(db, now=NOW, threshold=THRESHOLD, **filters)
+
+
+def test_dashboard_resumo_e_atividade_limitada(db, catalog):
+    db.add_all([
+        HistoricoMovimentacao(equipamento_id=catalog["ids"][0],
+                              zona_destino_id=catalog["a"],
+                              origem_registro="correcao_manual", justificativa="Teste",
+                              movimentada_em=NOW - timedelta(minutes=2)),
+        HistoricoMovimentacao(equipamento_id=catalog["ids"][1],
+                              zona_destino_id=catalog["b"],
+                              origem_registro="correcao_manual", justificativa="Teste",
+                              movimentada_em=NOW - timedelta(minutes=1)),
+    ])
+    db.flush()
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_recency_context] = lambda: (NOW, THRESHOLD)
+    try:
+        with TestClient(app) as client:
+            summary = client.get("/api/dashboard/resumo")
+            assert summary.status_code == 200
+            assert summary.json() == {"registered": 4, "disponivel": 1, "atencao": 1,
+                                      "fora_de_servico": 1, "nunca_detectado": 1}
+            activity = client.get("/api/dashboard/atividade?limit=1")
+            assert activity.status_code == 200
+            assert len(activity.json()["items"]) == 1
+            assert activity.json()["items"][0]["equipamento_nome"] == "Maca B"
+            assert client.get("/api/dashboard/atividade?limit=21").status_code == 422
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_filtros_isolados_e_cumulativos(db, catalog):

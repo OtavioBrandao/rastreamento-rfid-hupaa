@@ -67,3 +67,13 @@ export interface OverviewSummary {
   fora_de_servico: number
   nunca_detectado: number
 }
+
+export interface ActivityItem {
+  id: number
+  equipamento_id: number
+  equipamento_nome: string
+  zona_origem: string | null
+  zona_destino: string
+  movimentada_em: string
+  origem_registro: string
+}

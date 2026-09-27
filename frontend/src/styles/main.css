@@ -223,6 +223,10 @@ button,a {
   font-size:.93rem;
   max-width:710px
 }
+.activity-panel { margin-top:24px; }
+.activity-list { margin:0; padding-left:22px; }
+.activity-list li { padding:10px 0; border-top:1px solid var(--line); }
+.activity-list small { display:block; color:#61788b; margin-top:4px; }
 .demo-pill,.demo-tag {
   display:inline-flex;
   align-items:center;
