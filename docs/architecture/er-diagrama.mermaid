@@ -34,6 +34,7 @@ erDiagram
 
     PERFIS ||--o{ USUARIOS : define
     USUARIOS ||--o{ AUDITORIAS : realiza
+    USUARIOS ||--o{ SESSOES : "abre (ISS-026)"
 
     TIPOS_EQUIPAMENTO {
         bigint id PK
@@ -190,10 +191,25 @@ erDiagram
         bigint id PK
         string nome
         string email UK
-        string senha_hash
+        string senha_hash "Argon2id"
         bigint perfil_id FK
         boolean ativo
+        boolean deve_trocar_senha
+        int tentativas_falhas
+        timestamptz bloqueado_ate
+        timestamptz ultimo_login_em
         timestamptz created_at
+        timestamptz updated_at
+    }
+
+    SESSOES {
+        bigint id PK
+        bigint usuario_id FK
+        string token_hash UK "SHA-256 do token"
+        timestamptz criada_em
+        timestamptz expira_em
+        timestamptz revogada_em
+        string motivo_revogacao "logout, troca_senha, redefinicao_senha, desativacao"
     }
 
     AUDITORIAS {

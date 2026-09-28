@@ -653,6 +653,8 @@ class HistoricoMovimentacao(Base):
 
 
 class Perfil(Base):
+    """ISS-026: as duas linhas são semeadas pela migration, não pela aplicação."""
+
     __tablename__ = "perfis"
 
     id = Column(BigInteger, primary_key=True)
@@ -662,6 +664,16 @@ class Perfil(Base):
 
 
 class Usuario(Base):
+    """
+    ISS-026. `email` é o login e fica SEMPRE normalizado (minúsculas, sem
+    espaço nas pontas); a CHECK garante isso no banco, não só na API.
+    Baixa é lógica (`ativo = false`): `auditorias` referencia o autor.
+
+    `tentativas_falhas` conta falhas SEGUIDAS de senha; ao atingir o limite a
+    conta recebe `bloqueado_ate` e o contador volta a zero. `senha_hash`
+    guarda apenas o hash Argon2id — nunca a senha.
+    """
+
     __tablename__ = "usuarios"
 
     id = Column(BigInteger, primary_key=True)
@@ -670,9 +682,67 @@ class Usuario(Base):
     senha_hash = Column(String, nullable=False)
     perfil_id = Column(BigInteger, ForeignKey("perfis.id"), nullable=False)
     ativo = Column(Boolean, nullable=False, server_default="true")
+    deve_trocar_senha = Column(Boolean, nullable=False, server_default="false")
+    tentativas_falhas = Column(Integer, nullable=False, server_default="0")
+    bloqueado_ate = Column(TIMESTAMP(timezone=True), nullable=True)
+    ultimo_login_em = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
 
     perfil = relationship("Perfil", back_populates="usuarios")
+    sessoes = relationship("Sessao", back_populates="usuario")
+
+    __table_args__ = (
+        CheckConstraint("email = lower(btrim(email))", name="ck_usuarios_email_normalizado"),
+        CheckConstraint("tentativas_falhas >= 0", name="ck_usuarios_tentativas_nao_negativas"),
+    )
+
+
+class Sessao(Base):
+    """
+    ISS-026. Sessão de login com token opaco: o token aleatório (256 bits)
+    vai só no cookie do navegador; aqui fica apenas o SHA-256 dele, em hex.
+    Quem lê o banco não consegue reapresentar uma sessão.
+
+    Válida = `revogada_em IS NULL`, `expira_em` no futuro e usuário ativo.
+    Revogar nunca apaga a linha: `motivo_revogacao` explica o encerramento.
+    """
+
+    __tablename__ = "sessoes"
+
+    id = Column(BigInteger, primary_key=True)
+    usuario_id = Column(
+        BigInteger, ForeignKey("usuarios.id", name="fk_sessoes_usuario_id"), nullable=False
+    )
+    token_hash = Column(String(64), nullable=False)
+    criada_em = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    expira_em = Column(TIMESTAMP(timezone=True), nullable=False)
+    revogada_em = Column(TIMESTAMP(timezone=True), nullable=True)
+    motivo_revogacao = Column(String(30), nullable=True)
+
+    usuario = relationship("Usuario", back_populates="sessoes")
+
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_sessoes_token_hash"),
+        CheckConstraint("token_hash ~ '^[0-9a-f]{64}$'", name="ck_sessoes_token_hash_formato"),
+        CheckConstraint("expira_em > criada_em", name="ck_sessoes_expiracao_posterior"),
+        CheckConstraint(
+            "(revogada_em IS NULL) = (motivo_revogacao IS NULL)",
+            name="ck_sessoes_revogacao_consistente",
+        ),
+        CheckConstraint(
+            "motivo_revogacao IS NULL OR motivo_revogacao IN "
+            "('logout', 'troca_senha', 'redefinicao_senha', 'desativacao')",
+            name="ck_sessoes_motivo_valido",
+        ),
+        Index(
+            "ix_sessoes_usuario_nao_revogadas",
+            "usuario_id",
+            postgresql_where=(revogada_em.is_(None)),
+        ),
+    )
 
 
 class Auditoria(Base):

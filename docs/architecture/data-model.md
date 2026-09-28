@@ -255,8 +255,37 @@ monotônico usado para perceber silêncio não substitui `lido_em` no agrupament
 
 **Índices:** `(equipamento_id, movimentada_em, id)` para consulta por período e ordem determinística; `(equipamento_id, registrado_em)` preservado. O índice único parcial em `passagem_id` para registros automáticos impede duplicação concorrente. Campos novos aceitam NULL para preservar linhas anteriores à ISS-018; novas inserções obedecem ao CHECK. O serviço de ledger não altera `equipamentos`; a ISS-017 chama o append e atualiza a projeção na mesma transação.
 
-### `perfis` / `usuarios` (RF-021, RF-022)
-Simples: `perfis` com `operacional`/`administrador`; `usuarios` referenciando `perfis`, com `email` único e `senha_hash` (nunca senha em texto puro).
+### `perfis` / `usuarios` (RF-021, RF-022, ISS-026)
+`perfis` contém exatamente `operacional` e `administrador`, **semeados pela migration** da ISS-026 (idempotente; a aplicação não cria perfis).
+
+| Coluna de `usuarios` | Tipo | Regra |
+|---|---|---|
+| id | bigint | PK |
+| nome | varchar | NOT NULL |
+| email | varchar | UNIQUE, NOT NULL; login. CHECK `ck_usuarios_email_normalizado`: `email = lower(btrim(email))` |
+| senha_hash | varchar | NOT NULL; só hash Argon2id, nunca a senha |
+| perfil_id | bigint | FK → perfis, NOT NULL |
+| ativo | boolean | NOT NULL, default true (baixa lógica) |
+| deve_trocar_senha | boolean | NOT NULL, default false; true após criação ou redefinição por admin |
+| tentativas_falhas | integer | NOT NULL, default 0, CHECK `>= 0`; falhas **seguidas** de senha |
+| bloqueado_ate | timestamptz | NULL; login recusado enquanto `> agora` |
+| ultimo_login_em | timestamptz | NULL |
+| created_at / updated_at | timestamptz | NOT NULL, default now() |
+
+### `sessoes` (ISS-026)
+Sessão de login com **token opaco**: o token (256 bits) só existe no cookie `rfid_sessao`; o banco guarda o SHA-256 dele.
+
+| Coluna | Tipo | Regra |
+|---|---|---|
+| id | bigint | PK |
+| usuario_id | bigint | FK → usuarios, NOT NULL |
+| token_hash | varchar(64) | UNIQUE (`uq_sessoes_token_hash`), NOT NULL, CHECK hex minúsculo de 64 caracteres |
+| criada_em | timestamptz | NOT NULL, default now() |
+| expira_em | timestamptz | NOT NULL, CHECK `expira_em > criada_em` |
+| revogada_em | timestamptz | NULL = não revogada |
+| motivo_revogacao | varchar(30) | CHECK IN ('logout','troca_senha','redefinicao_senha','desativacao'); CHECK: preenchido **se e somente se** `revogada_em` estiver |
+
+**Índice:** parcial `ix_sessoes_usuario_nao_revogadas (usuario_id) WHERE revogada_em IS NULL`, usado para revogar as sessões abertas de um usuário. Sessão válida = não revogada, não expirada **e** usuário ativo (conferido a cada request). Revogar nunca apaga a linha.
 
 ### `auditorias` (RF-023, RNF-006)
 | Coluna | Tipo | Regra |
@@ -271,6 +300,8 @@ Simples: `perfis` com `operacional`/`administrador`; `usuarios` referenciando `p
 | registrado_em | timestamptz | NOT NULL, default now() |
 
 Genérica o suficiente pra auditar qualquer tabela sem precisar de uma tabela de auditoria por entidade. **Índice:** `(entidade, entidade_id, registrado_em)`.
+
+Na ISS-026, criação e edição de usuário gravam aqui na mesma transação (`entidade = 'usuarios'`, `acao` `create`/`update`, `usuario_id` = administrador autor ou NULL para o comando de terminal). `dados_antes`/`dados_depois` guardam nome, e-mail, perfil, `ativo` e `deve_trocar_senha`, mais `operacao` — nunca hash ou senha.
 
 ---
 

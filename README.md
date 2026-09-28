@@ -28,6 +28,7 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Busca operacional (ISS-019):** `GET /api/ativos` filtra por nome/patrimônio, tipo, EPC, status e última zona com paginação; dashboard e mapas consultam esta API. Consulte [contrato e limites](docs/implementations/iss-019-busca-ativos.md).
 - **Ativos por zona (ISS-020):** a consulta existente por `zona` lista a última localização conhecida; veja a [semântica e validação sintética](docs/implementations/iss-020-ativos-por-zona.md).
 - **Última localização na interface (ISS-021):** tabela e detalhe exibem andar → setor → zona e horário no fuso `America/Maceio`; o detalhe consulta o histórico paginado. Veja o [contrato e a validação](docs/implementations/iss-021-ultima-localizacao-interface.md).
+- **Usuários e autenticação (ISS-026):** login por e-mail com sessão opaca em cookie `HttpOnly`/`SameSite=Strict`, Argon2id, bloqueio por conta, senha temporária e administração em `/usuarios`; o primeiro admin nasce por `python -m api.criar_admin`. As demais rotas seguem públicas até a ISS-027. Veja o [contrato](docs/implementations/iss-026-usuarios-autenticacao.md) e o [ADR 0009](docs/decisions/0009-autenticacao-sessao-opaca-cookie.md).
 
 - **Mapa e portais (ISS-023):** vínculos validados por IDs, regiões configuráveis e alternativa textual. Veja [implementação e limites físicos](docs/implementations/iss-023-mapa-portais.md).
 - **Passagens em vai e vem (hotfix):** passagens consecutivas sem exigir 3 s de silêncio, com refratário e rejeição de reflexão quando a antena de origem continua lendo a tag. Veja o [hotfix](docs/implementations/hotfix-passagem-vai-e-vem.md).
@@ -112,6 +113,10 @@ simulador; a imagem Docker continua usando somente `requirements.txt`. Veja
 
 ### Iniciar a API FastAPI:
 ```bash
+# Primeira vez (ISS-026): criar o administrador inicial; a senha é pedida no terminal
+set -a; source .env.cloud; set +a
+python -m api.criar_admin --nome "Seu Nome" --email voce@hupaa.example
+
 python -m uvicorn api.main:app --host 127.0.0.1 --port 8010 --env-file .env.cloud
 # Acesse a documentação interativa em http://127.0.0.1:8010/docs
 ```
@@ -202,6 +207,7 @@ A documentação detalhada foi reorganizada segundo a **[Issue #51](docs/impleme
   - [ISS-019: Busca operacional de ativos](docs/implementations/iss-019-busca-ativos.md)
   - [ISS-020: Ativos por última zona conhecida](docs/implementations/iss-020-ativos-por-zona.md)
   - [ISS-021: Última localização e horário na interface](docs/implementations/iss-021-ultima-localizacao-interface.md)
+  - [ISS-026: Usuários e autenticação](docs/implementations/iss-026-usuarios-autenticacao.md)
 - **Experimentos e Evidências:**
   - [Índice de Evidências e Matriz de Testes](docs/experiments/README.md)
   - [Evidências MQTT e Rede](docs/experiments/mqtt/)
