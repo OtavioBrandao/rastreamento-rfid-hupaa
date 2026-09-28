@@ -14,3 +14,11 @@ A interface inicial da ISS-032 ainda trazia textos redundantes, uma marca provis
 ## Validação
 
 O branco dos ícones sobre os selos alcança pelo menos 5,02:1 de contraste, e o texto dos rótulos sobre branco alcança 7,84:1. Os ícones e rótulos comunicam cada estado sem depender apenas da cor. O frontend foi verificado com build TypeScript/Vite e testes Vitest; o projeto não define comando de lint próprio para o frontend.
+
+## Capturas
+
+A captura anterior é um recorte do PDF de referência fornecido com a tarefa. A captura posterior foi feita no navegador com dados fictícios servidos apenas para conferir a interface.
+
+![Dashboard antes do refinamento](assets/iss-032-dashboard-before.png)
+
+![Dashboard depois do refinamento](assets/iss-032-dashboard-after.jpg)
