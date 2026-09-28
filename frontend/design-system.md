@@ -16,10 +16,17 @@ Os valores são centralizados em `src/styles/main.css` como variáveis CSS.
 | Atenção | `--attention` | `#ad6b08` |
 | Offline | `--offline` | `#71818a` |
 | Fora de serviço | `--critical` | `#b83d3d` |
+| Contorno/ícone do total | `--kpi-total` | `#102a42` |
+| Contorno/ícone de disponíveis | `--kpi-available` | `#188038` |
+| Contorno/ícone de atenção | `--kpi-attention` | `#a45b00` |
+| Contorno/ícone de fora de serviço | `--kpi-critical` | `#c62828` |
+| Contorno/ícone de nunca detectados | `--kpi-offline` | `#526675` |
 | Antena RFID | `--antenna` | `#df3f45` |
 | Leitor RFID | `--reader` | `#365fc4` |
 
 O azul da identidade visual da UFAL segue o [manual institucional](https://ufal.br/ufal/comunicacao/identidade-visual/manual-de-identidade-visual.pdf), que especifica `#0095DA` para web. O tom de ação é mais escuro para manter contraste.
+
+Os cinco indicadores de “Situação dos equipamentos” mantêm fundo branco e usam o respectivo token apenas no contorno e no selo do ícone. O total usa azul-marinho e contorno mais fino; os demais usam verde, âmbar, vermelho e grafite de maior presença. Cada indicador combina rótulo, número e ícone. O contraste calculado do branco sobre os selos varia de 5,02:1 a 14,67:1; o rótulo `#435461` sobre branco atinge 7,84:1 (WCAG AA).
 
 As **três zonas principais** da planta são provisórias: Zona 1 (ala superior esquerda), Zona 2 (ala superior direita) e Zona 3 (bloco inferior com ligação central). As cores do desenho mostram apenas o contexto arquitetônico: serviço `#F31217`, administrativo `#633937`, circulação vertical `#00E820`, circulação horizontal `#67008F`, institucional `#12BCE8` e permanência/atendimento `#FFCA08`. Elas não representam as três zonas principais, status de equipamentos ou localização decidida para portais.
 
