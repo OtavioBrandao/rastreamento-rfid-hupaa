@@ -14,6 +14,11 @@
   --attention:#ad6b08;
   --offline:#71818a;
   --critical:#b83d3d;
+  --kpi-total:#102a42;
+  --kpi-available:#188038;
+  --kpi-attention:#a45b00;
+  --kpi-critical:#c62828;
+  --kpi-offline:#526675;
   --antenna:#df3f45;
   --reader:#365fc4;
   --line:#dce5ed;
@@ -285,22 +290,38 @@ button,a {
   gap:10px
 }
 .kpi-card {
+  --kpi-color:var(--kpi-total);
   min-width:0;
   min-height:125px;
-  background:white;
-  border:1px solid var(--line);
-  border-top:3px solid #82999a;
+  background:var(--surface);
+  border:2px solid var(--kpi-color);
   border-radius:10px;
   padding:16px
 }
-.kpi-card>span {
+.kpi-card-heading {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:8px
+}
+.kpi-card-label {
   font-size:.7rem;
-  color:#63777c;
+  color:#435461;
   text-transform:uppercase;
   letter-spacing:.06em;
   font-weight:750;
   display:block;
   min-height:2.3em
+}
+.kpi-icon {
+  width:30px;
+  height:30px;
+  flex:0 0 30px;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:var(--kpi-color);
+  color:#fff
 }
 .kpi-card strong {
   display:block;
@@ -313,17 +334,20 @@ button,a {
   color:#8a9a9d;
   font-size:.69rem
 }
+.kpi-total {
+  border-width:1px
+}
 .kpi-available {
-  border-top-color:var(--available)
+  --kpi-color:var(--kpi-available)
 }
 .kpi-attention {
-  border-top-color:var(--attention)
+  --kpi-color:var(--kpi-attention)
 }
 .kpi-offline {
-  border-top-color:var(--offline)
+  --kpi-color:var(--kpi-offline)
 }
 .kpi-critical {
-  border-top-color:var(--critical)
+  --kpi-color:var(--kpi-critical)
 }
 .kpi-card .operational-badge {
   padding:0;
@@ -1545,7 +1569,7 @@ button,a {
   .kpi-card strong {
     font-size:1.85rem
   }
-  .kpi-card>span {
+  .kpi-card-label {
     font-size:.63rem
   }
   .floor-map,.floor-map-lab {
