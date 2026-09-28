@@ -16,3 +16,4 @@ Este diretório documenta as decisões arquiteturais fundamentais tomadas durant
 | [ADR 0006](0006-desacoplamento-leitor-antena-portal.md) | Desacoplamento entre Leitores, Antenas e Portais | Aceita | Remoção de `leitor.portal_id`, agregação de antenas por portais e separação de `reader_id` de serial |
 | [ADR 0007](0007-unicidade-parcial-antena-ativa.md) | Unicidade Parcial de Antena Ativa e Preservação Histórica | Aceita | Índice parcial `WHERE ativo` para portas físicas de leitores e baixa lógica de hardware |
 | [ADR 0008](0008-topologia-logica-versionada-portais.md) | Topologia Lógica Versionada de Portais | Aceita | Mapeamento temporal [inicio, fim), unicidade de antena ativa e separação de hardware vs. inferência |
+| [ADR 0009](0009-autenticacao-sessao-opaca-cookie.md) | Autenticação por Sessão Opaca em Cookie e Senhas Argon2id | Aceita | Token opaco com hash SHA-256 no banco, cookie HttpOnly/SameSite=Strict, bloqueio por conta e senha temporária (ISS-026) |

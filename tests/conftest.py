@@ -40,6 +40,15 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
+# Fixtures da ISS-026 (autenticação), definidas em `tests/suporte_auth.py` e
+# registradas aqui para qualquer módulo de teste poder pedi-las pelo nome.
+from suporte_auth import (  # noqa: F401 - fixtures
+    admin_logado,
+    ajustes_auth,
+    api_auth,
+    relogio,
+)
+
 from alembic import command
 from db.models import Andar, Antena, Leitor, Setor, Zona
 
@@ -53,6 +62,10 @@ from db.models import Andar, Antena, Leitor, Setor, Zona
 TABELAS_DO_CRUD = (
     "mapeamentos_antena_portal",
     "auditorias",
+    # ISS-026. `perfis` fica de fora de propósito: quem semeia é a migration,
+    # e truncá-la deixaria a API sem perfil para atribuir.
+    "sessoes",
+    "usuarios",
     "associacoes_tag_equipamento",
     "historico_movimentacoes",
     "equipamentos",
@@ -145,10 +158,13 @@ def db(engine):
         # referencia tipos_equipamento, zonas e passagens; passagens referencia
         # portais/antenas/leituras_brutas; antenas -> leitores -> portais;
         # portais/antenas/historico referenciam zonas; zonas -> setores ->
-        # andares. auditorias não tem FK para nenhuma delas — ordem livre.
+        # andares. auditorias e sessoes referenciam usuarios (ISS-026), então
+        # vêm antes dele; `perfis` não é limpa (semeada pela migration).
         for tabela in (
             "mapeamentos_antena_portal",
             "auditorias",
+            "sessoes",
+            "usuarios",
             "associacoes_tag_equipamento",
             "historico_movimentacoes",
             "equipamentos",
