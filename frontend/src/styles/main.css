@@ -137,22 +137,6 @@ button,a {
   color:#fff;
   border-left-color:#42b5ed
 }
-.sidebar-bottom {
-  margin-top:auto;
-  border-top:1px solid #31516a;
-  padding:22px 12px 0;
-  color:#abc3d5;
-  font-size:.73rem;
-  display:flex;
-  gap:8px;
-  align-items:center
-}
-.sidebar-indicator {
-  width:7px;
-  height:7px;
-  background:#42b5ed;
-  border-radius:50%
-}
 .app-body {
   min-width:0;
   flex:1;
@@ -160,40 +144,23 @@ button,a {
   flex-direction:column
 }
 .site-header {
-  min-height:74px;
+  min-height:62px;
   border-bottom:1px solid var(--line);
   background:#fff;
   padding:16px clamp(22px,3vw,48px);
   display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px
+  align-items:center
 }
 .site-header strong {
   display:block;
   font-size:.87rem
 }
-.site-header span {
-  font-size:.75rem;
-  color:var(--muted)
-}
-.header-context {
-  border-left:1px solid var(--line);
-  padding-left:17px
-}
 .main-content {
   width:100%;
   max-width:1600px;
   margin:0 auto;
-  padding:34px clamp(22px,3vw,48px) 70px;
+  padding:34px clamp(22px,3vw,48px) 48px;
   flex:1
-}
-.site-footer {
-  padding:20px 30px;
-  border-top:1px solid var(--line);
-  color:#849599;
-  font-size:.73rem;
-  text-align:center
 }
 .eyebrow {
   font-size:.65rem;
@@ -1377,7 +1344,7 @@ button,a {
   .sidebar-brand small {
     font-size:.62rem
   }
-  .sidebar-label,.sidebar-bottom {
+  .sidebar-label {
     display:none
   }
   .main-nav {
@@ -1446,7 +1413,7 @@ button,a {
   .sidebar-brand small {
     font-size:.6rem
   }
-  .sidebar-label,.sidebar-bottom {
+  .sidebar-label {
     display:none
   }
   .main-nav {
@@ -1559,9 +1526,6 @@ button,a {
     padding:7px 5px
   }
   .main-nav svg {
-    display:none
-  }
-  .header-context {
     display:none
   }
   .search-control {
