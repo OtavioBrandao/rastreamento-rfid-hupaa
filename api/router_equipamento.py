@@ -82,7 +82,7 @@ def get_recency_context() -> tuple[datetime, timedelta]:
     return datetime.now(timezone.utc), recency_threshold_from_env()
 
 
-def _para_resposta(
+def para_resposta(
     equipamento: Equipamento, recency_context: tuple[datetime, timedelta],
 ) -> EquipamentoResposta:
     """
@@ -100,10 +100,12 @@ def _para_resposta(
         identificador_interno_normalizado=equipamento.identificador_interno_normalizado,
         descricao=equipamento.descricao,
         status=equipamento.status,
+        ultima_zona_id=equipamento.ultima_zona_id,
         ultima_deteccao_em=em_utc(equipamento.ultima_deteccao_em),
         estado_recencia=classify_recency(
             equipamento.ultima_deteccao_em, *recency_context
         ),
+        versao=equipamento.versao,
         created_at=equipamento.created_at,
         updated_at=equipamento.updated_at,
     )
@@ -132,7 +134,7 @@ def criar_equipamento(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(erro)) from erro
     except service.IdentificadorDuplicado as erro:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(erro)) from erro
-    return _para_resposta(equipamento, recency_context)
+    return para_resposta(equipamento, recency_context)
 
 
 @router.get(
@@ -149,7 +151,7 @@ def listar_equipamentos(
 ) -> EquipamentoPagina:
     pagina = service.listar(db, page=page, size=size, incluir_inativos=incluir_inativos)
     return EquipamentoPagina(
-        items=[_para_resposta(item, recency_context) for item in pagina.items],
+        items=[para_resposta(item, recency_context) for item in pagina.items],
         page=pagina.page,
         size=pagina.size,
         total=pagina.total,
@@ -174,7 +176,7 @@ def buscar_equipamento_por_identificador(
         service.EquipamentoNaoEncontradoPorIdentificador,
     ) as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
-    return _para_resposta(equipamento, recency_context)
+    return para_resposta(equipamento, recency_context)
 
 
 @router.get(
@@ -191,7 +193,7 @@ def detalhar_equipamento(
         equipamento = service.buscar_por_id(db, equipamento_id)
     except service.EquipamentoNaoEncontrado as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
-    return _para_resposta(equipamento, recency_context)
+    return para_resposta(equipamento, recency_context)
 
 
 @router.patch(
@@ -218,7 +220,7 @@ def atualizar_equipamento(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
     except service.TipoEquipamentoInvalido as erro:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(erro)) from erro
-    return _para_resposta(equipamento, recency_context)
+    return para_resposta(equipamento, recency_context)
 
 
 @router.post(
@@ -235,7 +237,7 @@ def inativar_equipamento(
         equipamento = service.inativar(db, equipamento_id)
     except service.EquipamentoNaoEncontrado as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
-    return _para_resposta(equipamento, recency_context)
+    return para_resposta(equipamento, recency_context)
 
 
 @router.post(
@@ -252,4 +254,4 @@ def reativar_equipamento(
         equipamento = service.reativar(db, equipamento_id)
     except service.EquipamentoNaoEncontrado as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
-    return _para_resposta(equipamento, recency_context)
+    return para_resposta(equipamento, recency_context)

@@ -23,6 +23,7 @@ class MovimentacaoResposta(BaseModel):
     registrado_em: datetime
     justificativa: str | None
     registro_anterior_id: int | None
+    referencia: str | None = None
 
 
 class MovimentacaoPagina(BaseModel):

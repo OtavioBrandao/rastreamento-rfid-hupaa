@@ -22,7 +22,7 @@ Esta issue entrega:
 | `vincular_epc` | associação tag ↔ equipamento criada (com o EPC) | registro central |
 | `desvincular_epc` | `fim` da associação preenchido (com o EPC antes e depois) | registro central |
 | `alterar_senha` | `senha_hash` mudou (troca pelo titular ou redefinição por admin) | registro central |
-| `correcao_manual` | herdada do vocabulário anterior | — |
+| `correcao_manual` | correção manual de localização ou de cadastro de equipamento, com justificativa em `motivo` e referência em `dados_depois` ([ISS-025](iss-025-correcao-manual.md)) | `service_correcoes` (localização, via `registrar`) e registro central (cadastro, com `definir_correcao`) |
 | `login_aceito` | login com sucesso | `service_auth` |
 | `login_recusado` | qualquer login recusado (motivo interno no campo `motivo`) | `service_auth` |
 | `conta_bloqueada` | N falhas seguidas no login (`tentativas_de_login`) ou na troca de senha (`tentativas_de_troca_de_senha`) | `service_auth` |

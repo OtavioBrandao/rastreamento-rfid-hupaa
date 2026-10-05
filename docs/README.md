@@ -48,6 +48,7 @@ O projeto prioriza a confiabilidade da ingestão e da persistência antes da ló
 - **Usuários e autenticação (ISS-026):** login por e-mail com sessão opaca em cookie `HttpOnly`/`SameSite=Strict`, senhas Argon2id, bloqueio por conta, senha temporária com troca obrigatória, administração de usuários e primeiro administrador por terminal. Veja [contrato e validação](implementations/iss-026-usuarios-autenticacao.md) e o [ADR 0009](decisions/0009-autenticacao-sessao-opaca-cookie.md).
 - **Perfis e permissões (ISS-027):** toda rota de negócio exige sessão e permissão de uma matriz única (`api/permissoes.py`): operacional consulta tudo exceto usuários, administrador faz tudo; negação única 403 `acesso_negado` com log. O dashboard ganhou login, troca de senha obrigatória e Sair. Veja [matriz, rotas e testes](implementations/iss-027-perfis-rbac.md).
 - **Trilha de auditoria imutável (ISS-028):** registro central automático (listener do ORM) de toda mudança de cadastro e dos eventos de segurança (login, logout, bloqueio, acesso negado), com autor, origem, motivo e `correlation_id` por requisição; append-only garantido por trigger no banco; consulta só pela API (`/auditorias`, administrador). Veja [catálogo, garantias e limites](implementations/iss-028-auditoria.md).
+- **Correção manual (ISS-025):** o administrador corrige a última localização (vale a partir de agora, entra no histórico como correção manual) e o cadastro do equipamento — nome, tipo, descrição e patrimônio — no painel de detalhes, com justificativa obrigatória, referência opcional, revisão antes de gravar e controle de concorrência pela versão otimista do equipamento (409 quando outra operação gravou no meio). Veja [regras, API e evidências](implementations/iss-025-correcao-manual.md).
 
 ### ⏳ O que está PLANEJADO (Próximos passos):
 - **Validação física:** Ajuste dos parâmetros e verificação da sequência de leituras com hardware real no HUPAA.
@@ -142,6 +143,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Usuários e Autenticação (ISS-026)](implementations/iss-026-usuarios-autenticacao.md)
    - [Perfis e Permissões / RBAC (ISS-027)](implementations/iss-027-perfis-rbac.md)
    - [Trilha de Auditoria Imutável (ISS-028)](implementations/iss-028-auditoria.md)
+   - [Correção Manual de Cadastro e Localização (ISS-025)](implementations/iss-025-correcao-manual.md)
    - [Frontend e Dashboard Operacional (ISS-032, Etapa A)](implementations/iss-032-frontend-dashboard.md)
    - [Redesenho do Dashboard e Mapas (ISS-032)](implementations/iss-032-redesign-mapas.md)
    - [Mapa por zonas e portais (ISS-023)](implementations/iss-023-mapa-portais.md)
@@ -196,6 +198,7 @@ docs/
 │   ├── iss-026-usuarios-autenticacao.md <- Login, sessões, bloqueio e administração de usuários
 │   ├── iss-027-perfis-rbac.md <- Matriz de permissões, rotas protegidas e login no dashboard
 │   ├── iss-028-auditoria.md <- Trilha append-only, registro central e consulta /auditorias
+│   ├── iss-025-correcao-manual.md <- Correção de localização e cadastro com versão otimista
 │   └── iss-051-reorganizacao-documentacao.md <- Registro desta reestruturação (AGENTS.md)
 ├── experiments/                   <- Relatórios e evidências de testes práticos
 │   ├── README.md                  <- Síntese de experimentos e matriz de aceitação
