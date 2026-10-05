@@ -745,27 +745,62 @@ class Sessao(Base):
     )
 
 
+# ISS-028: catálogo fechado de ações da trilha (o CHECK do banco espelha esta tupla).
+ACOES_AUDITORIA = (
+    "criar", "atualizar", "inativar", "reativar", "excluir",
+    "vincular_epc", "desvincular_epc", "alterar_senha", "correcao_manual",
+    "login_aceito", "login_recusado", "conta_bloqueada", "logout", "acesso_negado",
+)
+ORIGENS_AUDITORIA = ("usuario", "sistema", "anonimo")
+
+
+def _lista_sql(valores: tuple[str, ...]) -> str:
+    return ", ".join(f"'{valor}'" for valor in valores)
+
+
 class Auditoria(Base):
-    """RF-023 / RNF-006. Genérica o suficiente para auditar qualquer
-    tabela sem precisar de uma tabela de auditoria por entidade."""
+    """
+    RF-023 / RNF-006, ISS-028. Trilha APPEND-ONLY: um trigger do banco
+    (`tg_auditorias_append_only`) recusa UPDATE e DELETE. As linhas de
+    cadastro vêm do registro central de `api/auditoria.py` (listener
+    `after_flush`); eventos de segurança, de `registrar(...)`.
+
+    `origem`: `usuario` (há autor em `usuario_id`), `sistema` (processo sem
+    autor, ex.: comando de terminal) ou `anonimo` (tentativa sem sessão, ex.:
+    login recusado). `entidade_id` é NULL quando não há alvo identificável
+    (login de conta inexistente). `correlation_id` agrupa as linhas de uma
+    mesma requisição HTTP.
+    """
 
     __tablename__ = "auditorias"
 
     id = Column(BigInteger, primary_key=True)
-    usuario_id = Column(BigInteger, ForeignKey("usuarios.id"), nullable=True)  # NULL = sistema
+    usuario_id = Column(BigInteger, ForeignKey("usuarios.id"), nullable=True)
+    origem = Column(String(16), nullable=False)
     entidade = Column(String, nullable=False)
-    entidade_id = Column(BigInteger, nullable=False)
-    acao = Column(String, nullable=False)  # 'create' | 'update' | 'delete' | 'correcao_manual'
-    dados_antes = Column(JSONB, nullable=True)
-    dados_depois = Column(JSONB, nullable=True)
+    entidade_id = Column(BigInteger, nullable=True)
+    acao = Column(String, nullable=False)
+    motivo = Column(Text, nullable=True)
+    correlation_id = Column(String(64), nullable=True)
+    # none_as_null: sem isso, None vira o literal JSON `null` em vez de SQL NULL.
+    dados_antes = Column(JSONB(none_as_null=True), nullable=True)
+    dados_depois = Column(JSONB(none_as_null=True), nullable=True)
     registrado_em = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
 
     usuario = relationship("Usuario")
 
     __table_args__ = (
         Index("ix_auditorias_entidade", "entidade", "entidade_id", "registrado_em"),
+        Index("ix_auditorias_registrado_em", "registrado_em", "id"),
+        Index("ix_auditorias_usuario_registrado_em", "usuario_id", "registrado_em"),
+        Index("ix_auditorias_correlation_id", "correlation_id"),
         CheckConstraint(
-            "acao IN ('create', 'update', 'delete', 'correcao_manual')",
-            name="ck_auditoria_acao_valida",
+            f"acao IN ({_lista_sql(ACOES_AUDITORIA)})", name="ck_auditoria_acao_valida"
+        ),
+        CheckConstraint(
+            f"origem IN ({_lista_sql(ORIGENS_AUDITORIA)})", name="ck_auditoria_origem_valida"
+        ),
+        CheckConstraint(
+            "(origem = 'usuario') = (usuario_id IS NOT NULL)", name="ck_auditoria_autor_coerente"
         ),
     )

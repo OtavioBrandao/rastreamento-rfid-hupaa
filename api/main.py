@@ -1,5 +1,6 @@
 """
-Aplicação FastAPI do MVP (ISS-008, ISS-009, ISS-010, ISS-011, ISS-012, ISS-026, ISS-027).
+Aplicação FastAPI do MVP (ISS-008, ISS-009, ISS-010, ISS-011, ISS-012, ISS-026, ISS-027,
+ISS-028).
 
 Sobe com:
     uvicorn api.main:app --reload
@@ -13,9 +14,11 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from api.auditoria import correlacao_da_requisicao, correlation_id_valido
 from api.config_auth import configuracao_auth_do_ambiente
 from api.logging_config import configurar_logging_api
 from api.router_associacao import router as router_associacao
+from api.router_auditoria import router as router_auditoria
 from api.router_auth import router as router_auth
 from api.router_busca_ativos import router as router_busca_ativos
 from api.router_dashboard import router as router_dashboard
@@ -68,6 +71,27 @@ app.include_router(router_topologia_portal)
 # cada módulo). Públicas: só GET /health, POST /auth/login e POST /auth/logout.
 app.include_router(router_auth)
 app.include_router(router_usuarios)
+# ISS-028: consulta da trilha de auditoria (só leitura, só administrador).
+app.include_router(router_auditoria)
+
+CABECALHO_CORRELACAO = "X-Correlation-ID"
+
+
+@app.middleware("http")
+async def correlacao(request: Request, call_next):
+    """
+    ISS-028: um id por requisição, gravado em toda linha da trilha que ela
+    gerar. Usa o do cliente se bem formado; senão gera um. Volta em TODA
+    resposta (inclusive 401/403/422) no mesmo header.
+    """
+    identificador = correlation_id_valido(request.headers.get(CABECALHO_CORRELACAO))
+    marca = correlacao_da_requisicao.set(identificador)
+    try:
+        resposta = await call_next(request)
+    finally:
+        correlacao_da_requisicao.reset(marca)
+    resposta.headers[CABECALHO_CORRELACAO] = identificador
+    return resposta
 
 # Campos cujo valor nunca pode voltar no corpo de um 422 (nem em log de erro).
 CAMPOS_SENSIVEIS = frozenset(
