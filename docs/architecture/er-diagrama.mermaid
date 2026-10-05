@@ -52,6 +52,7 @@ erDiagram
         timestamptz ultima_deteccao_em
         bigint ultima_passagem_id FK
         bigint ultima_movimentacao_id FK
+        bigint versao "versao otimista (ISS-025)"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -179,6 +180,7 @@ erDiagram
         string origem_registro "passagem_automatica, correcao_manual"
         timestamptz registrado_em
         string justificativa "correcao manual"
+        string referencia "chamado/OS da correcao (ISS-025)"
         bigint registro_anterior_id FK
     }
 

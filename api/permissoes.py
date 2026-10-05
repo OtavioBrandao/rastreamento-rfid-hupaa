@@ -37,6 +37,8 @@ METODOS_DE_CONSULTA = frozenset({"GET", "HEAD", "OPTIONS"})
 class Permissao(StrEnum):
     EQUIPAMENTOS_CONSULTAR = "equipamentos:consultar"
     EQUIPAMENTOS_ALTERAR = "equipamentos:alterar"
+    # ISS-025: corrigir patrimônio/cadastro e localização com justificativa; só administrador.
+    EQUIPAMENTOS_CORRIGIR = "equipamentos:corrigir"
     LOCALIZACAO_CONSULTAR = "localizacao:consultar"
     LOCALIZACAO_ALTERAR = "localizacao:alterar"
     HARDWARE_CONSULTAR = "hardware:consultar"

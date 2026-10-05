@@ -1,6 +1,6 @@
 """
 Aplicação FastAPI do MVP (ISS-008, ISS-009, ISS-010, ISS-011, ISS-012, ISS-026, ISS-027,
-ISS-028).
+ISS-028, ISS-025).
 
 Sobe com:
     uvicorn api.main:app --reload
@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm.exc import StaleDataError
 
 from api.auditoria import correlacao_da_requisicao, correlation_id_valido
 from api.config_auth import configuracao_auth_do_ambiente
@@ -21,6 +22,7 @@ from api.router_associacao import router as router_associacao
 from api.router_auditoria import router as router_auditoria
 from api.router_auth import router as router_auth
 from api.router_busca_ativos import router as router_busca_ativos
+from api.router_correcoes import router as router_correcoes
 from api.router_dashboard import router as router_dashboard
 from api.router_equipamento import router as router_equipamento
 from api.router_hardware import router as router_hardware
@@ -56,6 +58,8 @@ app = FastAPI(
 # equipamento já existir e estar ativo).
 app.include_router(router_tipos_equipamento)
 app.include_router(router_equipamento)
+# ISS-025: correção manual (localização e cadastro), logo depois de equipamentos.
+app.include_router(router_correcoes)
 app.include_router(router_busca_ativos)
 app.include_router(router_dashboard)
 app.include_router(router_leituras_laboratorio)
@@ -109,6 +113,19 @@ def _contem_campo_sensivel(valor: object) -> bool:
     if isinstance(valor, (list, tuple)):
         return any(_contem_campo_sensivel(item) for item in valor)
     return False
+
+
+@app.exception_handler(StaleDataError)
+async def conflito_de_versao(_: Request, __: StaleDataError) -> JSONResponse:
+    """
+    ISS-025: rede de segurança do `version_id_col` do equipamento. Qualquer
+    escrita do ORM que encontre a versão mudada (outra operação gravou no
+    meio) vira 409 com o mesmo código da correção, em vez de 500.
+    """
+    return JSONResponse(status_code=409, content={"detail": {
+        "codigo": "conflito_de_versao",
+        "mensagem": "O equipamento foi alterado por outra operação. Recarregue e tente de novo.",
+    }})
 
 
 @app.exception_handler(RequestValidationError)

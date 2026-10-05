@@ -17,6 +17,7 @@ A matriz existe em **um só lugar**: `api/permissoes.py` (`Permissao` e `MATRIZ`
 |---|---|---|---|
 | `equipamentos:consultar` | equipamentos, tipos, vínculo de EPC, busca, dashboard, histórico de movimentações | ✓ | ✓ |
 | `equipamentos:alterar` | idem, escrita | — | ✓ |
+| `equipamentos:corrigir` | correção manual de localização e de cadastro com justificativa ([ISS-025](iss-025-correcao-manual.md)) | — | ✓ |
 | `localizacao:consultar` | andares, setores, zonas, árvore | ✓ | ✓ |
 | `localizacao:alterar` | idem, escrita | — | ✓ |
 | `hardware:consultar` | leitores, antenas, portais, mapeamentos, topologia | ✓ | ✓ |
@@ -69,6 +70,8 @@ Tabela **gerada por introspecção** com `python -m tools.tabela_permissoes`; re
 | GET | `/equipamentos/por-identificador/{identificador_interno}` | equipamentos:consultar | ✓ | ✓ |
 | GET | `/equipamentos/{equipamento_id}` | equipamentos:consultar | ✓ | ✓ |
 | PATCH | `/equipamentos/{equipamento_id}` | equipamentos:alterar | — | ✓ |
+| POST | `/equipamentos/{equipamento_id}/correcoes/cadastro` | equipamentos:corrigir | — | ✓ |
+| POST | `/equipamentos/{equipamento_id}/correcoes/localizacao` | equipamentos:corrigir | — | ✓ |
 | POST | `/equipamentos/{equipamento_id}/inativar` | equipamentos:alterar | — | ✓ |
 | GET | `/equipamentos/{equipamento_id}/movimentacoes` | equipamentos:consultar | ✓ | ✓ |
 | POST | `/equipamentos/{equipamento_id}/reativar` | equipamentos:alterar | — | ✓ |
@@ -124,7 +127,7 @@ Tabela **gerada por introspecção** com `python -m tools.tabela_permissoes`; re
 | POST | `/zonas/{zona_id}/inativar` | localizacao:alterar | — | ✓ |
 | POST | `/zonas/{zona_id}/reativar` | localizacao:alterar | — | ✓ |
 
-84 rotas.
+86 rotas.
 
 ## Como funciona
 

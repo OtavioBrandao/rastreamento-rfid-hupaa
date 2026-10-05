@@ -130,5 +130,6 @@ def list_for_equipment(
         registrado_em=row.registrado_em,
         justificativa=row.justificativa,
         registro_anterior_id=row.registro_anterior_id,
+        referencia=row.referencia,
     ) for row in rows)
     return MovementPage(items, page, size, total, (total + size - 1) // size)
