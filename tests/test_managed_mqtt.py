@@ -40,6 +40,24 @@ class ManagedMqttTests(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 Settings.from_env(cloud_env() | changes)
 
+    def test_plain_cloud_requires_explicit_lab_opt_in(self):
+        plain = {"MQTT_MODE": "cloud", "MQTT_HOST": "broker.hivemq.com",
+                 "MQTT_PORT": "1883", "MQTT_TLS_ENABLED": "false",
+                 "MQTT_CLIENT_ID": "test-ingestor"}
+        with self.assertRaises(ValueError):
+            Settings.from_env(plain)
+        settings = Settings.from_env(plain | {"MQTT_INSECURE_LAB": "true"})
+        self.assertFalse(settings.mqtt_tls_enabled)
+        self.assertEqual(settings.mqtt_port, 1883)
+        with patch("rfid_ingestion.connection.mqtt.Client") as factory:
+            create_client(settings)
+            factory.return_value.tls_set_context.assert_not_called()
+            factory.return_value.username_pw_set.assert_not_called()
+        for changes in ({"MQTT_TLS_ENABLED": "true"}, {"MQTT_MODE": "local"},
+                        {"MQTT_INSECURE_LAB": "yes"}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                Settings.from_env(plain | {"MQTT_INSECURE_LAB": "true"} | changes)
+
     def test_tls_context_checks_certificate_and_hostname(self):
         settings = Settings.from_env(cloud_env())
         context = tls_context(settings)

@@ -23,7 +23,7 @@ def observation(side, seconds, *, epc="X", portal=1, antenna=None, reading=None)
 
 @pytest.mark.parametrize("first,second", [("a", "b"), ("b", "a")])
 def test_opposite_sides_confirm_once(first, second):
-    detector = PassageDetector(WINDOW)
+    detector = PassageDetector(WINDOW, refractory=timedelta(seconds=1))
     assert detector.add(observation(first, 0), received_at_monotonic=0) is None
     passage = detector.add(observation(second, 3), received_at_monotonic=3)
     assert passage is not None
@@ -108,20 +108,66 @@ def test_tied_timestamps_and_out_of_order_arrival_are_deterministic():
     assert (result.first_side, result.second_side) == ("a", "b")
 
 
-def test_activity_cluster_rearms_only_after_silence_in_event_time():
+def _walk(detector, steps):
+    sides = []
+    for side, second in steps:
+        passage = detector.add(observation(side, second), received_at_monotonic=second)
+        if passage is not None:
+            detector.mark_persisted(passage, duplicate=False)
+            sides.append(f"{passage.first_side}->{passage.second_side}")
+    return sides
+
+
+def test_continuous_back_and_forth_confirms_every_crossing_without_silence():
+    # Ensaio físico 05/10/2026: a tag era lida quase todo segundo; a regra antiga
+    # exigia 3 s de silêncio e descartava 25 de 26 travessias.
+    detector = PassageDetector(WINDOW, refractory=timedelta(seconds=1))
+    steps = [("a", 0), ("b", 1.5), ("b", 2.5), ("a", 4), ("a", 5), ("b", 6.5), ("a", 8)]
+    assert _walk(detector, steps) == ["a->b", "b->a", "a->b", "b->a"]
+    assert detector.counters.activity_suppressed == 2
+
+
+def test_refractory_and_overlap_suppress_bounce_after_crossing():
+    detector = PassageDetector(WINDOW, refractory=timedelta(seconds=1))
+    assert _walk(detector, [("a", 0), ("b", 1), ("a", 1.5)]) == ["a->b"]
+    # Lado oposto que começou antes da âncora (sobreposição das antenas).
+    assert _walk(detector, [("a", 0.9)]) == []
+    assert _walk(detector, [("a", 2.5)]) == ["b->a"]
+    assert detector.counters.activity_suppressed == 2
+
+
+def test_origin_still_reading_tag_is_reflection_not_passage():
+    # Tag parada na antena A, lida esporadicamente por B (reflexão).
+    calls = []
+
+    def origin_active(origin, destination):
+        calls.append((origin.side, destination.side))
+        return True
+
+    detector = PassageDetector(WINDOW, origin_active=origin_active)
+    assert _walk(detector, [("a", 0), ("b", 1), ("a", 2), ("b", 3)]) == []
+    assert calls == [("a", "b"), ("a", "b")]
+    assert detector.counters.origin_still_active == 2
+
+    moved = PassageDetector(WINDOW, origin_active=lambda origin, destination: False)
+    assert _walk(moved, [("a", 0), ("b", 1)]) == ["a->b"]
+
+
+def test_reflection_after_confirmed_passage_keeps_destination_anchor():
+    active = {"value": False}
+    detector = PassageDetector(WINDOW, origin_active=lambda o, d: active["value"])
+    assert _walk(detector, [("a", 0), ("b", 1)]) == ["a->b"]
+    active["value"] = True
+    assert _walk(detector, [("a", 2)]) == []
+    active["value"] = False
+    assert _walk(detector, [("b", 2.5), ("a", 4)]) == ["b->a"]
+
+
+def test_return_after_long_absence_starts_new_candidate():
     detector = PassageDetector(WINDOW)
-    detector.add(observation("a", 0), received_at_monotonic=0)
-    first = detector.add(observation("b", 1), received_at_monotonic=1)
-    detector.mark_persisted(first, duplicate=False)
-    for side, second in (("b", 2), ("a", 3), ("b", 5)):
-        assert detector.add(observation(side, second), received_at_monotonic=second) is None
-    assert detector.counters.activity_suppressed == 3
-    assert detector.add(observation("a", 8.001), received_at_monotonic=8.001) is None
-    second = detector.add(observation("b", 9), received_at_monotonic=9)
-    assert second is not None
-    detector.mark_persisted(second, duplicate=True)
-    assert detector.counters.passages_duplicates == 1
-    assert detector.counters.passages_confirmed == 1
+    assert _walk(detector, [("a", 0), ("b", 1), ("a", 10)]) == ["a->b"]
+    assert detector.counters.candidates_expired == 1
+    assert _walk(detector, [("b", 11)]) == ["a->b"]
 
 
 def test_failed_persistence_keeps_proposal_for_retry():

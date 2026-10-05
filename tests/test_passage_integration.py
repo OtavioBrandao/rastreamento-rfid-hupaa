@@ -232,3 +232,25 @@ def test_pipeline_raw_debounce_passage_and_replay(pg_engine, mapped_portal, tmp_
                     detectada_em=T0,
                 )
             )
+
+
+def test_origin_active_detects_reflection_from_raw_readings(pg_engine, mapped_portal):
+    _, antenna_a, antenna_b, _, _ = mapped_portal
+    repo = PassageRepository(pg_engine)
+    origin = repo.resolve(_observation(antenna_a, 0, 1, reading=1))
+    destination = repo.resolve(_observation(antenna_b, 2, 2.5, reading=2))
+    grace, hold = timedelta(milliseconds=300), timedelta(seconds=1)
+
+    def read(antenna, second, event):
+        with pg_engine.begin() as connection:
+            connection.execute(LeituraBruta.__table__.insert().values(
+                event_id=f"sha256:{event:064x}", antena_id=antenna, epc="EPC-INTEGRACAO",
+                lido_em=T0 + timedelta(seconds=second)))
+
+    # Leitura de A dentro da sobreposição tolerada e depois do hold: travessia real.
+    read(antenna_a, 2.2, 1)
+    read(antenna_a, 3.6, 2)
+    assert repo.origin_active(origin, destination, grace=grace, hold=hold) is False
+    # A continua lendo a tag enquanto B a vê: reflexão, não passagem.
+    read(antenna_a, 3.0, 3)
+    assert repo.origin_active(origin, destination, grace=grace, hold=hold) is True

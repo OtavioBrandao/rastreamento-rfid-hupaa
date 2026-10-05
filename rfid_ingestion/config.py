@@ -26,6 +26,10 @@ DEFAULT_RETRY_JITTER = 0.2
 DEFAULT_RFID_DEBOUNCE_WINDOW_MS = 250
 DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS = 1000
 DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS = 3000
+# Calibrados com o ensaio físico de 05/10/2026 (vai e vem contínuo no portal EASY).
+DEFAULT_RFID_PASSAGE_REFRACTORY_MS = 1000
+DEFAULT_RFID_PASSAGE_OVERLAP_GRACE_MS = 300
+DEFAULT_RFID_PASSAGE_ORIGIN_HOLD_MS = 1000
 DEFAULT_RFID_DIRECTION_AMBIGUITY_MS = 100
 VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 LOCAL_MQTT_HOSTNAMES = frozenset({"localhost", "mosquitto"})
@@ -76,6 +80,8 @@ class Settings:
   log_level: str = DEFAULT_LOG_LEVEL
   mqtt_mode: str = "local"
   mqtt_tls_enabled: bool = False
+  # Opt-in explícito de laboratório: broker externo sem TLS (ex.: leitor sem mqtts).
+  mqtt_insecure_lab: bool = False
   mqtt_ca_cert: str | None = field(default=None, repr=False)
   mqtt_keepalive: int = 60
   max_payload_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES
@@ -93,6 +99,9 @@ class Settings:
   rfid_debounce_window_ms: int = DEFAULT_RFID_DEBOUNCE_WINDOW_MS
   rfid_out_of_order_tolerance_ms: int = DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS
   rfid_passage_max_interval_ms: int = DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS
+  rfid_passage_refractory_ms: int = DEFAULT_RFID_PASSAGE_REFRACTORY_MS
+  rfid_passage_overlap_grace_ms: int = DEFAULT_RFID_PASSAGE_OVERLAP_GRACE_MS
+  rfid_passage_origin_hold_ms: int = DEFAULT_RFID_PASSAGE_ORIGIN_HOLD_MS
   rfid_direction_ambiguity_ms: int = DEFAULT_RFID_DIRECTION_AMBIGUITY_MS
 
   @classmethod
@@ -102,8 +111,13 @@ class Settings:
       tls = source.get("MQTT_TLS_ENABLED", "true" if mode == "cloud" else "false")
       if tls not in ("true", "false"):
           raise ValueError("MQTT_TLS_ENABLED deve ser true ou false")
+      insecure_lab = source.get("MQTT_INSECURE_LAB", "false")
+      if insecure_lab not in ("true", "false"):
+          raise ValueError("MQTT_INSECURE_LAB deve ser true ou false")
       if mode == "cloud":
-          for name in ("MQTT_HOST", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_CLIENT_ID"):
+          obrigatorios = ("MQTT_HOST", "MQTT_CLIENT_ID") if insecure_lab == "true" else (
+              "MQTT_HOST", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_CLIENT_ID")
+          for name in obrigatorios:
               if not source.get(name, "").strip():
                   raise ValueError(f"{name} é obrigatório no modo cloud")
       events_file_value = source.get(
@@ -125,6 +139,7 @@ class Settings:
           log_level=source.get("LOG_LEVEL", DEFAULT_LOG_LEVEL).strip().upper(),
           mqtt_mode=mode,
           mqtt_tls_enabled=tls == "true",
+          mqtt_insecure_lab=insecure_lab == "true",
           mqtt_ca_cert=_optional_value(source.get("MQTT_CA_CERT")),
           mqtt_keepalive=_integer_value(source, "MQTT_KEEPALIVE", 60),
           max_payload_bytes=_integer_value(source, "MQTT_MAX_PAYLOAD_BYTES", DEFAULT_MAX_PAYLOAD_BYTES),
@@ -166,6 +181,15 @@ class Settings:
           rfid_passage_max_interval_ms=_integer_value(
               source, "RFID_PASSAGE_MAX_INTERVAL_MS", DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS
           ),
+          rfid_passage_refractory_ms=_integer_value(
+              source, "RFID_PASSAGE_REFRACTORY_MS", DEFAULT_RFID_PASSAGE_REFRACTORY_MS
+          ),
+          rfid_passage_overlap_grace_ms=_integer_value(
+              source, "RFID_PASSAGE_OVERLAP_GRACE_MS", DEFAULT_RFID_PASSAGE_OVERLAP_GRACE_MS
+          ),
+          rfid_passage_origin_hold_ms=_integer_value(
+              source, "RFID_PASSAGE_ORIGIN_HOLD_MS", DEFAULT_RFID_PASSAGE_ORIGIN_HOLD_MS
+          ),
           rfid_direction_ambiguity_ms=_integer_value(
               source, "RFID_DIRECTION_AMBIGUITY_MS", DEFAULT_RFID_DIRECTION_AMBIGUITY_MS
           ),
@@ -189,6 +213,10 @@ class Settings:
           raise ValueError("RFID_DEBOUNCE_WINDOW_MS deve ser inteiro positivo")
       if type(self.rfid_passage_max_interval_ms) is not int or self.rfid_passage_max_interval_ms < 1:
           raise ValueError("RFID_PASSAGE_MAX_INTERVAL_MS deve ser inteiro positivo")
+      for name in ("refractory", "overlap_grace", "origin_hold"):
+          value = getattr(self, f"rfid_passage_{name}_ms")
+          if type(value) is not int or value < 0:
+              raise ValueError(f"RFID_PASSAGE_{name.upper()}_MS deve ser inteiro não negativo")
       if type(self.rfid_direction_ambiguity_ms) is not int or self.rfid_direction_ambiguity_ms < 0:
           raise ValueError("RFID_DIRECTION_AMBIGUITY_MS deve ser inteiro não negativo")
       if (
@@ -202,7 +230,9 @@ class Settings:
           raise ValueError("MQTT_MODE deve ser local ou cloud")
       if not re.fullmatch(r"[A-Za-z0-9.:-]+", self.mqtt_host):
           raise ValueError("MQTT_HOST deve ser um hostname ou IP, sem URL ou credenciais")
-      if self.mqtt_mode == "cloud" and (
+      if self.mqtt_insecure_lab and (self.mqtt_mode != "cloud" or self.mqtt_tls_enabled):
+          raise ValueError("MQTT_INSECURE_LAB exige MQTT_MODE=cloud e MQTT_TLS_ENABLED=false")
+      if self.mqtt_mode == "cloud" and not self.mqtt_insecure_lab and (
           not self.mqtt_tls_enabled or self.mqtt_port != 8883
           or not self.mqtt_username or not self.mqtt_password
       ):

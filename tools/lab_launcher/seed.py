@@ -14,6 +14,7 @@ from api.normalizacao import normalizar_nome
 from api.seed_localizacao_piloto import ConfigLocalizacaoPiloto
 from api.seed_localizacao_piloto import semear as semear_zonas
 from api.service_associacao import associar as associar_tag
+from api.service_equipamento import atualizar as atualizar_equipamento
 from api.service_equipamento import criar as criar_equipamento
 from api.service_hardware import criar_antena, criar_leitor, criar_portal
 from api.service_tipos_equipamento import criar as criar_tipo
@@ -33,11 +34,14 @@ from db.models import (
 )
 from rfid_ingestion.topics import reading_topic
 
+from .tags import parse_tag
+
 ANDAR = "Laboratório RFID"
 SETOR = "Bancada de testes"
 ZONAS = ("Zona A", "Zona B")
 PORTAL = PORTAL_LABORATORIO
 TIPO_SINTETICO = "Equipamento sintético de laboratório RFID"
+TIPO_FISICO = "Equipamento físico de laboratório RFID"
 
 
 def semear(session: Session, reader_id: str = "reader-01", serial: str | None = None) -> dict[str, str]:
@@ -130,41 +134,64 @@ def semear(session: Session, reader_id: str = "reader-01", serial: str | None = 
 
 def semear_epcs_sinteticos(session: Session, epcs: list[str]) -> dict[str, str]:
     """Vincula EPCs de teste antes da publicação para observar a última zona."""
-    if not epcs:
+    return semear_equipamentos(session, [(epc, None) for epc in epcs], TIPO_SINTETICO)
+
+
+def semear_equipamentos(session: Session, tags: list[tuple[str, str | None]],
+                        tipo_nome: str = TIPO_FISICO) -> dict[str, str]:
+    """Vincula cada EPC a um equipamento de laboratório com o nome informado.
+
+    Equipamentos criados pelo launcher (identificador ``LAB-RFID-<EPC>``) são
+    renomeados quando o nome muda; vínculos com outros equipamentos são
+    preservados sem alteração.
+    """
+    if not tags:
         return {}
     tipo = session.scalar(select(TipoEquipamento).where(
-        TipoEquipamento.nome_normalizado == normalizar_nome(TIPO_SINTETICO)
+        TipoEquipamento.nome_normalizado == normalizar_nome(tipo_nome)
     ))
     if tipo is None:
-        tipo = criar_tipo(session, TIPO_SINTETICO)
+        tipo = criar_tipo(session, tipo_nome)
     elif not tipo.ativo:
-        raise ValueError("tipo de equipamento sintético inativo")
+        raise ValueError(f"tipo de equipamento {tipo_nome!r} inativo")
+
+    nomes: dict[str, str | None] = {}
+    for epc_original, nome in tags:
+        nomes[normalizar_epc(epc_original)] = (nome or "").strip() or None
 
     resumo = {}
-    for epc_original in dict.fromkeys(epcs):
-        epc = normalizar_epc(epc_original)
+    for epc, nome in nomes.items():
+        identificador = f"LAB-RFID-{epc}"
         vinculo = session.scalar(
             select(AssociacaoTagEquipamento).join(Tag).where(
                 Tag.epc == epc, AssociacaoTagEquipamento.fim.is_(None)
             )
         )
         if vinculo is not None:
-            resumo[epc] = f"vínculo existente com equipamento {vinculo.equipamento_id}"
+            equipamento = session.get(Equipamento, vinculo.equipamento_id)
+            estado = f"vínculo existente com equipamento {equipamento.id}"
+            if (nome and equipamento.nome != nome
+                    and equipamento.identificador_interno == identificador):
+                atualizar_equipamento(session, equipamento.id, nome=nome)
+                estado += f"; renomeado para {nome!r}"
+            resumo[epc] = f"{estado} ({equipamento.nome})"
             continue
-        identificador = f"LAB-RFID-{epc}"
         equipamento = session.scalar(select(Equipamento).where(
             Equipamento.identificador_interno_normalizado == normalizar_nome(identificador)
         ))
         if equipamento is None:
-            equipamento = criar_equipamento(session, f"Teste RFID {epc}", tipo.id,
+            equipamento = criar_equipamento(session, nome or f"Teste RFID {epc}", tipo.id,
                                            identificador)
             estado = "equipamento criado"
-        elif equipamento.status != "ativo" or equipamento.tipo_id != tipo.id:
+        elif equipamento.status != "ativo" or (nome is None and equipamento.tipo_id != tipo.id):
             raise ValueError(f"equipamento de laboratório incompatível para EPC {epc}")
         else:
+            if nome and equipamento.nome != nome:
+                atualizar_equipamento(session, equipamento.id, nome=nome)
             estado = "equipamento reutilizado"
         associar_tag(session, equipamento.id, epc)
-        resumo[epc] = f"{estado}; tag associada ao equipamento {equipamento.id}"
+        resumo[epc] = (f"{estado}; tag associada ao equipamento {equipamento.id} "
+                       f"({equipamento.nome})")
     return resumo
 
 
@@ -173,10 +200,13 @@ def main() -> int:
     parser.add_argument("--reader-id", default="reader-01")
     parser.add_argument("--serial")
     parser.add_argument("--epc", action="append", default=[])
+    parser.add_argument("--tag", action="append", default=[], type=parse_tag,
+                        help="EPC=Nome do equipamento físico a cadastrar")
     args = parser.parse_args()
     with SessionLocal() as session:
         resumo = semear(session, args.reader_id, args.serial)
         epcs = semear_epcs_sinteticos(session, args.epc)
+        epcs.update(semear_equipamentos(session, args.tag))
     print("Cadastro base: " + "; ".join(f"{chave}: {estado}"
                                         for chave, estado in resumo.items()))
     for epc, estado in epcs.items():

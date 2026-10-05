@@ -38,6 +38,38 @@ export interface EquipmentItem {
   ultima_zona: AssetZone | null
   ultima_deteccao_em: string | null
   localizacao_desatualizada: boolean | null
+  ultima_leitura?: LastReading | null
+}
+
+/** Última leitura bruta da tag: presença na antena, não zona confirmada. */
+export interface LastReading {
+  em: string
+  leitor?: string | null
+  porta?: number | null
+  zona?: string | null
+}
+
+export interface ReadAntenna { antena_id: number; leitor: string; porta: number; zona: string | null }
+
+export interface ReadSummaryItem {
+  epc: string
+  cadastrada: boolean
+  equipamento: { id: number; nome: string; identificador_interno: string; ultima_zona: string | null; ultima_zona_em: string | null } | null
+  leituras: number
+  leituras_por_antena: { antena_id: number; leituras: number }[]
+  ultima_leitura: LastReading | null
+}
+
+export interface ReadSummary {
+  janela_segundos: number
+  gerado_em: string
+  total_leituras: number
+  tags_detectadas: number
+  cadastradas_detectadas: number
+  cadastradas_sem_leitura: number
+  nao_cadastradas: number
+  antenas: ReadAntenna[]
+  items: ReadSummaryItem[]
 }
 
 export interface AssetPage {
