@@ -20,8 +20,12 @@ from sqlalchemy.orm import Session
 
 from api import service_tipos_equipamento as service
 from api.database import get_db
+from api.permissoes import Permissao, exigir_por_metodo
 
-router = APIRouter(prefix="/tipos-equipamento", tags=["tipos de equipamento"])
+_PERMISSAO = exigir_por_metodo(
+    consultar=Permissao.EQUIPAMENTOS_CONSULTAR, alterar=Permissao.EQUIPAMENTOS_ALTERAR
+)
+router = APIRouter(prefix="/tipos-equipamento", tags=["tipos de equipamento"], dependencies=[Depends(_PERMISSAO)])
 
 
 def _validar_nome_preenchido(valor: str | None) -> str | None:

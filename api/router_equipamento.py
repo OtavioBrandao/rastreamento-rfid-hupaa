@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from api import service_equipamento as service
 from api.database import get_db
+from api.permissoes import Permissao, exigir_por_metodo
 from api.schemas_equipamento import (
     EquipamentoAtualizar,
     EquipamentoCriar,
@@ -33,7 +34,10 @@ from db.models import Equipamento
 from rfid_location.recency import classify_recency, recency_threshold_from_env
 from rfid_movement import repository as movement_repository
 
-router = APIRouter(prefix="/equipamentos", tags=["equipamentos"])
+_PERMISSAO = exigir_por_metodo(
+    consultar=Permissao.EQUIPAMENTOS_CONSULTAR, alterar=Permissao.EQUIPAMENTOS_ALTERAR
+)
+router = APIRouter(prefix="/equipamentos", tags=["equipamentos"], dependencies=[Depends(_PERMISSAO)])
 
 
 @router.get(

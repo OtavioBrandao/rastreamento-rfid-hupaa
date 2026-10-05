@@ -7,10 +7,15 @@ from sqlalchemy.orm import Session
 from api.database import get_db
 from api.epc import EpcInvalido, normalizar_epc
 from api.laboratorio import PORTAL_LABORATORIO
+from api.permissoes import Permissao, exigir_por_metodo
 from api.timestamps import em_utc
 from db.models import Antena, LeituraBruta, Portal
 
-router = APIRouter(prefix="/api/laboratorio", tags=["laboratório"])
+# Só há leitura; "alterar" fica em hardware:alterar (não existe laboratorio:alterar).
+_PERMISSAO = exigir_por_metodo(
+    consultar=Permissao.LABORATORIO_CONSULTAR, alterar=Permissao.HARDWARE_ALTERAR
+)
+router = APIRouter(prefix="/api/laboratorio", tags=["laboratório"], dependencies=[Depends(_PERMISSAO)])
 
 
 @router.get("/leituras", summary="Leituras recentes das antenas do laboratório")

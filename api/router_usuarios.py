@@ -1,13 +1,15 @@
 """
-Administração de usuários (ISS-026). TODAS as rotas exigem administrador
-com sessão liberada (sem troca de senha pendente).
+Administração de usuários (ISS-026). TODAS as rotas exigem a permissão
+`usuarios:administrar` (ISS-027), com sessão liberada (sem troca de senha
+pendente). O router e as rotas que precisam do autor usam o MESMO objeto
+`administrar_usuarios`, que o FastAPI resolve uma vez por request.
 
 Mapeamento de erro:
 - `UsuarioNaoEncontrado`                         -> 404
 - `EmailDuplicado`                               -> 409
 - `UltimoAdministrador`                          -> 409
 - `OperacaoNaPropriaConta` (desativar/redefinir) -> 409
-- `AutorSemPermissao` (rebaixado durante a request) -> 403
+- `AutorSemPermissao` (rebaixado durante a request) -> 403 `acesso_negado`
 - campo extra no corpo (ex.: `email` no PATCH)   -> 422, pelo Pydantic
 """
 
@@ -19,7 +21,7 @@ from sqlalchemy.orm import Session
 from api import service_usuarios as service
 from api.config_auth import obter_agora
 from api.database import get_db
-from api.dependencias_auth import sessao_administrador
+from api.permissoes import administrar_usuarios
 from api.router_auth import usuario_para_resposta
 from api.schemas_auth import (
     NomePerfil,
@@ -32,7 +34,9 @@ from api.schemas_auth import (
 from api.senhas import SenhaForaDaPolitica
 from api.service_auth import SessaoAutenticada
 
-router = APIRouter(prefix="/usuarios", tags=["usuários"])
+router = APIRouter(
+    prefix="/usuarios", tags=["usuários"], dependencies=[Depends(administrar_usuarios)]
+)
 
 _STATUS = {
     service.UsuarioNaoEncontrado: status.HTTP_404_NOT_FOUND,
@@ -59,7 +63,6 @@ def listar_usuarios(
     ativo: bool | None = Query(None),
     perfil: NomePerfil | None = Query(None),
     db: Session = Depends(get_db),
-    _admin: SessaoAutenticada = Depends(sessao_administrador),
 ) -> UsuarioPagina:
     pagina = service.listar(db, page=page, size=size, ativo=ativo, perfil=perfil)
     return UsuarioPagina(
@@ -75,7 +78,7 @@ def listar_usuarios(
 def criar_usuario(
     payload: UsuarioCriar,
     db: Session = Depends(get_db),
-    admin: SessaoAutenticada = Depends(sessao_administrador),
+    admin: SessaoAutenticada = Depends(administrar_usuarios),
 ) -> UsuarioResposta:
     return _executar(
         service.criar, db, admin.usuario.id, nome=payload.nome, email=payload.email,
@@ -87,7 +90,6 @@ def criar_usuario(
 def consultar_usuario(
     usuario_id: int,
     db: Session = Depends(get_db),
-    _admin: SessaoAutenticada = Depends(sessao_administrador),
 ) -> UsuarioResposta:
     return _executar(service.obter, db, usuario_id)
 
@@ -97,7 +99,7 @@ def atualizar_usuario(
     usuario_id: int,
     payload: UsuarioAtualizar,
     db: Session = Depends(get_db),
-    admin: SessaoAutenticada = Depends(sessao_administrador),
+    admin: SessaoAutenticada = Depends(administrar_usuarios),
 ) -> UsuarioResposta:
     return _executar(
         service.atualizar, db, admin.usuario.id, usuario_id,
@@ -112,7 +114,7 @@ def desativar_usuario(
     usuario_id: int,
     db: Session = Depends(get_db),
     agora: datetime = Depends(obter_agora),
-    admin: SessaoAutenticada = Depends(sessao_administrador),
+    admin: SessaoAutenticada = Depends(administrar_usuarios),
 ) -> UsuarioResposta:
     return _executar(service.desativar, db, admin.usuario.id, usuario_id, agora)
 
@@ -124,7 +126,7 @@ def reativar_usuario(
     usuario_id: int,
     db: Session = Depends(get_db),
     agora: datetime = Depends(obter_agora),
-    admin: SessaoAutenticada = Depends(sessao_administrador),
+    admin: SessaoAutenticada = Depends(administrar_usuarios),
 ) -> UsuarioResposta:
     return _executar(service.reativar, db, admin.usuario.id, usuario_id, agora)
 
@@ -138,7 +140,7 @@ def redefinir_senha_usuario(
     payload: RedefinirSenhaEntrada,
     db: Session = Depends(get_db),
     agora: datetime = Depends(obter_agora),
-    admin: SessaoAutenticada = Depends(sessao_administrador),
+    admin: SessaoAutenticada = Depends(administrar_usuarios),
 ) -> UsuarioResposta:
     return _executar(
         service.redefinir_senha, db, admin.usuario.id, usuario_id,

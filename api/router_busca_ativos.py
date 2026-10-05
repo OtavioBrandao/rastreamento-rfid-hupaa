@@ -8,11 +8,15 @@ from sqlalchemy.orm import Session
 
 from api.database import get_db
 from api.epc import EpcInvalido, normalizar_epc
+from api.permissoes import Permissao, exigir_por_metodo
 from api.router_equipamento import get_recency_context
 from api.schemas_busca_ativos import BuscaAtivosPagina, StatusAtivo
 from api.service_busca_ativos import PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, buscar
 
-router = APIRouter(prefix="/api/ativos", tags=["consulta de ativos"])
+_PERMISSAO = exigir_por_metodo(
+    consultar=Permissao.EQUIPAMENTOS_CONSULTAR, alterar=Permissao.EQUIPAMENTOS_ALTERAR
+)
+router = APIRouter(prefix="/api/ativos", tags=["consulta de ativos"], dependencies=[Depends(_PERMISSAO)])
 Sort = Literal["nome", "-nome", "ultima_deteccao_em", "-ultima_deteccao_em"]
 
 
