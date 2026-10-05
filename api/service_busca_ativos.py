@@ -1,11 +1,15 @@
-"""Consulta paginada da projeção ISS-017, sem inferir localização por leitura bruta."""
+"""Consulta paginada da projeção ISS-017, sem inferir localização por leitura bruta.
+
+A última leitura bruta é exposta à parte (`ultima_leitura`) como presença.
+"""
 
 from datetime import datetime, timedelta
 
 from sqlalchemy import and_, false, func, or_
 from sqlalchemy.orm import Session, contains_eager
 
-from api.schemas_busca_ativos import AtivoBusca, BuscaAtivosPagina, ZonaBusca
+from api.schemas_busca_ativos import AtivoBusca, BuscaAtivosPagina, LeituraRecente, ZonaBusca
+from api.service_leituras import ultimas_leituras
 from api.timestamps import em_utc
 from db.models import AssociacaoTagEquipamento, Equipamento, Setor, Tag, Zona
 from rfid_location.recency import classify_recency
@@ -90,6 +94,7 @@ def buscar(
                                 Equipamento.id.asc()),
     }
     rows = query.order_by(*ordering[sort]).limit(page_size).offset((page - 1) * page_size).all()
+    leituras = ultimas_leituras(db, (epc for _, epc in rows if epc))
     items = []
     for equipment, active_epc in rows:
         recency = classify_recency(equipment.ultima_deteccao_em, now, threshold)
@@ -118,5 +123,7 @@ def buscar(
             ultima_deteccao_em=em_utc(equipment.ultima_deteccao_em),
             localizacao_desatualizada=None if recency == "nunca_detectada"
             else recency == "desatualizada",
+            ultima_leitura=LeituraRecente(**leituras[active_epc])
+            if active_epc in leituras else None,
         ))
     return BuscaAtivosPagina(items=items, total=total, page=page, page_size=page_size)

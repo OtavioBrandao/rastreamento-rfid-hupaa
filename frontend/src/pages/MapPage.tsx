@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { MapaHospital } from '../components/mapa/MapaHospital'
 import { MapaLaboratorio } from '../components/mapa/MapaLaboratorio'
+import { RegisteredDetections } from '../components/mapa/RegisteredDetections'
 import { getAllAssets, getMapTopology } from '../services/dashboard'
 import { emptyTopology } from '../services/mapTopology'
 import { useLiveQuery } from '../services/live'
@@ -18,6 +19,7 @@ export function MapPage({ onSelect }: { onSelect: (item: EquipmentItem) => void 
   const phase = assets.loading ? 'loading' : !assets.data && assets.error ? 'error' : 'loaded'
   const errorMessage = String(assets.error).includes('422') ? 'Confira o EPC informado.' : 'Não foi possível carregar o mapa.'
   const refreshError = assets.data && assets.error
+  const detections = <RegisteredDetections items={items} onSelect={onSelect}/>
   function submit(event: FormEvent) { event.preventDefault(); setEpc(draftEpc.trim()) }
   return <div className="map-page">
     <div className="page-heading"><div><p className="eyebrow">VISUALIZAÇÃO ESPACIAL</p><h1>Mapa / Planta</h1><p className="lead">Última zona conhecida, sem posição exata do equipamento.</p></div></div>
@@ -26,6 +28,6 @@ export function MapPage({ onSelect }: { onSelect: (item: EquipmentItem) => void 
     {topologyError && <p role="alert">Não foi possível validar as zonas e portais da planta. Consulte a lista textual; tentando novamente...</p>}
     {phase === 'loading' && <div className="panel map-skeleton" role="status" aria-label="Carregando mapa"><span/><span/></div>}
     {phase === 'error' && <div className="state-panel error-panel" role="alert"><h2>{errorMessage}</h2>Tentando novamente automaticamente.</div>}
-    {phase === 'loaded' && <>{refreshError && <p role="alert">Não foi possível atualizar as posições. Tentando novamente...</p>}{epc && items.length === 0 && <p role="status">Nenhum ativo associado a este EPC.</p>}{mode === 'hospital' ? <div id="panel-hospital" role="tabpanel" aria-labelledby="tab-hospital"><MapaHospital topology={topology} items={items} onSelect={onSelect}/></div> : <div id="panel-lab" role="tabpanel" aria-labelledby="tab-lab"><MapaLaboratorio topology={topology} items={items} epc={epc} onSelect={onSelect}/></div>}</>}
+    {phase === 'loaded' && <>{refreshError && <p role="alert">Não foi possível atualizar as posições. Tentando novamente...</p>}{epc && items.length === 0 && <p role="status">Nenhum ativo associado a este EPC.</p>}{mode === 'hospital' ? <div id="panel-hospital" role="tabpanel" aria-labelledby="tab-hospital"><MapaHospital topology={topology} items={items} onSelect={onSelect} footer={detections}/></div> : <div id="panel-lab" role="tabpanel" aria-labelledby="tab-lab"><MapaLaboratorio topology={topology} items={items} epc={epc} onSelect={onSelect} footer={detections}/></div>}</>}
   </div>
 }
