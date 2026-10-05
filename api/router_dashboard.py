@@ -7,10 +7,14 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.database import get_db
+from api.permissoes import Permissao, exigir_por_metodo
 from api.router_equipamento import get_recency_context
 from api.service_dashboard import atividade_recente, resumo
 
-router = APIRouter(prefix="/api/dashboard", tags=["painel operacional"])
+_PERMISSAO = exigir_por_metodo(
+    consultar=Permissao.EQUIPAMENTOS_CONSULTAR, alterar=Permissao.EQUIPAMENTOS_ALTERAR
+)
+router = APIRouter(prefix="/api/dashboard", tags=["painel operacional"], dependencies=[Depends(_PERMISSAO)])
 
 
 class Resumo(BaseModel):

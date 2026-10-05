@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from api import service_hardware as service
 from api.database import get_db
+from api.permissoes import Permissao, exigir_por_metodo
 from api.schemas_hardware import (
     AntenaAtualizar,
     AntenaCriar,
@@ -37,7 +38,10 @@ from api.schemas_hardware import (
     PortalResposta,
 )
 
-router = APIRouter()
+_PERMISSAO = exigir_por_metodo(
+    consultar=Permissao.HARDWARE_CONSULTAR, alterar=Permissao.HARDWARE_ALTERAR
+)
+router = APIRouter(dependencies=[Depends(_PERMISSAO)])
 
 _NAO_ENCONTRADO = (
     service.LeitorNaoEncontrado,

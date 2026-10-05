@@ -14,6 +14,9 @@ from suporte_auth import consultar, inserir_usuario, logar
 
 from api import criar_admin
 
+# ISS-027: login e cookie reais; sem o administrador de teste do conftest.
+pytestmark = pytest.mark.autenticacao_real
+
 RAIZ = Path(__file__).resolve().parent.parent
 SENHA_ADMIN = "Senha-Do-Admin-2026"
 
