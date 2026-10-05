@@ -45,6 +45,9 @@ def main() -> int:
         )
         direction_service.process_pending()
         location_service.process_pending()
+        passage_repository = PassageRepository(engine)
+        overlap_grace = timedelta(milliseconds=settings.rfid_passage_overlap_grace_ms)
+        origin_hold = timedelta(milliseconds=settings.rfid_passage_origin_hold_ms)
         passage_service = PassageInferenceService(
             PassageDetector(
                 timedelta(milliseconds=settings.rfid_passage_max_interval_ms),
@@ -52,8 +55,11 @@ def main() -> int:
                     settings.rfid_debounce_window_ms
                     + settings.rfid_out_of_order_tolerance_ms
                 )),
+                refractory=timedelta(milliseconds=settings.rfid_passage_refractory_ms),
+                origin_active=lambda origin, destination: passage_repository.origin_active(
+                    origin, destination, grace=overlap_grace, hold=origin_hold),
             ),
-            PassageRepository(engine),
+            passage_repository,
             passage_persisted=direction_service.process_pending,
         )
         def inference_tick(now_monotonic: float) -> None:

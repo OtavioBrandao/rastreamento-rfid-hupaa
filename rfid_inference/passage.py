@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -61,6 +62,7 @@ class PassageCounters:
     passages_confirmed: int = 0
     passages_duplicates: int = 0
     activity_suppressed: int = 0
+    origin_still_active: int = 0
 
 
 @dataclass(slots=True)
@@ -70,6 +72,10 @@ class _State:
     last_event_at: datetime | None = None
     last_received_monotonic: float = 0.0
     proposed: DetectedPassage | None = None
+    # Última observação do lado de destino: referência para a próxima passagem.
+    anchor: PortalObservation | None = None
+    proposed_anchor: PortalObservation | None = None
+    last_passage_at: datetime | None = None
 
 
 def _order(item: PortalObservation) -> tuple[datetime, int, str]:
@@ -80,13 +86,27 @@ class PassageDetector:
     """Estado independente por (EPC, portal), com confirmação em duas fases.
 
     A proposta permanece recuperável até o serviço confirmar a persistência.
+    Após uma passagem, leituras no lado de destino apenas renovam a âncora; uma
+    observação no lado oposto, posterior à âncora e fora do período refratário,
+    inicia a próxima passagem sem exigir silêncio da tag.
+
+    ``origin_active(origem, destino)`` informa se a antena de origem continuou
+    lendo a tag durante a observação de destino (após a tolerância de
+    sobreposição). Nesse caso a tag não saiu da origem: é reflexão/sobreposição
+    de antenas e a passagem é descartada.
     """
 
-    def __init__(self, max_interval: timedelta, *, silence_grace: timedelta = timedelta(0)):
-        if max_interval <= timedelta(0) or silence_grace < timedelta(0):
+    def __init__(self, max_interval: timedelta, *, silence_grace: timedelta = timedelta(0),
+                 refractory: timedelta = timedelta(0),
+                 origin_active: Callable[[PortalObservation, PortalObservation], bool]
+                 | None = None):
+        if (max_interval <= timedelta(0) or silence_grace < timedelta(0)
+                or refractory < timedelta(0)):
             raise ValueError("intervalos inválidos")
         self.max_interval = max_interval
         self.silence_grace = silence_grace
+        self.refractory = refractory
+        self.origin_active = origin_active
         self.states: dict[tuple[str, int], _State] = {}
         self.counters = PassageCounters()
 
@@ -102,14 +122,25 @@ class PassageDetector:
         if state.proposed is not None:
             return state.proposed
         if state.confirmed:
-            assert state.last_event_at is not None
-            if observation.first_seen_at - state.last_event_at <= self.max_interval:
+            assert state.last_event_at is not None and state.anchor is not None
+            anchor = state.anchor
+            same_side = observation.side == anchor.side
+            # Lado oposto que começou antes da âncora é sobreposição entre antenas;
+            # dentro do período refratário, ruído logo após a travessia.
+            noise = not same_side and (
+                _order(observation) < _order(anchor)
+                or (state.last_passage_at is not None
+                    and observation.first_seen_at - state.last_passage_at < self.refractory)
+            )
+            if same_side or noise:
+                if same_side:
+                    state.anchor = max((anchor, observation), key=_order)
                 state.last_event_at = max(state.last_event_at, observation.last_seen_at)
                 self.counters.activity_suppressed += 1
                 _event("rfid_passage_activity_suppressed", *key)
                 return None
             state.confirmed = False
-            state.candidate = None
+            state.candidate = anchor
 
         candidate = state.candidate
         if candidate is not None:
@@ -126,6 +157,16 @@ class PassageDetector:
                 self.counters.same_side_observations += 1
                 _event("rfid_passage_same_side", *key)
                 return None
+            if self.origin_active is not None and self.origin_active(first, second):
+                # A origem segue lendo a tag: mantém a origem como referência.
+                self.counters.origin_still_active += 1
+                _event("rfid_passage_origin_still_active", *key)
+                if state.anchor is not None and first is state.anchor:
+                    state.confirmed = True
+                    state.candidate = None
+                else:
+                    state.candidate = first
+                return None
             detected = DetectedPassage(
                 epc=observation.epc,
                 portal_id=observation.portal_id,
@@ -140,6 +181,7 @@ class PassageDetector:
                 detected_at=max(first.last_seen_at, second.last_seen_at),
             )
             state.proposed = detected
+            state.proposed_anchor = second
             state.last_event_at = max(first.last_seen_at, second.last_seen_at)
             return detected
         state.candidate = observation
@@ -155,6 +197,9 @@ class PassageDetector:
         state.proposed = None
         state.candidate = None
         state.confirmed = True
+        state.anchor = state.proposed_anchor
+        state.proposed_anchor = None
+        state.last_passage_at = passage.second_observed_at
         if duplicate:
             self.counters.passages_duplicates += 1
             _event("rfid_passage_duplicate", *key)

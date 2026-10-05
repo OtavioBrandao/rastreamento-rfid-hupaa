@@ -30,6 +30,7 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Última localização na interface (ISS-021):** tabela e detalhe exibem andar → setor → zona e horário no fuso `America/Maceio`; o detalhe consulta o histórico paginado. Veja o [contrato e a validação](docs/implementations/iss-021-ultima-localizacao-interface.md).
 
 - **Mapa e portais (ISS-023):** vínculos validados por IDs, regiões configuráveis e alternativa textual. Veja [implementação e limites físicos](docs/implementations/iss-023-mapa-portais.md).
+- **Passagens em vai e vem (hotfix):** passagens consecutivas sem exigir 3 s de silêncio, com refratário e rejeição de reflexão quando a antena de origem continua lendo a tag. Veja o [hotfix](docs/implementations/hotfix-passagem-vai-e-vem.md).
 - **Leituras e presença (hotfix):** página Leituras com contagem por tag e antena, tabela de equipamentos detectados abaixo dos mapas e última leitura no dashboard, separada da zona confirmada. Veja o [hotfix](docs/implementations/hotfix-leituras-presenca.md).
 - **Ensaio físico no launcher (hotfix):** opções 2 e 3 perguntam as tags e o nome de cada equipamento; o broker externo aceita `mqtt` sem TLS por opt-in de laboratório. Veja o [hotfix](docs/implementations/hotfix-lab-tags-fisicas-mqtt-sem-tls.md).
 - **Atualização automática (ISS-033):** dashboard, mapas, detalhes e histórico atualizados a cada 2 s; leituras EASY a cada 1 s; botão global de recuperação e rótulo “Em trânsito”. Veja [comportamento e validação](docs/implementations/iss-033-atualizacao-automatica.md).

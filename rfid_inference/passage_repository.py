@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from sqlalchemy import or_, select
+from datetime import timedelta
+
+from sqlalchemy import exists, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
-from db.models import MapeamentoAntenaPortal, Passagem
+from db.models import LeituraBruta, MapeamentoAntenaPortal, Passagem
 from rfid_inference.debounce import ConsolidatedObservation
 
 from .passage import DetectedPassage, PortalObservation
@@ -49,6 +51,21 @@ class PassageRepository:
             first_event_id=observation.first_event_id,
             last_event_id=observation.last_event_id,
         )
+
+    def origin_active(self, origin: PortalObservation, destination: PortalObservation, *,
+                      grace: timedelta, hold: timedelta) -> bool:
+        """A antena de origem leu a tag durante o destino (após a sobreposição)?
+
+        A janela termina ``hold`` depois da última leitura do destino; essas
+        leituras já foram persistidas quando o debounce finaliza a observação.
+        """
+        with self.engine.connect() as connection:
+            return bool(connection.scalar(select(exists().where(
+                LeituraBruta.epc == origin.epc,
+                LeituraBruta.antena_id == origin.antenna_id,
+                LeituraBruta.lido_em > destination.first_seen_at + grace,
+                LeituraBruta.lido_em <= destination.last_seen_at + hold,
+            ))))
 
     def persist(self, passage: DetectedPassage) -> bool:
         """Retorna True se inserida, False se as evidências já existiam."""
