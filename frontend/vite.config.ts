@@ -7,6 +7,7 @@ export default defineConfig({
     '/api': 'http://127.0.0.1:8000',
     '/tipos-equipamento': 'http://127.0.0.1:8000',
     '/localizacoes': 'http://127.0.0.1:8000',
+    '/portais': 'http://127.0.0.1:8000',
     '/equipamentos': 'http://127.0.0.1:8000',
   } },
   test: {

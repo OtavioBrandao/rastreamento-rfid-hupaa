@@ -29,6 +29,9 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Ativos por zona (ISS-020):** a consulta existente por `zona` lista a última localização conhecida; veja a [semântica e validação sintética](docs/implementations/iss-020-ativos-por-zona.md).
 - **Última localização na interface (ISS-021):** tabela e detalhe exibem andar → setor → zona e horário no fuso `America/Maceio`; o detalhe consulta o histórico paginado. Veja o [contrato e a validação](docs/implementations/iss-021-ultima-localizacao-interface.md).
 
+- **Mapa e portais (ISS-023):** vínculos validados por IDs, regiões configuráveis e alternativa textual. Veja [implementação e limites físicos](docs/implementations/iss-023-mapa-portais.md).
+- **Atualização automática (ISS-033):** dashboard, mapas, detalhes e histórico atualizados a cada 2 s; leituras EASY a cada 1 s; botão global de recuperação e rótulo “Em trânsito”. Veja [comportamento e validação](docs/implementations/iss-033-atualizacao-automatica.md).
+
 ### ⏳ Próximos Passos (Backlog Imediato):
 - **Validação física:** Calibrar debounce, janela de passagem e tolerância de direção no HUPAA.
 
