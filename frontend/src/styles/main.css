@@ -1596,3 +1596,10 @@ button,a {
     outline:4px solid #df3f4599
   }
 }
+
+.marker-portal { background:#594591; border-radius:5px }
+.global-refresh { display:flex; align-items:center; gap:8px; margin-left:auto; min-height:36px; padding:7px 12px; border:1px solid #b4c9d0; border-radius:7px; background:#f4f9fa; color:#17495c; font:inherit; font-size:.85rem; cursor:pointer }
+.global-refresh:disabled { cursor:wait; opacity:.7 }
+.global-refresh[aria-busy="true"] svg { animation:refresh-spin 1s linear infinite }
+@keyframes refresh-spin { to { transform:rotate(360deg) } }
+@media (prefers-reduced-motion:reduce) { .global-refresh[aria-busy="true"] svg { animation:none } }

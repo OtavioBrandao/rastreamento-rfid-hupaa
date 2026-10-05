@@ -1,11 +1,19 @@
 import type { ActivityItem, AssetFilters, AssetPage, FilterOption, MovementPage, OverviewSummary } from '../types/dashboard'
+import type { MapTopology, RegisteredPortal, RegisteredZone } from './mapTopology'
 
 const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
 async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`${base}${path}`, { signal })
-  if (!response.ok) throw new Error(`API respondeu ${response.status}`)
-  return response.json() as Promise<T>
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  if (signal?.aborted) controller.abort()
+  signal?.addEventListener('abort', abort, { once: true })
+  const timeout = window.setTimeout(abort, 8000)
+  try {
+    const response = await fetch(`${base}${path}`, { signal: controller.signal, cache: 'no-store' })
+    if (!response.ok) throw new Error(`API respondeu ${response.status}`)
+    return await response.json() as T
+  } finally { window.clearTimeout(timeout); signal?.removeEventListener('abort', abort) }
 }
 
 export function getAssets(filters: AssetFilters = {}, signal?: AbortSignal): Promise<AssetPage> {
@@ -63,4 +71,19 @@ export function getOverviewSummary(signal?: AbortSignal): Promise<OverviewSummar
 export async function getRecentActivity(signal?: AbortSignal): Promise<ActivityItem[]> {
   const result = await readJson<{ items: ActivityItem[] }>('/api/dashboard/atividade?limit=8', signal)
   return result.items
+}
+
+export async function getMapTopology(signal?: AbortSignal): Promise<MapTopology> {
+  type Tree = { setores: { zonas: RegisteredZone[] }[] }[]
+  type PortalPage = { items: RegisteredPortal[]; pages: number }
+  const [tree, first] = await Promise.all([
+    readJson<Tree>('/localizacoes/arvore', signal),
+    readJson<PortalPage>('/portais?page=1&size=100', signal),
+  ])
+  const portals = [...first.items]
+  for (let page = 2; page <= first.pages; page++) {
+    const next = await readJson<PortalPage>(`/portais?page=${page}&size=100`, signal)
+    portals.push(...next.items)
+  }
+  return { zones: tree.flatMap((floor) => floor.setores.flatMap((sector) => sector.zonas)), portals }
 }

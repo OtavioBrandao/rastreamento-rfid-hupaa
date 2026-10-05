@@ -1,7 +1,7 @@
 import type { AssetStatus, EquipmentItem } from '../types/dashboard'
 
 const labels: Record<AssetStatus, string> = {
-  disponivel: 'Disponível', atencao: 'Atenção necessária', offline: 'Offline',
+  disponivel: 'Em trânsito', atencao: 'Atenção necessária', offline: 'Offline',
   fora_de_servico: 'Fora de serviço', nunca_detectado: 'Nunca detectado',
 }
 
