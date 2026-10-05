@@ -1,4 +1,4 @@
-import type { ActivityItem, AssetFilters, AssetPage, FilterOption, MovementPage, OverviewSummary, ReadSummary } from '../types/dashboard'
+import type { ActivityItem, AssetFilters, AssetPage, EquipmentItem, FilterOption, MovementPage, OverviewSummary, ReadSummary } from '../types/dashboard'
 import { notifySessionEnded } from './auth'
 import type { MapTopology, RegisteredPortal, RegisteredZone } from './mapTopology'
 
@@ -29,6 +29,11 @@ export function getAssets(filters: AssetFilters = {}, signal?: AbortSignal): Pro
 
 export function getMovements(equipmentId: number, page = 1, signal?: AbortSignal): Promise<MovementPage> {
   return readJson<MovementPage>(`/equipamentos/${equipmentId}/movimentacoes?page=${page}&size=20`, signal)
+}
+
+/** Um ativo pelo ID, no mesmo formato da busca (ISS-025: identidade estável após correção). */
+export function getAsset(id: number, signal?: AbortSignal): Promise<EquipmentItem> {
+  return readJson<EquipmentItem>(`/api/ativos/${id}`, signal)
 }
 
 export async function getAllAssets(filters: AssetFilters = {}, signal?: AbortSignal) {

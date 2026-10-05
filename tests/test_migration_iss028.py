@@ -98,7 +98,7 @@ def test_legado_traduzido_origem_preenchida_trigger_e_checks(banco):
 
 def test_downgrade_devolve_vocabulario_antigo_e_reupgrade(banco):
     _legado(banco)
-    _ok(banco, "upgrade", "head")
+    _ok(banco, "upgrade", REVISAO_ISS028)  # downgrade testado é só o da ISS-028
 
     _ok(banco, "downgrade", REVISAO_ANTERIOR)
 
@@ -124,7 +124,7 @@ def test_downgrade_devolve_vocabulario_antigo_e_reupgrade(banco):
      "(NULL, 'sistema', 'associacoes_tag_equipamento', 3, 'vincular_epc')"),
 ], ids=["sem-alvo", "vincular-epc"])
 def test_downgrade_recusado_mantem_trilha_e_trigger(banco, descricao, linha):
-    _ok(banco, "upgrade", "head")
+    _ok(banco, "upgrade", REVISAO_ISS028)  # downgrade testado é só o da ISS-028
     _sql(banco, "INSERT INTO auditorias (usuario_id, origem, entidade, entidade_id, acao) "
                 f"VALUES {linha}")
     antes = _sql(banco, "SELECT * FROM auditorias ORDER BY id")
@@ -139,7 +139,7 @@ def test_downgrade_recusado_mantem_trilha_e_trigger(banco, descricao, linha):
 
 
 def test_downgrade_preserva_motivo_e_correlation_id_em_iss028(banco):
-    _ok(banco, "upgrade", "head")
+    _ok(banco, "upgrade", REVISAO_ISS028)  # downgrade testado é só o da ISS-028
     _sql(banco, """
         INSERT INTO auditorias (id, origem, entidade, entidade_id, acao, motivo,
                                 correlation_id, dados_depois) VALUES

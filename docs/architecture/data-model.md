@@ -29,6 +29,7 @@ Documento de apoio à issue de modelagem (Épico E1, Must, RF-001 a RF-023, RNF-
 | ultima_deteccao_em | timestamptz | NULL |
 | ultima_passagem_id | bigint | FK → passagens, NULL |
 | ultima_movimentacao_id | bigint | FK → historico_movimentacoes, NULL; registro que originou a projeção |
+| versao | bigint | NOT NULL, default 1, CHECK `ck_equipamentos_versao_positiva` (`>= 1`); versão otimista ([ISS-025](../implementations/iss-025-correcao-manual.md)): toda escrita incrementa (ORM via `version_id_col`; pipeline e correção via `update_location`) |
 | created_at / updated_at | timestamptz | NOT NULL, default now() |
 
 > RF-012 usa uma projeção diretamente no equipamento. `ultima_movimentacao_id` aponta para a fonte auditável, inclusive após correção manual, quando `ultima_passagem_id` é NULL. `registrado_em` do movimento é o tempo de processamento; `updated_at` do equipamento também muda por edições cadastrais.
@@ -251,6 +252,7 @@ monotônico usado para perceber silêncio não substitui `lido_em` no agrupament
 | origem_registro | varchar | NOT NULL, CHECK IN ('passagem_automatica','correcao_manual') |
 | registrado_em | timestamptz | NOT NULL, default now() |
 | justificativa | text | Obrigatória na correção manual |
+| referencia | varchar(255) | NULL; chamado/OS da correção manual ([ISS-025](../implementations/iss-025-correcao-manual.md)). CHECK `ck_historico_referencia_so_manual`: só em `correcao_manual` e não vazia |
 | registro_anterior_id | bigint | FK autorreferente; correção preserva o registro original |
 
 **Índices:** `(equipamento_id, movimentada_em, id)` para consulta por período e ordem determinística; `(equipamento_id, registrado_em)` preservado. O índice único parcial em `passagem_id` para registros automáticos impede duplicação concorrente. Campos novos aceitam NULL para preservar linhas anteriores à ISS-018; novas inserções obedecem ao CHECK. O serviço de ledger não altera `equipamentos`; a ISS-017 chama o append e atualiza a projeção na mesma transação.

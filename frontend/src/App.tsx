@@ -6,7 +6,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { MapPage } from './pages/MapPage'
 import { ReadingsPage } from './pages/ReadingsPage'
-import { getSession, logout, onSessionEnded, type Session } from './services/auth'
+import { getSession, logout, onSessionEnded, pode, type Session } from './services/auth'
 import type { EquipmentItem } from './types/dashboard'
 import { LiveProvider } from './services/live'
 
@@ -61,6 +61,8 @@ export default function App() {
 function Panel({ session, onLogout }: { session: Session; onLogout: () => void }) {
   const [page, setPage] = useState(currentPage)
   const [selected, setSelected] = useState<EquipmentItem | null>(null)
+  // ISS-025: corrigir é só do administrador; a matriz vem pronta de /auth/me.
+  const canCorrect = pode(session, 'equipamentos:corrigir')
   useEffect(() => {
     const onHashChange = () => setPage(currentPage())
     window.addEventListener('hashchange', onHashChange)
@@ -68,6 +70,6 @@ function Panel({ session, onLogout }: { session: Session; onLogout: () => void }
   }, [])
   return <AppShell page={page} user={session.usuario} onLogout={onLogout}>
     {page === 'map' ? <MapPage onSelect={setSelected} /> : page === 'readings' ? <ReadingsPage /> : <DashboardPage onSelect={setSelected} />}
-    <EquipmentDrawer item={selected} onClose={() => setSelected(null)}/>
+    <EquipmentDrawer item={selected} onClose={() => setSelected(null)} canCorrect={canCorrect}/>
   </AppShell>
 }

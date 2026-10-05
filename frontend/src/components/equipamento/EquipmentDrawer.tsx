@@ -1,20 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
-import { getAllAssets, getMovements } from '../../services/dashboard'
+import { getAsset, getMovements } from '../../services/dashboard'
 import type { EquipmentItem } from '../../types/dashboard'
-import { useLiveQuery } from '../../services/live'
+import { useLiveQuery, useLiveRefresh } from '../../services/live'
 import { AssetStatusBadge, LocationBadge, PresenceBadge, ageLabel, antennaLabel, detectionLabel } from '../DashboardParts'
 import { Icon } from '../layout/Icon'
+import { CorrectionPanel, type CorrectionMode } from './CorrectionPanel'
 
-export function EquipmentDrawer({ item: selected, onClose }: { item: EquipmentItem | null; onClose: () => void }) {
+interface Props {
+  item: EquipmentItem | null
+  onClose: () => void
+  /** Só o administrador (`equipamentos:corrigir`) vê a seção de correção (ISS-025). */
+  canCorrect?: boolean
+}
+
+export function EquipmentDrawer({ item: selected, onClose, canCorrect = false }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyPage, setHistoryPage] = useState(1)
-  const detail = useLiveQuery(selected ? `detail:${selected.id}` : null, async (signal) => {
-    const result = await getAllAssets({ q: selected!.identificador_interno }, signal)
-    const found = result.find((asset) => asset.id === selected!.id)
-    if (!found) throw new Error('Equipamento não encontrado')
-    return found
-  })
+  const { refresh } = useLiveRefresh()
+  const [correction, setCorrection] = useState<CorrectionMode | null>(null)
+  const [correctionDone, setCorrectionDone] = useState<string | null>(null)
+  // Recarrega pelo ID, identidade estável: o nome e o patrimônio podem ter sido
+  // corrigidos (ISS-025), e uma busca textual pode não trazer o item na 1ª página.
+  const detail = useLiveQuery(selected ? `detail:${selected.id}` : null,
+    (signal) => getAsset(selected!.id, signal))
   const item = detail.data ?? selected
   const historyQuery = useLiveQuery(item && historyOpen ? `history:${item.id}:${historyPage}` : null,
     (signal) => getMovements(item!.id, historyPage, signal))
@@ -23,6 +32,8 @@ export function EquipmentDrawer({ item: selected, onClose }: { item: EquipmentIt
   useEffect(() => {
     setHistoryOpen(false)
     setHistoryPage(1)
+    setCorrection(null)
+    setCorrectionDone(null)
   }, [selected?.id])
   useEffect(() => {
     if (!item) return
@@ -31,7 +42,7 @@ export function EquipmentDrawer({ item: selected, onClose }: { item: EquipmentIt
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
       if (event.key === 'Tab') {
-        const controls = closeRef.current?.closest('[role="dialog"]')?.querySelectorAll<HTMLElement>('button, a, input, select')
+        const controls = closeRef.current?.closest('[role="dialog"]')?.querySelectorAll<HTMLElement>('button, a, input, select, textarea')
         if (!controls?.length) return
         if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls[controls.length - 1].focus() }
         else if (!event.shiftKey && document.activeElement === controls[controls.length - 1]) { event.preventDefault(); controls[0].focus() }
@@ -64,12 +75,28 @@ export function EquipmentDrawer({ item: selected, onClose }: { item: EquipmentIt
             {history.items.length ? <ol>{history.items.map((movement) => <li key={movement.id}>
               <strong>{movement.zona_origem ?? 'Origem não registrada'} → {movement.zona_destino}</strong>
               <span>{movement.movimentada_em ? detectionLabel(movement.movimentada_em) : 'Horário da movimentação indisponível'}</span>
-              {movement.origem_registro === 'correcao_manual' && <small>Correção manual{movement.justificativa ? `: ${movement.justificativa}` : ''}</small>}
+              {movement.origem_registro === 'correcao_manual' && <small>Correção manual{movement.justificativa ? `: ${movement.justificativa}` : ''}{movement.referencia ? ` (ref. ${movement.referencia})` : ''}</small>}
             </li>)}</ol> : <p>Nenhuma movimentação registrada.</p>}
             {history.pages > 1 && <nav aria-label="Páginas do histórico"><button type="button" disabled={historyPage <= 1} onClick={() => setHistoryPage((page) => page - 1)}>Anterior</button><span>Página {history.page} de {history.pages}</span><button type="button" disabled={historyPage >= history.pages} onClick={() => setHistoryPage((page) => page + 1)}>Próxima</button></nav>}
           </>}
         </div>}
       </section>
+      {canCorrect && <section className="correction-section" aria-labelledby="correction-title"><h3 id="correction-title">Correção manual</h3>
+        {correctionDone && <p className="correction-success" role="status">{correctionDone}</p>}
+        {correction ? <CorrectionPanel key={correction} mode={correction} equipmentId={item.id}
+          onCancel={() => setCorrection(null)}
+          onDone={(message) => {
+            setCorrection(null)
+            setCorrectionDone(message)
+            setHistoryPage(1)
+            setHistoryOpen(true)
+            // Atualização global (ISS-033): detalhe, histórico, lista e mapa sem esperar o ciclo.
+            refresh()
+          }}/> : <div className="correction-actions">
+          <button type="button" className="correction-secondary" onClick={() => { setCorrectionDone(null); setCorrection('localizacao') }}>Corrigir localização</button>
+          <button type="button" className="correction-secondary" onClick={() => { setCorrectionDone(null); setCorrection('cadastro') }}>Corrigir cadastro</button>
+        </div>}
+      </section>}
     </aside>
   </div>
 }
