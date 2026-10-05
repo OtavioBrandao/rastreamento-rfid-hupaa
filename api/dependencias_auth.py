@@ -1,13 +1,13 @@
 """
 Dependencies de sessão (ISS-026).
 
-Três níveis, do mais permissivo ao mais restrito:
+Dois níveis de sessão; a permissão por perfil vem por cima, em
+`api/permissoes.py` (ISS-027):
 - `sessao_autenticada`: qualquer sessão válida, inclusive com senha
-  temporária. Só /auth/me, /auth/trocar-senha e /auth/logout usam direto.
+  temporária. Só /auth/me e /auth/trocar-senha usam direto.
 - `sessao_liberada`: sessão válida SEM troca de senha pendente. Com senha
   temporária responde 403 com detail exatamente "troca_de_senha_obrigatoria"
-  — o front da ISS-027 depende desse valor.
-- `sessao_administrador`: liberada e com perfil administrador.
+  — o front depende desse valor. `exigir`/`exigir_por_metodo` partem daqui.
 
 O token vem SÓ do cookie `rfid_sessao`; não existe header Authorization.
 """
@@ -19,12 +19,11 @@ from sqlalchemy.orm import Session
 
 from api.config_auth import obter_agora
 from api.database import get_db
-from api.service_auth import PERFIL_ADMINISTRADOR, SessaoAutenticada, resolver_sessao
+from api.service_auth import SessaoAutenticada, resolver_sessao
 
 NOME_COOKIE = "rfid_sessao"
 DETALHE_NAO_AUTENTICADO = "nao_autenticado"
 DETALHE_TROCA_OBRIGATORIA = "troca_de_senha_obrigatoria"
-DETALHE_SO_ADMIN = "acesso_restrito_a_administradores"
 
 
 def sessao_autenticada(
@@ -45,10 +44,3 @@ def sessao_liberada(
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail=DETALHE_TROCA_OBRIGATORIA)
     return sessao
 
-
-def sessao_administrador(
-    sessao: SessaoAutenticada = Depends(sessao_liberada),
-) -> SessaoAutenticada:
-    if sessao.usuario.perfil.nome != PERFIL_ADMINISTRADOR:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=DETALHE_SO_ADMIN)
-    return sessao

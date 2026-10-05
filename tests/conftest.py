@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from alembic.config import Config
@@ -81,6 +82,54 @@ TABELAS_DO_CRUD = (
 
 
 HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1"}
+
+MARCADOR_AUTENTICACAO_REAL = "autenticacao_real"
+
+
+def pytest_configure(config) -> None:
+    config.addinivalue_line(
+        "markers",
+        f"{MARCADOR_AUTENTICACAO_REAL}: não substitui a sessão por um administrador de "
+        "teste; o teste faz login de verdade (ISS-026/ISS-027).",
+    )
+
+
+@pytest.fixture(autouse=True)
+def administrador_de_teste(request):
+    """
+    ISS-027: toda rota de negócio passou a exigir sessão e permissão. Os testes
+    de CRUD anteriores chamam a API sem login; para eles, `sessao_autenticada`
+    é substituída por um ADMINISTRADOR TRANSIENTE — objeto em memória, sem
+    linha em `usuarios` nem em `sessoes`. A autorização continua rodando de
+    verdade por cima dele (matriz, senha temporária, log).
+
+    Opt-out: `@pytest.mark.autenticacao_real` (ou `pytestmark`) nos módulos que
+    testam login, sessão e permissão com cookie real.
+
+    ATENÇÃO ISS-028: quando os serviços passarem a gravar o AUTOR (ex.:
+    `auditorias.usuario_id`), este admin sem linha no banco violaria a FK —
+    será preciso inserir um usuário real aqui e apontar a sessão para ele.
+    """
+    if request.node.get_closest_marker(MARCADOR_AUTENTICACAO_REAL):
+        yield
+        return
+    from api.dependencias_auth import sessao_autenticada
+    from api.main import app
+    from api.service_auth import PERFIL_ADMINISTRADOR, SessaoAutenticada
+    from db.models import Perfil, Usuario
+
+    admin = Usuario(
+        id=0, nome="Administrador de teste", email="admin-teste@hupaa.example",
+        perfil=Perfil(id=0, nome=PERFIL_ADMINISTRADOR), ativo=True, deve_trocar_senha=False,
+    )
+    sessao = SessaoAutenticada(
+        sessao_id=0, expira_em=datetime(2999, 1, 1, tzinfo=timezone.utc), usuario=admin
+    )
+    app.dependency_overrides[sessao_autenticada] = lambda: sessao
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(sessao_autenticada, None)
 
 
 def _url_do_banco_de_teste() -> str | None:

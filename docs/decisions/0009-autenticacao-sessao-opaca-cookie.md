@@ -41,5 +41,5 @@ A autorização por perfil nas demais rotas fica para a ISS-027, e o catálogo d
 
 ## Consequências
 - Cada request autenticada custa uma consulta por índice único em `sessoes`, com join em `usuarios` e `perfis`.
-- A ISS-027 pode proteger as rotas existentes reusando as dependencies `sessao_liberada` e `sessao_administrador` (`api/dependencias_auth.py`). O front pode contar com o detail `troca_de_senha_obrigatoria`.
+- A ISS-027 protegeu as rotas existentes a partir de `sessao_liberada`, com a matriz de `api/permissoes.py` (que substituiu `sessao_administrador`). O front conta com o detail `troca_de_senha_obrigatoria`.
 - Mudar o formato do token ou do cookie invalida todas as sessões abertas, o que é aceitável: basta entrar de novo.

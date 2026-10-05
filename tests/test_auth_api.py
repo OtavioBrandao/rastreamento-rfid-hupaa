@@ -26,6 +26,9 @@ from suporte_auth import (
 
 from api import senhas
 
+# ISS-027: login e cookie reais; sem o administrador de teste do conftest.
+pytestmark = pytest.mark.autenticacao_real
+
 EMAIL = "maria@hupaa.example"
 NOVA = "nova-senha-segura-2"
 

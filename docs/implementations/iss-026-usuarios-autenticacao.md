@@ -8,7 +8,7 @@ Até aqui a API do MVP era aberta: as tabelas `usuarios`, `perfis` e `auditorias
 - administração de usuários por administradores (`/usuarios`);
 - criação do primeiro administrador pelo terminal (`python -m api.criar_admin`).
 
-**Fora do escopo, de propósito:** proteger as rotas existentes (equipamentos, zonas, hardware etc.) é a ISS-027, e o catálogo de auditoria é a ISS-028. Essas rotas continuam públicas.
+**Fora do escopo, de propósito:** proteger as rotas existentes (equipamentos, zonas, hardware etc.) é a ISS-027, e o catálogo de auditoria é a ISS-028. Essas rotas continuaram públicas até a [ISS-027](iss-027-perfis-rbac.md), que as protegeu.
 
 ## Por que importa para o MVP
 
@@ -43,7 +43,7 @@ A localização de equipamentos do HUPAA não pode ser consultada nem alterada p
 | `POST /usuarios/{id}/reativar` | 200 | zera o bloqueio; **não** ressuscita sessões antigas |
 | `POST /usuarios/{id}/redefinir-senha` `{senha_temporaria}` | 200 | `deve_trocar_senha=true`, zera o bloqueio, revoga sessões; 409 na própria conta |
 
-Sem sessão → 401 `nao_autenticado`; perfil operacional → 403 `acesso_restrito_a_administradores`; admin com senha temporária → 403 `troca_de_senha_obrigatoria`. Nenhum schema de resposta tem campo de senha ou hash.
+Sem sessão → 401 `nao_autenticado`; perfil operacional → 403 `acesso_negado` (detail unificado na [ISS-027](iss-027-perfis-rbac.md); antes era `acesso_restrito_a_administradores`); admin com senha temporária → 403 `troca_de_senha_obrigatoria`. Nenhum schema de resposta tem campo de senha ou hash.
 
 A resposta de usuário traz `id, nome, email, perfil, ativo, deve_trocar_senha, bloqueado_ate, ultimo_login_em, created_at, updated_at`, com instantes em UTC.
 
@@ -137,6 +137,6 @@ python -m alembic upgrade head && python -m alembic check
 
 - Bloqueio por **conta**, não por IP: um atacante pode bloquear uma conta de propósito. Limitar a taxa por IP depende de proxy reverso (ver ADR 0009).
 - CSRF coberto por `SameSite=Strict` **enquanto front e API tiverem a mesma origem**.
-- As rotas existentes seguem públicas até a ISS-027.
+- As rotas existentes seguiram públicas até a [ISS-027](iss-027-perfis-rbac.md), que passou a exigir sessão e permissão nelas.
 - Sessões revogadas ou expiradas não são expurgadas (retenção, RNF-015).
 - `updated_at` de `usuarios` segue a ressalva de `equipamentos`: `onupdate` só dispara em UPDATE feito pelo SQLAlchemy.

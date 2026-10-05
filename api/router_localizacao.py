@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from api import service_localizacao as service
 from api.database import get_db
+from api.permissoes import Permissao, exigir_por_metodo
 from api.schemas_localizacao import (
     AndarArvore,
     AndarAtualizar,
@@ -36,7 +37,10 @@ from api.schemas_localizacao import (
     ZonaResposta,
 )
 
-router = APIRouter()
+_PERMISSAO = exigir_por_metodo(
+    consultar=Permissao.LOCALIZACAO_CONSULTAR, alterar=Permissao.LOCALIZACAO_ALTERAR
+)
+router = APIRouter(dependencies=[Depends(_PERMISSAO)])
 
 _NAO_ENCONTRADO = (
     service.AndarNaoEncontrado,

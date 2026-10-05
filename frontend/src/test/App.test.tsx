@@ -15,6 +15,20 @@ const assets = [item(1, { status: 'atencao', localizacao_desatualizada: true }),
   localizacao_desatualizada: null,
 }), item(3, { ultima_zona: { id: 3, nome: 'Zona A', referencia_planta: 'sala-a',
   andar: '2º andar', setor: 'Bloco B', caminho: '2º andar → Bloco B → Zona A' } })]
+// ISS-027: o painel só monta com sessão; /auth/me responde uma sessão de administrador.
+const SESSAO_ADMIN = {
+  usuario: { id: 1, nome: 'Ana Admin', email: 'ana@hupaa.example', perfil: 'administrador',
+    ativo: true, deve_trocar_senha: false },
+  sessao_expira_em: '2026-09-26T20:00:00Z',
+  permissoes: ['equipamentos:consultar', 'equipamentos:alterar'],
+}
+const sessionResponse = () => ({ ok: true, status: 200, json: async () => SESSAO_ADMIN })
+
+/** Renderiza e ESPERA o painel montar (a sessão é consultada antes). */
+async function renderApp() {
+  render(<App/>)
+  await screen.findByRole('searchbox', { name: 'Nome ou patrimônio' })
+}
 let calls: string[]
 let paginationMode: boolean
 let historyFailure: boolean
@@ -32,6 +46,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (input: string) => {
     calls.push(String(input))
     const url = new URL(String(input), 'http://localhost')
+    if (url.pathname === '/auth/me') return sessionResponse()
     if (historyFailure && url.pathname.endsWith('/movimentacoes')) return { ok: false, status: 503 }
     if (assetsFailure && url.pathname === '/api/ativos') return { ok: false, status: 503 }
     if (activityFailure && url.pathname === '/api/dashboard/atividade') return { ok: false, status: 503 }
@@ -84,7 +99,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('integração da busca', () => {
   it('mostra a badge de localização na tabela e no detalhe; preserva null', async () => {
-    render(<App/>)
+    await renderApp()
     const table = await screen.findByRole('table')
     expect(within(table).getByText('Localização pode estar desatualizada')).toBeInTheDocument()
     expect(within(table).getByText('Nenhuma localização registrada')).toBeInTheDocument()
@@ -108,7 +123,7 @@ describe('integração da busca', () => {
   })
 
   it('filtra EPC nos dois modos e não plota ativo nunca detectado', async () => {
-    render(<App/>)
+    await renderApp()
     fireEvent.click(screen.getByRole('link', { name: 'Mapa / Planta' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Sem zona confirmada/ }))
     const semZona = screen.getByRole('tabpanel', { name: /Sem zona confirmada/ })
@@ -187,7 +202,7 @@ describe('integração da busca', () => {
 
   it('usa a paginação real do servidor', async () => {
     paginationMode = true
-    render(<App/>)
+    await renderApp()
     await screen.findByRole('table')
     fireEvent.click(screen.getByRole('button', { name: 'Próxima' }))
     expect(await screen.findByRole('button', { name: /Maca 99/ })).toBeInTheDocument()
@@ -195,13 +210,16 @@ describe('integração da busca', () => {
   })
 
   it('exibe erro recuperável quando a API falha', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503 })))
-    render(<App/>)
+    // Sessão válida; só os dados falham (senão o teste veria o login, não o erro de dados).
+    vi.stubGlobal('fetch', vi.fn(async (input: string) =>
+      new URL(String(input), 'http://localhost').pathname === '/auth/me'
+        ? sessionResponse() : { ok: false, status: 503 }))
+    await renderApp()
     expect(await screen.findByText('Não foi possível carregar os equipamentos.')).toBeInTheDocument()
   })
 
   it('limpa a lista antiga ao falhar uma busca e recupera no retry', async () => {
-    render(<App/>)
+    await renderApp()
     expect(await screen.findByRole('table')).toBeInTheDocument()
     assetsFailure = true
     fireEvent.change(screen.getByRole('searchbox', { name: 'Nome ou patrimônio' }), { target: { value: 'Maca' } })
@@ -214,7 +232,7 @@ describe('integração da busca', () => {
   })
 
   it('ignora resposta atrasada de uma busca anterior após erro', async () => {
-    render(<App/>)
+    await renderApp()
     expect(await screen.findByRole('table')).toBeInTheDocument()
     const originalFetch = globalThis.fetch
     let releaseOld!: (value: { ok: boolean; json: () => Promise<unknown> }) => void
@@ -241,7 +259,7 @@ describe('integração da busca', () => {
 
   it('exibe erro da atividade e recupera sem dados antigos', async () => {
     activityFailure = true
-    render(<App/>)
+    await renderApp()
     const region = screen.getByRole('region', { name: 'Movimentações recentes' })
     expect(await within(region).findByText(/Não foi possível carregar as movimentações/)).toBeInTheDocument()
     expect(region).not.toHaveTextContent('Zona 0 → Zona 1')
@@ -251,7 +269,7 @@ describe('integração da busca', () => {
   })
 
   it('não exibe histórico antigo quando a consulta falha e permite nova tentativa', async () => {
-    render(<App/>)
+    await renderApp()
     const table = await screen.findByRole('table')
     fireEvent.click(within(table).getByRole('button', { name: /Maca 1/ }))
     historyFailure = true

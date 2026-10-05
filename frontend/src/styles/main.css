@@ -1799,3 +1799,166 @@ button,a {
 .registered-detections { margin-top:20px }
 .asset-filters .checkbox-label { display:flex; align-items:center; gap:8px; flex:0 1 auto; min-height:40px }
 .asset-filters .checkbox-label input { width:auto; min-height:0 }
+
+/* ISS-027: sessão — cabeçalho, login e troca de senha */
+.site-header {
+  justify-content:space-between;
+  gap:16px
+}
+.session-user {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0
+}
+.session-name {
+  font-size:.84rem;
+  font-weight:650;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.session-profile {
+  font-size:.7rem;
+  font-weight:750;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--slate);
+  background:var(--canvas);
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:4px 10px
+}
+.session-logout,.auth-secondary {
+  background:#fff;
+  color:var(--blue);
+  border:1px solid var(--blue);
+  border-radius:8px;
+  font-weight:750;
+  padding:8px 16px
+}
+.session-logout:hover,.auth-secondary:hover {
+  background:#eef6fb
+}
+.auth-screen {
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:32px 16px;
+  background:var(--canvas)
+}
+.auth-loading {
+  color:var(--muted)
+}
+.auth-card {
+  width:100%;
+  max-width:420px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:32px
+}
+.auth-brand {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  color:var(--slate);
+  margin-bottom:24px
+}
+.auth-brand .brand-mark {
+  width:40px;
+  height:40px;
+  flex:0 0 40px;
+  color:var(--slate)
+}
+.auth-brand strong,.auth-brand small {
+  display:block
+}
+.auth-brand small {
+  font-size:.7rem;
+  color:var(--muted);
+  letter-spacing:.06em
+}
+.auth-card h1 {
+  font-size:1.5rem;
+  margin:0 0 8px;
+  color:var(--slate)
+}
+.auth-lead {
+  margin:0 0 24px;
+  color:var(--muted);
+  font-size:.9rem;
+  line-height:1.45
+}
+.auth-form {
+  display:flex;
+  flex-direction:column
+}
+.auth-form label {
+  font-weight:750;
+  font-size:.82rem;
+  margin:0 0 8px
+}
+.auth-form input {
+  min-height:46px;
+  border:1px solid #bdccca;
+  border-radius:8px;
+  padding:10px 12px;
+  margin-bottom:16px;
+  font-size:.9rem;
+  background:#fff
+}
+.auth-form input:focus-visible {
+  border-color:var(--blue);
+  outline-offset:1px
+}
+.auth-hint {
+  margin:-8px 0 16px;
+  font-size:.76rem;
+  color:var(--muted)
+}
+.auth-primary {
+  min-height:46px;
+  background:var(--blue);
+  color:#fff;
+  border:0;
+  border-radius:8px;
+  font-weight:750;
+  margin-top:8px
+}
+.auth-primary:disabled {
+  opacity:.7;
+  cursor:progress
+}
+.auth-secondary {
+  min-height:42px;
+  margin-top:12px
+}
+.auth-error,.auth-notice {
+  border-radius:8px;
+  padding:10px 12px;
+  font-size:.84rem;
+  margin:0 0 16px
+}
+.auth-error {
+  color:var(--critical);
+  background:#fff9f8;
+  border:1px solid #f0c7c1
+}
+.auth-notice {
+  color:#6b4305;
+  background:#fff8ec;
+  border:1px solid #f1d6a8
+}
+@media(max-width:460px) {
+  .auth-card {
+    padding:24px 18px
+  }
+  .auth-brand .brand-mark {
+    display:block
+  }
+  .session-name {
+    display:none
+  }
+}

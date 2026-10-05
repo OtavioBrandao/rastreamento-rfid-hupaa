@@ -1,4 +1,5 @@
 import type { ActivityItem, AssetFilters, AssetPage, FilterOption, MovementPage, OverviewSummary, ReadSummary } from '../types/dashboard'
+import { notifySessionEnded } from './auth'
 import type { MapTopology, RegisteredPortal, RegisteredZone } from './mapTopology'
 
 const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -10,7 +11,9 @@ async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   signal?.addEventListener('abort', abort, { once: true })
   const timeout = window.setTimeout(abort, 8000)
   try {
-    const response = await fetch(`${base}${path}`, { signal: controller.signal, cache: 'no-store' })
+    const response = await fetch(`${base}${path}`, { signal: controller.signal, cache: 'no-store', credentials: 'same-origin' })
+    // 401 no meio do uso = sessão expirada, conta desativada ou logout em outra aba (ISS-027).
+    if (response.status === 401) notifySessionEnded()
     if (!response.ok) throw new Error(`API respondeu ${response.status}`)
     return await response.json() as T
   } finally { window.clearTimeout(timeout); signal?.removeEventListener('abort', abort) }

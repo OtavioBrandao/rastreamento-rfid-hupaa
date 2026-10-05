@@ -14,6 +14,9 @@ from suporte_auth import (
 
 from api import service_usuarios
 
+# ISS-027: login e cookie reais; sem o administrador de teste do conftest.
+pytestmark = pytest.mark.autenticacao_real
+
 TEMP = "temporaria-123"
 CAMPOS_RESPOSTA = {
     "id", "nome", "email", "perfil", "ativo", "deve_trocar_senha", "bloqueado_ate",
@@ -71,7 +74,7 @@ def test_todas_as_rotas_exigem_administrador(engine, api_auth, metodo, rota, cor
     resposta = cliente.request(metodo, rota, json=corpo)
 
     assert resposta.status_code == 403
-    assert resposta.json() == {"detail": "acesso_restrito_a_administradores"}
+    assert resposta.json() == {"detail": "acesso_negado"}
 
 
 def test_admin_rebaixado_perde_acesso_na_sessao_aberta(engine, admin_logado):
@@ -379,7 +382,22 @@ def test_autor_sem_perfil_de_admin_e_recusado_sob_lock(engine, api_auth):
     operacional = inserir_usuario(engine, "op@hupaa.example")
 
     with Session(bind=engine) as db:
-        with pytest.raises(service_usuarios.AutorSemPermissao):
+        with pytest.raises(service_usuarios.AutorSemPermissao, match="^acesso_negado$"):
             service_usuarios.atualizar(db, operacional, admin, perfil="operacional")
 
     assert consultar(engine, "SELECT count(*) FROM auditorias")[0][0] == 0
+
+
+def test_autor_rebaixado_durante_a_request_recebe_a_negacao_unica(engine, admin_logado,
+                                                                  monkeypatch):
+    """A corrida (autor perde o perfil enquanto espera o lock) responde como qualquer negação."""
+    cliente, _ = admin_logado
+    alvo = inserir_usuario(engine, "alvo@hupaa.example")
+
+    def perdeu_o_perfil(*_args, **_kwargs):
+        raise service_usuarios.AutorSemPermissao()
+
+    monkeypatch.setattr(service_usuarios, "atualizar", perdeu_o_perfil)
+    resposta = cliente.patch(f"/usuarios/{alvo}", json={"nome": "Outro"})
+
+    assert (resposta.status_code, resposta.json()) == (403, {"detail": "acesso_negado"})
