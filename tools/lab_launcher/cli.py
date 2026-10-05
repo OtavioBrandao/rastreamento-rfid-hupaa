@@ -14,6 +14,7 @@ from dotenv import dotenv_values
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.epc import normalizar_epc
+from rfid_ingestion.topics import reading_topic
 
 from .config import ROOT, carregar
 from .docker_env import (
@@ -30,6 +31,7 @@ from .docker_env import (
 from .session import iniciar as iniciar_sessao
 from .session import parar as parar_sessao
 from .synthetic import epcs_padrao, novo_contador, programa_multitag, publicar, roteiro
+from .tags import epcs_recentes, parse_tag, perguntar_tags
 from .terminals import abrir, encerrar
 from .verify import conferir, inicio
 
@@ -81,9 +83,53 @@ def _roteiro_escolhido(valor: int | None, interativo: bool) -> int:
     return escolhido
 
 
+def _transporte_escolhido(valor: str | None, modo: str, interativo: bool) -> str:
+    if modo != "managed":
+        if valor not in (None, "tls"):
+            raise ValueError("--mqtt-transport só se aplica ao broker externo")
+        return "tls"
+    if valor is None and interativo:
+        typer.echo("Transporte MQTT do broker externo:")
+        typer.echo("1. mqtts com TLS (porta 8883, HiveMQ Cloud)")
+        typer.echo("2. mqtt sem TLS (porta 1883, somente para ensaio de laboratório)")
+        valor = {"1": "tls", "2": "plain"}.get(
+            typer.prompt("Escolha o transporte (1-2)", default="1"), "")
+    valor = valor or "tls"
+    if valor not in ("tls", "plain"):
+        raise ValueError("--mqtt-transport deve ser tls ou plain")
+    return valor
+
+
+def _avisar_transporte_plain(valores: dict[str, str], interativo: bool) -> None:
+    host = valores["MQTT_HOST"]
+    print(f"ATENÇÃO: MQTT sem TLS em {host}:{valores['MQTT_PORT']}. Leituras trafegam "
+          "em texto aberto; use apenas EPCs de laboratório.")
+    if host.endswith(".hivemq.cloud"):
+        aviso = ("clusters HiveMQ Cloud aceitam somente TLS (8883) ou WebSocket TLS "
+                 "(8884); a porta 1883 deve ser recusada")
+        if not interativo or not typer.confirm(f"{aviso}. Continuar mesmo assim?",
+                                               default=False):
+            raise ValueError(aviso)
+
+
+def _tags_fisicas(tags: list[str] | None, database_url: str,
+                  interativo: bool) -> list[tuple[str, str]]:
+    if tags:
+        escolhidas = dict(parse_tag(item) for item in tags)
+        return list(escolhidas.items())
+    if not interativo:
+        print("Nenhuma --tag informada; nenhum equipamento será cadastrado.")
+        return []
+    try:
+        recentes = epcs_recentes(database_url)
+    except SQLAlchemyError:
+        recentes = []
+    return perguntar_tags(recentes)
+
+
 def _perfil_publicador(modo: str, valores: dict[str, str], arquivo: Path | None,
                       interativo: bool) -> dict[str, str]:
-    if modo == "managed" and arquivo is None:
+    if modo == "managed" and arquivo is None and valores.get("MQTT_INSECURE_LAB") != "true":
         padrao = ROOT / ".env.cloud.reader-01"
         if padrao.exists():
             arquivo = padrao
@@ -93,7 +139,7 @@ def _perfil_publicador(modo: str, valores: dict[str, str], arquivo: Path | None,
         else:
             raise ValueError("teste externo sintético exige --publisher-env-file com "
                              "credencial autorizada a publicar")
-    if arquivo is None:
+    if arquivo is None or valores.get("MQTT_INSECURE_LAB") == "true":
         return dict(valores)
     if not arquivo.is_file():
         raise ValueError(f"arquivo do publicador ausente: {arquivo}")
@@ -175,6 +221,10 @@ def start(
     messages: Annotated[int, typer.Option("--messages", help="Leituras por item/travessia")] = 100,
     interval: Annotated[float, typer.Option("--interval")] = 0.5,
     epc: Annotated[list[str] | None, typer.Option("--epc")] = None,
+    tag: Annotated[list[str] | None, typer.Option(
+        "--tag", help="Leitor físico: EPC=Nome do equipamento (repita por tag)")] = None,
+    mqtt_transport: Annotated[str | None, typer.Option(
+        "--mqtt-transport", help="Broker externo: tls (8883) ou plain (1883, laboratório)")] = None,
 ) -> None:
     processos = []
     arquivo = None
@@ -183,13 +233,22 @@ def start(
     started = False
     marker = None
     lista: list[str] = []
+    tags_fisicas: list[tuple[str, str]] = []
     publisher: dict[str, str] | None = None
     etapa = "seleção do cenário"
     try:
         modo, origem = _cenario(env, source)
         print(f"Cenário: ambiente {modo}; origem {origem}; leitor {reader_id}")
         interativo = sys.stdin.isatty()
-        roteiro_id = _roteiro_escolhido(scenario, interativo)
+        if origem == "physical":
+            if scenario is not None or epc:
+                raise ValueError("leitor físico usa --tag EPC=Nome; --scenario e --epc "
+                                 "são do teste sintético")
+            roteiro_id = 1
+        else:
+            if tag:
+                raise ValueError("--tag é do leitor físico; no sintético use --epc")
+            roteiro_id = _roteiro_escolhido(scenario, interativo)
         if roteiro_id != 1 and not passage:
             raise ValueError("--single só é compatível com o roteiro 1")
         if roteiro_id != 1 and count != 1:
@@ -201,9 +260,16 @@ def start(
         if modo == "managed" and fresh:
             raise ValueError("--fresh só é permitido no banco local")
         etapa = "configuração do ambiente"
-        arquivo, valores = carregar(modo, env_file, interativo)
+        transporte = _transporte_escolhido(mqtt_transport, modo, interativo)
+        arquivo, valores = carregar(modo, env_file, interativo, transporte)
+        if transporte == "plain":
+            _avisar_transporte_plain(valores, interativo)
         ambiente = dict(os.environ, **valores)
         print(f"Configuração carregada de {arquivo.name}")
+        if modo == "managed":
+            print(f"Broker externo: {valores['MQTT_HOST']}:{valores.get('MQTT_PORT', '8883')} "
+                  f"({'mqtt sem TLS' if transporte == 'plain' else 'mqtts/TLS'}); "
+                  f"tópico {valores.get('MQTT_TOPIC', 'easy/dev/hupaa/+/+/readings')}")
         if timestamp_format and timestamp_format not in ("counter", "rfc3339", "epoch_ms"):
             raise ValueError("--timestamp-format deve ser counter, rfc3339 ou epoch_ms")
         if origem == "synthetic":
@@ -227,12 +293,6 @@ def start(
                       f"{total_planejado} leituras no total; EPCs {', '.join(lista)}")
             publisher = _perfil_publicador(modo, valores, publisher_env_file,
                                            interativo)
-        elif roteiro_id != 1:
-            print("Roteiro de movimentação manual (o leitor físico fornece as leituras):")
-            if roteiro_id == 2:
-                print("  Tag 02: A → B; depois B → A enquanto tag 03 faz A → B; repetir.")
-            else:
-                print("  Tag 02: A → B e permanecer. Tag 03: A ↔ B repetidamente.")
         ambiente["EZ700_TIMESTAMP_FORMAT"] = timestamp_format or "counter"
         projeto = valores.get("COMPOSE_PROJECT_NAME", "rfid-hospital-local" if modo == "local"
                               else "rfid-hospital-managed")
@@ -270,6 +330,9 @@ def start(
                 mostrar=True)
         etapa = "conclusão das migrations"
         aguardar(arquivo, modo, migracao, completo=True, env=ambiente)
+        if origem == "physical":
+            etapa = "seleção das tags físicas"
+            tags_fisicas = _tags_fisicas(tag, valores["APP_DATABASE_URL"], interativo)
         etapa = "cadastro base do laboratório"
         print("Garantindo cadastro base...")
         seed_env = dict(ambiente)
@@ -277,7 +340,8 @@ def start(
             seed_env["DATABASE_URL"] = valores["DATABASE_URL"]
         executar([sys.executable, "-m", "tools.lab_launcher.seed", "--reader-id", reader_id,
                   *(["--serial", serial] if serial else []),
-                  *(item for valor in lista for item in ("--epc", valor))],
+                  *(item for valor in lista for item in ("--epc", valor)),
+                  *(item for par in tags_fisicas for item in ("--tag", "=".join(par)))],
                  env=seed_env, mostrar=True)
         etapa = "inicialização do ingestor"
         print("Iniciando ingestor...")
@@ -306,7 +370,13 @@ def start(
                      contador_inicial=contador_inicial,
                      programa=programa if roteiro_id != 1 else None)
         else:
-            print("Pronto para leituras do leitor físico. Use 'stop' ao encerrar.")
+            if tags_fisicas:
+                print("Equipamentos do ensaio:")
+                for valor, nome in tags_fisicas:
+                    print(f"  {valor} → {nome}")
+            topico = reading_topic(reader_id, portal=portal_id)
+            print(f"Pronto para leituras do leitor físico em {valores['MQTT_HOST']}:"
+                  f"{valores.get('MQTT_PORT')} no tópico {topico}. Use 'stop' ao encerrar.")
         if interativo and not no_terminals:
             print("Acompanhando o teste. Pressione Ctrl+C para encerrar os serviços.")
             while marker is not None and marker.exists():

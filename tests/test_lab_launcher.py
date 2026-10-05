@@ -24,9 +24,9 @@ from db.models import (
 )
 from rfid_ingestion.config import Settings
 from rfid_ingestion.parsing import build_event
-from tools.lab_launcher import cli, docker_env, session, synthetic, terminals, verify, watch
+from tools.lab_launcher import cli, docker_env, session, synthetic, tags, terminals, verify, watch
 from tools.lab_launcher.config import carregar
-from tools.lab_launcher.seed import semear, semear_epcs_sinteticos
+from tools.lab_launcher.seed import semear, semear_epcs_sinteticos, semear_equipamentos
 
 
 def test_seed_laboratorio_reexecutavel(db):
@@ -705,3 +705,86 @@ def test_falha_de_migration_inclui_log_do_servico(monkeypatch, tmp_path):
     ))
     with pytest.raises(RuntimeError, match="alembic: tabela ausente"):
         docker_env.aguardar(tmp_path / ".env", "local", "migrate-local", completo=True)
+
+
+def test_tags_fisicas_cadastram_equipamentos_com_nome(db):
+    semear(db)
+    epc_a, epc_b = "3034000000000C40000000E8", "3034000000000C400000012F"
+    primeiro = semear_equipamentos(db, [(epc_a.lower(), "Bomba de infusão 01"),
+                                        (epc_b, "Monitor multiparâmetro")])
+    assert all("equipamento criado" in valor for valor in primeiro.values())
+    nomes = set(db.scalars(select(Equipamento.nome)))
+    assert nomes == {"Bomba de infusão 01", "Monitor multiparâmetro"}
+
+    segundo = semear_equipamentos(db, [(epc_a, "Bomba de infusão 02")])
+    assert "renomeado" in segundo[epc_a]
+    assert db.scalar(select(func.count()).select_from(Equipamento)) == 2
+    assert db.scalar(select(func.count()).select_from(AssociacaoTagEquipamento)) == 2
+    assert "Bomba de infusão 02" in set(db.scalars(select(Equipamento.nome)))
+
+
+def test_tag_fisica_nao_renomeia_equipamento_cadastrado_fora_do_laboratorio(db):
+    from api.service_associacao import associar
+    from api.service_equipamento import criar as criar_equipamento
+    from api.service_tipos_equipamento import criar as criar_tipo
+
+    tipo = criar_tipo(db, "Ventilador")
+    real = criar_equipamento(db, "Ventilador UTI 3", tipo.id, "PAT-123")
+    associar(db, real.id, "E28011B000000C40000000E4")
+    resumo = semear_equipamentos(db, [("E28011B000000C40000000E4", "Outro nome")])
+    assert "renomeado" not in resumo["E28011B000000C40000000E4"]
+    db.refresh(real)
+    assert real.nome == "Ventilador UTI 3"
+
+
+def test_tags_fisicas_por_flag_e_por_pergunta(monkeypatch):
+    assert cli._tags_fisicas(["3034000000000c40000000e8=Bomba 01"], "", False) == [
+        ("3034000000000C40000000E8", "Bomba 01")]
+    with pytest.raises(ValueError, match="EPC=Nome"):
+        cli._tags_fisicas(["3034000000000C40000000E8"], "", False)
+    assert cli._tags_fisicas(None, "", False) == []
+
+    recentes = [tags.EpcObservado("3034000000000C40000000E8", 10,
+                                  datetime(2026, 10, 5, tzinfo=timezone.utc), None)]
+    respostas = iter(["1", "Bomba 01", "ZZ", "E28011B000000C4000000132", "Monitor", ""])
+    monkeypatch.setattr(tags.typer, "prompt", lambda *args, **kwargs: next(respostas))
+    assert tags.perguntar_tags(recentes) == [
+        ("3034000000000C40000000E8", "Bomba 01"),
+        ("E28011B000000C4000000132", "Monitor"),
+    ]
+
+
+def test_transporte_plain_usa_broker_sem_tls_e_mantem_banco_externo(monkeypatch, tmp_path):
+    for chave in ("MQTT_HOST", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_PLAIN_HOST"):
+        monkeypatch.delenv(chave, raising=False)
+    arquivo = tmp_path / ".env.cloud"
+    arquivo.write_text(
+        "MQTT_HOST=cluster.s1.eu.hivemq.cloud\nMQTT_USERNAME=ingestor\n"
+        "MQTT_PASSWORD=segredo\nMQTT_CLIENT_ID=easy-cloud-ingestor\n"
+        "MQTT_PLAIN_HOST=broker.hivemq.com\n"
+        "DATABASE_URL=postgresql+psycopg2://u:p@db.neon.tech/x\n"
+        "APP_DATABASE_URL=postgresql+psycopg2://u:p@db-pool.neon.tech/x\n",
+        encoding="utf-8",
+    )
+    _, valores = carregar("managed", arquivo, False, "plain")
+    assert valores["MQTT_HOST"] == "broker.hivemq.com"
+    assert valores["MQTT_PORT"] == "1883"
+    assert (valores["MQTT_TLS_ENABLED"], valores["MQTT_INSECURE_LAB"]) == ("false", "true")
+    assert valores["MQTT_USERNAME"] == ""
+    assert valores["APP_DATABASE_URL"].endswith("db-pool.neon.tech/x")
+    settings = Settings.from_env(valores)
+    assert not settings.mqtt_tls_enabled and settings.mqtt_port == 1883
+
+    _, tls = carregar("managed", arquivo, False)
+    assert (tls["MQTT_HOST"], tls["MQTT_TLS_ENABLED"]) == ("cluster.s1.eu.hivemq.cloud", "true")
+    with pytest.raises(ValueError, match="somente TLS"):
+        cli._avisar_transporte_plain(dict(valores, MQTT_HOST="c.s1.eu.hivemq.cloud"), False)
+
+
+def test_transporte_e_tags_respeitam_o_modo(monkeypatch):
+    assert cli._transporte_escolhido(None, "local", True) == "tls"
+    with pytest.raises(ValueError, match="broker externo"):
+        cli._transporte_escolhido("plain", "local", False)
+    monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: "2")
+    assert cli._transporte_escolhido(None, "managed", True) == "plain"
+    assert cli._transporte_escolhido(None, "managed", False) == "tls"
