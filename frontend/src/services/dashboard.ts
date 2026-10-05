@@ -1,4 +1,4 @@
-import type { ActivityItem, AssetFilters, AssetPage, FilterOption, MovementPage, OverviewSummary } from '../types/dashboard'
+import type { ActivityItem, AssetFilters, AssetPage, FilterOption, MovementPage, OverviewSummary, ReadSummary } from '../types/dashboard'
 import type { MapTopology, RegisteredPortal, RegisteredZone } from './mapTopology'
 
 const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -86,4 +86,10 @@ export async function getMapTopology(signal?: AbortSignal): Promise<MapTopology>
     portals.push(...next.items)
   }
   return { zones: tree.flatMap((floor) => floor.setores.flatMap((sector) => sector.zonas)), portals }
+}
+
+export function getReadSummary(windowSeconds: number, registeredOnly = false, signal?: AbortSignal): Promise<ReadSummary> {
+  const params = new URLSearchParams({ janela_segundos: String(windowSeconds) })
+  if (registeredOnly) params.set('somente_cadastradas', 'true')
+  return readJson(`/api/leituras/resumo?${params}`, signal)
 }

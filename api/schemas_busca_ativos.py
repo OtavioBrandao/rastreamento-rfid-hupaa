@@ -19,6 +19,15 @@ class ZonaBusca(BaseModel):
     caminho: str
 
 
+class LeituraRecente(BaseModel):
+    """Última leitura bruta da tag ativa; presença, não zona confirmada."""
+
+    em: datetime
+    leitor: str | None = None
+    porta: int | None = None
+    zona: str | None = None
+
+
 class AtivoBusca(BaseModel):
     id: int
     nome: str
@@ -30,6 +39,7 @@ class AtivoBusca(BaseModel):
     ultima_zona: ZonaBusca | None
     ultima_deteccao_em: datetime | None
     localizacao_desatualizada: bool | None
+    ultima_leitura: LeituraRecente | None = None
 
 
 class BuscaAtivosPagina(BaseModel):
