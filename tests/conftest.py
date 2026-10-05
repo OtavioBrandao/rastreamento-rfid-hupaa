@@ -209,9 +209,12 @@ def db(engine):
         # portais/antenas/historico referenciam zonas; zonas -> setores ->
         # andares. auditorias e sessoes referenciam usuarios (ISS-026), então
         # vêm antes dele; `perfis` não é limpa (semeada pela migration).
+        # ISS-028: `auditorias` é append-only (trigger recusa DELETE); TRUNCATE
+        # não dispara trigger de linha e, aqui dentro da transação externa,
+        # também é desfeito pelo rollback do final.
+        conexao.execute(text("TRUNCATE TABLE auditorias"))
         for tabela in (
             "mapeamentos_antena_portal",
-            "auditorias",
             "sessoes",
             "usuarios",
             "associacoes_tag_equipamento",

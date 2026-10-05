@@ -5,8 +5,9 @@ Regras:
 - Permissão = recurso + ação (`equipamentos:consultar`). "equipamentos"
   cobre tipos, vínculo de EPC, busca, dashboard e histórico de movimentações.
 - NEGADO POR PADRÃO: um perfil fora de `MATRIZ` não tem permissão nenhuma.
-- Toda negação é o mesmo 403 `{"detail": "acesso_negado"}` e gera o evento
-  `acesso_negado` no logger `api.autorizacao`. Falta de sessão continua sendo
+- Toda negação é o mesmo 403 `{"detail": "acesso_negado"}`, gera o evento
+  `acesso_negado` no logger `api.autorizacao` e uma linha `acesso_negado`
+  na trilha de auditoria (ISS-028). Falta de sessão continua sendo
   401 `nao_autenticado` (de `sessao_autenticada`) e não é registrada aqui.
 - As duas fábricas partem de `sessao_liberada`: senha temporária barra ANTES
   de qualquer permissão (403 `troca_de_senha_obrigatoria`).
@@ -19,7 +20,10 @@ from collections.abc import Callable
 from enum import StrEnum
 
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
 
+from api import auditoria
+from api.database import get_db
 from api.dependencias_auth import sessao_liberada
 from api.logging_config import registrar_evento
 from api.service_auth import PERFIL_ADMINISTRADOR, PERFIL_OPERACIONAL, SessaoAutenticada
@@ -39,6 +43,7 @@ class Permissao(StrEnum):
     HARDWARE_ALTERAR = "hardware:alterar"
     LABORATORIO_CONSULTAR = "laboratorio:consultar"
     USUARIOS_ADMINISTRAR = "usuarios:administrar"
+    AUDITORIA_CONSULTAR = "auditoria:consultar"  # ISS-028, só administrador
 
 
 MATRIZ: dict[str, frozenset[Permissao]] = {
@@ -62,7 +67,9 @@ def lista_de_permissoes(perfil: str) -> list[str]:
     return sorted(permissao.value for permissao in permissoes_do_perfil(perfil))
 
 
-def _autorizar(request: Request, sessao: SessaoAutenticada, permissao: Permissao) -> None:
+def _autorizar(
+    request: Request, db: Session, sessao: SessaoAutenticada, permissao: Permissao,
+) -> None:
     perfil = sessao.usuario.perfil.nome
     if permissao in permissoes_do_perfil(perfil):
         return
@@ -72,6 +79,12 @@ def _autorizar(request: Request, sessao: SessaoAutenticada, permissao: Permissao
         logger, "acesso_negado", usuario_id=sessao.usuario.id, perfil=perfil,
         permissao=permissao.value, metodo=request.method, rota=rota,
     )
+    # ISS-028: a negação também entra na trilha, com commit próprio antes do 403.
+    auditoria.registrar(
+        db, "acesso_negado", entidade="rota", usuario_id=sessao.usuario.id,
+        dados={"permissao": permissao.value, "metodo": request.method, "rota": rota},
+    )
+    db.commit()
     raise HTTPException(status.HTTP_403_FORBIDDEN, detail=DETALHE_ACESSO_NEGADO)
 
 
@@ -79,9 +92,11 @@ def exigir(permissao: Permissao) -> Callable[..., SessaoAutenticada]:
     """Dependency de ROTA (ou de router) que exige uma permissão fixa."""
 
     def dependencia(
-        request: Request, sessao: SessaoAutenticada = Depends(sessao_liberada),
+        request: Request,
+        sessao: SessaoAutenticada = Depends(sessao_liberada),
+        db: Session = Depends(get_db),
     ) -> SessaoAutenticada:
-        _autorizar(request, sessao, permissao)
+        _autorizar(request, db, sessao, permissao)
         return sessao
 
     dependencia.__name__ = f"exigir_{permissao.name.lower()}"
@@ -95,10 +110,12 @@ def exigir_por_metodo(
     """Dependency de ROUTER: GET/HEAD/OPTIONS exigem `consultar`; o resto, `alterar`."""
 
     def dependencia(
-        request: Request, sessao: SessaoAutenticada = Depends(sessao_liberada),
+        request: Request,
+        sessao: SessaoAutenticada = Depends(sessao_liberada),
+        db: Session = Depends(get_db),
     ) -> SessaoAutenticada:
         exigida = consultar if request.method in METODOS_DE_CONSULTA else alterar
-        _autorizar(request, sessao, exigida)
+        _autorizar(request, db, sessao, exigida)
         return sessao
 
     dependencia.__name__ = f"exigir_{consultar.name.lower()}_ou_{alterar.name.lower()}"

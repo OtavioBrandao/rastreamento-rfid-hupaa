@@ -213,11 +213,14 @@ erDiagram
     }
 
     AUDITORIAS {
-        bigint id PK
-        bigint usuario_id FK "NULL = sistema"
+        bigint id PK "append-only (trigger)"
+        bigint usuario_id FK "autor; NULL = sistema ou anonimo"
+        string origem "usuario, sistema, anonimo"
         string entidade
-        bigint entidade_id
-        string acao "create, update, delete, correcao_manual"
+        bigint entidade_id "NULL = sem alvo"
+        string acao "catalogo ISS-028 (14 acoes)"
+        string motivo
+        string correlation_id
         jsonb dados_antes
         jsonb dados_depois
         timestamptz registrado_em

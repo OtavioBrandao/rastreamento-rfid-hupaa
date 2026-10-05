@@ -23,6 +23,7 @@ A matriz existe em **um só lugar**: `api/permissoes.py` (`Permissao` e `MATRIZ`
 | `hardware:alterar` | idem, escrita (e a escrita do laboratório, que hoje não existe) | — | ✓ |
 | `laboratorio:consultar` | leituras brutas: `/api/laboratorio/leituras` e `/api/leituras/resumo` (página Leituras) | ✓ | ✓ |
 | `usuarios:administrar` | todo `/usuarios` | — | ✓ |
+| `auditoria:consultar` | `/auditorias`, consulta da trilha ([ISS-028](iss-028-auditoria.md)) | — | ✓ |
 
 ## Regras gerais
 
@@ -57,6 +58,8 @@ Tabela **gerada por introspecção** com `python -m tools.tabela_permissoes`; re
 | GET | `/api/dashboard/resumo` | equipamentos:consultar | ✓ | ✓ |
 | GET | `/api/laboratorio/leituras` | laboratorio:consultar | ✓ | ✓ |
 | GET | `/api/leituras/resumo` | laboratorio:consultar | ✓ | ✓ |
+| GET | `/auditorias` | auditoria:consultar | — | ✓ |
+| GET | `/auditorias/{auditoria_id}` | auditoria:consultar | — | ✓ |
 | POST | `/auth/login` | pública | ✓ | ✓ |
 | POST | `/auth/logout` | pública | ✓ | ✓ |
 | GET | `/auth/me` | qualquer sessão | ✓ | ✓ |
@@ -121,7 +124,7 @@ Tabela **gerada por introspecção** com `python -m tools.tabela_permissoes`; re
 | POST | `/zonas/{zona_id}/inativar` | localizacao:alterar | — | ✓ |
 | POST | `/zonas/{zona_id}/reativar` | localizacao:alterar | — | ✓ |
 
-82 rotas.
+84 rotas.
 
 ## Como funciona
 

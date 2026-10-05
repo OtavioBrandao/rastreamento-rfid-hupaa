@@ -287,21 +287,28 @@ Sessão de login com **token opaco**: o token (256 bits) só existe no cookie `r
 
 **Índice:** parcial `ix_sessoes_usuario_nao_revogadas (usuario_id) WHERE revogada_em IS NULL`, usado para revogar as sessões abertas de um usuário. Sessão válida = não revogada, não expirada **e** usuário ativo (conferido a cada request). Revogar nunca apaga a linha.
 
-### `auditorias` (RF-023, RNF-006)
+### `auditorias` (RF-023, RNF-006, ISS-028)
+Trilha **append-only**: o trigger `tg_auditorias_append_only` (função `auditorias_append_only()`) recusa todo `UPDATE` e `DELETE` com `insufficient_privilege` ("auditorias é append-only: … não é permitido"). Detalhes em [ISS-028](../implementations/iss-028-auditoria.md).
+
 | Coluna | Tipo | Regra |
 |---|---|---|
 | id | bigint | PK |
-| usuario_id | bigint | FK → usuarios, NULL (NULL = ação automática do sistema) |
-| entidade | varchar | NOT NULL — nome da tabela afetada |
-| entidade_id | bigint | NOT NULL |
-| acao | varchar | NOT NULL, CHECK IN ('create','update','delete','correcao_manual') |
-| dados_antes | jsonb | NULL |
-| dados_depois | jsonb | NULL |
+| usuario_id | bigint | FK → usuarios, NULL; autor da ação quando `origem = 'usuario'` |
+| origem | varchar(16) | NOT NULL; `usuario`, `sistema` ou `anonimo` |
+| entidade | varchar | NOT NULL — tabela afetada (ou `rota` para acesso negado) |
+| entidade_id | bigint | NULL quando não há alvo identificável (login de conta inexistente) |
+| acao | varchar | NOT NULL, catálogo fechado (abaixo) |
+| motivo | text | NULL; por que aconteceu (ex.: `conta_inexistente`, `comando criar_admin`) |
+| correlation_id | varchar(64) | NULL; mesma requisição HTTP = mesmo id (header `X-Correlation-ID`) |
+| dados_antes | jsonb | NULL; estado anterior (só campos auditáveis; nunca segredo) |
+| dados_depois | jsonb | NULL; estado novo ou dados do evento |
 | registrado_em | timestamptz | NOT NULL, default now() |
 
-Genérica o suficiente pra auditar qualquer tabela sem precisar de uma tabela de auditoria por entidade. **Índice:** `(entidade, entidade_id, registrado_em)`.
+**CHECKs:** `ck_auditoria_acao_valida` (acao IN criar, atualizar, inativar, reativar, excluir, vincular_epc, desvincular_epc, alterar_senha, correcao_manual, login_aceito, login_recusado, conta_bloqueada, logout, acesso_negado); `ck_auditoria_origem_valida` (origem IN usuario, sistema, anonimo); `ck_auditoria_autor_coerente` (`(origem = 'usuario') = (usuario_id IS NOT NULL)`).
 
-Na ISS-026, criação e edição de usuário gravam aqui na mesma transação (`entidade = 'usuarios'`, `acao` `create`/`update`, `usuario_id` = administrador autor ou NULL para o comando de terminal). `dados_antes`/`dados_depois` guardam nome, e-mail, perfil, `ativo` e `deve_trocar_senha`, mais `operacao` — nunca hash ou senha.
+**Índices:** `(entidade, entidade_id, registrado_em)`; `ix_auditorias_registrado_em (registrado_em, id)` para a listagem em ordem; `ix_auditorias_usuario_registrado_em (usuario_id, registrado_em)`; `ix_auditorias_correlation_id (correlation_id)`.
+
+Genérica: uma tabela para toda entidade. As linhas de cadastro saem do registro central (`api/auditoria.py`, listener `after_flush`) na mesma transação da mudança; os eventos de segurança, de `registrar(...)`. Como a trilha referencia `usuarios`, um usuário que já agiu não pode mais ser apagado fisicamente (baixa é sempre lógica). Só `TRUNCATE` — privilégio do dono do banco — esvazia a tabela.
 
 ---
 
