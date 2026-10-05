@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 
-export type IconName = 'dashboard' | 'map' | 'search' | 'equipment' | 'antenna' | 'reader' | 'alert' | 'check' | 'clock' | 'close' | 'arrow' | 'layers' | 'question'
+export type IconName = 'dashboard' | 'map' | 'search' | 'equipment' | 'antenna' | 'reader' | 'portal' | 'refresh' | 'alert' | 'check' | 'clock' | 'close' | 'arrow' | 'layers' | 'question'
 
 const paths: Record<IconName, ReactNode> = {
+  portal: <><path d="M5 21V3h14v18M2 21h6M16 21h6M8 12h8m-3-3 3 3-3 3"/></>,
+  refresh: <><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></>,
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
   map: <><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></>,
   search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>,

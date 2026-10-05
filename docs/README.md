@@ -138,6 +138,8 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Recência da Localização (ISS-022)](implementations/iss-022-recencia-localizacao.md)
    - [Frontend e Dashboard Operacional (ISS-032, Etapa A)](implementations/iss-032-frontend-dashboard.md)
    - [Redesenho do Dashboard e Mapas (ISS-032)](implementations/iss-032-redesign-mapas.md)
+   - [Mapa por zonas e portais (ISS-023)](implementations/iss-023-mapa-portais.md)
+   - [Atualização automática das telas (ISS-033)](implementations/iss-033-atualizacao-automatica.md)
 4. Decisões Arquiteturais:
    - [Índice de ADRs](decisions/README.md)
 5. Ambiente e Testes:
