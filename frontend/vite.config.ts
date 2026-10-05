@@ -15,6 +15,8 @@ export default defineConfig({
     '/localizacoes': api,
     '/portais': api,
     '/equipamentos': api,
+    // ISS-027: sessão. /usuarios fica de fora: não há tela de usuários.
+    '/auth': api,
   } },
   test: {
     environment: 'jsdom',

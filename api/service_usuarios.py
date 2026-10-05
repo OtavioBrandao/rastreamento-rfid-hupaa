@@ -55,7 +55,7 @@ class AutorSemPermissao(ErroUsuario):
     """O autor perdeu o perfil de administrador enquanto a request esperava o lock."""
 
     def __init__(self) -> None:
-        super().__init__("acesso_restrito_a_administradores")
+        super().__init__("acesso_negado")
 
 
 @dataclass
