@@ -76,6 +76,8 @@ class Settings:
   log_level: str = DEFAULT_LOG_LEVEL
   mqtt_mode: str = "local"
   mqtt_tls_enabled: bool = False
+  # Opt-in explícito de laboratório: broker externo sem TLS (ex.: leitor sem mqtts).
+  mqtt_insecure_lab: bool = False
   mqtt_ca_cert: str | None = field(default=None, repr=False)
   mqtt_keepalive: int = 60
   max_payload_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES
@@ -102,8 +104,13 @@ class Settings:
       tls = source.get("MQTT_TLS_ENABLED", "true" if mode == "cloud" else "false")
       if tls not in ("true", "false"):
           raise ValueError("MQTT_TLS_ENABLED deve ser true ou false")
+      insecure_lab = source.get("MQTT_INSECURE_LAB", "false")
+      if insecure_lab not in ("true", "false"):
+          raise ValueError("MQTT_INSECURE_LAB deve ser true ou false")
       if mode == "cloud":
-          for name in ("MQTT_HOST", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_CLIENT_ID"):
+          obrigatorios = ("MQTT_HOST", "MQTT_CLIENT_ID") if insecure_lab == "true" else (
+              "MQTT_HOST", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_CLIENT_ID")
+          for name in obrigatorios:
               if not source.get(name, "").strip():
                   raise ValueError(f"{name} é obrigatório no modo cloud")
       events_file_value = source.get(
@@ -125,6 +132,7 @@ class Settings:
           log_level=source.get("LOG_LEVEL", DEFAULT_LOG_LEVEL).strip().upper(),
           mqtt_mode=mode,
           mqtt_tls_enabled=tls == "true",
+          mqtt_insecure_lab=insecure_lab == "true",
           mqtt_ca_cert=_optional_value(source.get("MQTT_CA_CERT")),
           mqtt_keepalive=_integer_value(source, "MQTT_KEEPALIVE", 60),
           max_payload_bytes=_integer_value(source, "MQTT_MAX_PAYLOAD_BYTES", DEFAULT_MAX_PAYLOAD_BYTES),
@@ -202,7 +210,9 @@ class Settings:
           raise ValueError("MQTT_MODE deve ser local ou cloud")
       if not re.fullmatch(r"[A-Za-z0-9.:-]+", self.mqtt_host):
           raise ValueError("MQTT_HOST deve ser um hostname ou IP, sem URL ou credenciais")
-      if self.mqtt_mode == "cloud" and (
+      if self.mqtt_insecure_lab and (self.mqtt_mode != "cloud" or self.mqtt_tls_enabled):
+          raise ValueError("MQTT_INSECURE_LAB exige MQTT_MODE=cloud e MQTT_TLS_ENABLED=false")
+      if self.mqtt_mode == "cloud" and not self.mqtt_insecure_lab and (
           not self.mqtt_tls_enabled or self.mqtt_port != 8883
           or not self.mqtt_username or not self.mqtt_password
       ):
