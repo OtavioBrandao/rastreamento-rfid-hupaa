@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { getAllAssets, getMovements } from '../../services/dashboard'
 import type { EquipmentItem } from '../../types/dashboard'
 import { useLiveQuery } from '../../services/live'
-import { LocationBadge, StatusBadge, detectionLabel } from '../DashboardParts'
+import { AssetStatusBadge, LocationBadge, PresenceBadge, ageLabel, antennaLabel, detectionLabel } from '../DashboardParts'
 import { Icon } from '../layout/Icon'
 
 export function EquipmentDrawer({ item: selected, onClose }: { item: EquipmentItem | null; onClose: () => void }) {
@@ -47,12 +47,13 @@ export function EquipmentDrawer({ item: selected, onClose }: { item: EquipmentIt
       <div className="drawer-top"><span className="eyebrow">DETALHE DO EQUIPAMENTO</span><button ref={closeRef} className="icon-button" type="button" aria-label="Fechar painel" onClick={onClose}><Icon name="close"/></button></div>
       <div className="drawer-title-row"><span className="drawer-equipment-icon"><Icon name="equipment" size={26}/></span><div><h2 id="drawer-title">{item.nome}</h2><p>{item.tipo} · {item.identificador_interno}</p></div></div>
       {detail.error && <p role="alert">Não foi possível atualizar os detalhes. Exibindo a última consulta; tentando novamente...</p>}
-      <div className="drawer-badges"><StatusBadge status={item.status}/><LocationBadge item={item}/></div>
+      <div className="drawer-badges"><AssetStatusBadge item={item}/><LocationBadge item={item}/><PresenceBadge reading={item.ultima_leitura}/></div>
       <p className="drawer-caveat">A última zona detectada é aproximada e não indica a posição atual exata.</p>
       <section><h3>Identificação e localização</h3><dl className="drawer-details">
         <div className="drawer-detail"><dt>EPC associado</dt><dd>{item.epc ?? 'Sem EPC associado'}</dd></div>
         <div className="drawer-detail"><dt>Última zona detectada</dt><dd>{item.ultima_zona?.caminho ?? 'Nenhuma localização registrada'}</dd></div>
-        <div className="drawer-detail"><dt>Última detecção (horário de Maceió)</dt><dd>{detectionLabel(item.ultima_deteccao_em)}</dd></div>
+        <div className="drawer-detail"><dt>Última zona confirmada em (horário de Maceió)</dt><dd>{detectionLabel(item.ultima_deteccao_em)}</dd></div>
+        <div className="drawer-detail"><dt>Última leitura da tag</dt><dd>{item.ultima_leitura ? `${antennaLabel(item.ultima_leitura)} · ${ageLabel(item.ultima_leitura.em)}` : 'Nenhuma leitura registrada'}</dd></div>
       </dl></section>
       <section aria-labelledby="history-title"><h3 id="history-title">Histórico de movimentações</h3>
         <button className="text-button" type="button" onClick={() => setHistoryOpen((open) => !open)}>{historyOpen ? 'Ocultar histórico' : 'Ver histórico completo'}</button>

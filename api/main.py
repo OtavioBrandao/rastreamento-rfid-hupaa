@@ -15,6 +15,7 @@ from api.router_busca_ativos import router as router_busca_ativos
 from api.router_dashboard import router as router_dashboard
 from api.router_equipamento import router as router_equipamento
 from api.router_hardware import router as router_hardware
+from api.router_leituras import router as router_leituras
 from api.router_leituras_laboratorio import router as router_leituras_laboratorio
 from api.router_localizacao import router as router_localizacao
 from api.router_tipos_equipamento import router as router_tipos_equipamento
@@ -35,6 +36,7 @@ app.include_router(router_equipamento)
 app.include_router(router_busca_ativos)
 app.include_router(router_dashboard)
 app.include_router(router_leituras_laboratorio)
+app.include_router(router_leituras)
 app.include_router(router_associacao)
 app.include_router(router_localizacao)
 # hardware depois de localizacao: antena/portal dependem de zonas ativas.

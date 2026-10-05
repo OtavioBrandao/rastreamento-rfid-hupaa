@@ -58,6 +58,22 @@ beforeEach(() => {
         zona_destino: 'Zona 1', movimentada_em: '2026-09-26T12:00:00Z',
         registrado_em: '2026-09-26T12:10:00Z', justificativa: null }],
         page: 1, size: 20, total: 1, pages: 1 }
+    } else if (url.pathname === '/api/leituras/resumo') {
+      const registered = [
+        { epc: assets[1].epc, cadastrada: true, equipamento: { id: 2, nome: 'Maca 2', identificador_interno: 'PAT-2', ultima_zona: null, ultima_zona_em: null },
+          leituras: 610, leituras_por_antena: [{ antena_id: 1, leituras: 610 }], ultima_leitura: { em: new Date().toISOString(), leitor: 'reader-01', porta: 1, zona: 'Sala A' } },
+        { epc: assets[0].epc, cadastrada: true, equipamento: { id: 1, nome: 'Maca 1', identificador_interno: 'PAT-1', ultima_zona: 'Zona 1', ultima_zona_em: '2026-09-26T12:00:00Z' },
+          leituras: 0, leituras_por_antena: [], ultima_leitura: null },
+      ]
+      const loose = { epc: '3034000000000C400000012F', cadastrada: false, equipamento: null, leituras: 644,
+        leituras_por_antena: [{ antena_id: 1, leituras: 563 }, { antena_id: 2, leituras: 81 }],
+        ultima_leitura: { em: new Date().toISOString(), leitor: 'reader-01', porta: 1, zona: 'Sala A' } }
+      const only = url.searchParams.get('somente_cadastradas') === 'true'
+      body = { janela_segundos: Number(url.searchParams.get('janela_segundos')), gerado_em: new Date().toISOString(),
+        total_leituras: only ? 610 : 1254, tags_detectadas: only ? 1 : 2, cadastradas_detectadas: 1, cadastradas_sem_leitura: 1,
+        nao_cadastradas: only ? 0 : 1,
+        antenas: [{ antena_id: 1, leitor: 'reader-01', porta: 1, zona: 'Sala A' }, { antena_id: 2, leitor: 'reader-01', porta: 2, zona: 'Sala B' }],
+        items: only ? registered : [...registered, loose] }
     } else if (url.pathname === '/tipos-equipamento') body = { items: [{ id: 1, nome: 'Maca' }] }
     else if (url.pathname === '/portais') body = { items: [{ id: 10, nome: 'Portal de teste RFID', zona_a_id: 3, zona_b_id: 4, ativo: true }], pages: 1 }
     else body = [{ setores: [{ zonas: [{ id: 1, nome: 'Zona 1', referencia_planta: 'zona-1', ativo: true }, { id: 3, nome: 'Sala A', referencia_planta: 'sala-a', ativo: true }, { id: 4, nome: 'Sala B', referencia_planta: 'sala-b', ativo: true }] }] }]
@@ -94,7 +110,7 @@ describe('integração da busca', () => {
   it('filtra EPC nos dois modos e não plota ativo nunca detectado', async () => {
     render(<App/>)
     fireEvent.click(screen.getByRole('link', { name: 'Mapa / Planta' }))
-    expect(await screen.findByRole('heading', { name: 'Ainda não detectados' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sem zona confirmada' })).toBeInTheDocument()
     expect(screen.getByText('Maca 2')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /1 equipamento.*Última zona/ })).toHaveLength(1)
     fireEvent.click(screen.getByRole('tab', { name: 'Laboratório de Testes (EASY)' }))
@@ -105,6 +121,43 @@ describe('integração da busca', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Consultar EPC' }), { target: { value: 'FFFFFFFFFFFFFFFFFFFFFFFF' } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar tag' }))
     expect(await screen.findByText('Nenhum ativo associado a este EPC.')).toBeInTheDocument()
+  })
+
+  it('mostra leituras por tag separando cadastradas de avulsas', async () => {
+    render(<App/>)
+    fireEvent.click(screen.getByRole('link', { name: 'Leituras' }))
+    const table = await within(await screen.findByRole('region', { name: 'Tags lidas' })).findByRole('table')
+    const rows = within(table).getAllByRole('row')
+    expect(rows[1]).toHaveTextContent('Maca 2')
+    expect(rows[1]).toHaveTextContent('610')
+    expect(rows[1]).toHaveTextContent('Antena 1 · Sala A')
+    expect(rows[3]).toHaveTextContent('Não cadastrada')
+    expect(rows[3]).toHaveTextContent('563')
+    expect(rows[3]).toHaveTextContent('81')
+    expect(within(table).getByRole('columnheader', { name: 'Antena 2 · Sala B' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Somente tags cadastradas' }))
+    await waitFor(() => expect(calls.some((url) => url.includes('somente_cadastradas=true'))).toBe(true))
+    await waitFor(() => expect(screen.queryByText('Não cadastrada')).not.toBeInTheDocument())
+  })
+
+  it('lista equipamentos detectados abaixo dos mapas e indica leitura sem zona', async () => {
+    assets[1].ultima_leitura = { em: new Date().toISOString(), leitor: 'reader-01', porta: 1, zona: 'Sala A' }
+    try {
+      render(<App/>)
+      const dashboard = await screen.findByRole('table')
+      expect(within(dashboard).getByText('Sem zona confirmada')).toBeInTheDocument()
+      expect(within(dashboard).getByText(/Lida agora · Antena 1 · Sala A/)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('link', { name: 'Mapa / Planta' }))
+      const region = await screen.findByRole('region', { name: 'Detectados recentemente' })
+      const rows = await within(region).findAllByRole('row')
+      expect(rows[1]).toHaveTextContent('Maca 2')
+      expect(rows[1]).toHaveTextContent('Antena 1 · Sala A')
+      expect(rows[2]).toHaveTextContent('Sem leitura recente')
+      fireEvent.click(screen.getByRole('tab', { name: 'Laboratório de Testes (EASY)' }))
+      const labRegion = within(screen.getByRole('tabpanel', { name: 'Laboratório de Testes (EASY)' })).getByRole('region', { name: 'Detectados recentemente' })
+      fireEvent.click(await within(labRegion).findByRole('button', { name: /Maca 2/ }))
+      expect(screen.getByRole('dialog')).toHaveTextContent('Antena 1 · Sala A')
+    } finally { delete assets[1].ultima_leitura }
   })
 
   it('usa a paginação real do servidor', async () => {
