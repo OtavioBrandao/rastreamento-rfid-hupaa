@@ -34,7 +34,10 @@ def _auditorias(engine, entidade_id: int):
     return consultar(
         engine,
         "SELECT usuario_id, acao, dados_antes, dados_depois FROM auditorias "
-        "WHERE entidade = 'usuarios' AND entidade_id = :id ORDER BY id",
+        "WHERE entidade = 'usuarios' AND entidade_id = :id "
+        # ISS-028: eventos de sessão do alvo também entram na trilha; aqui só cadastro.
+        "AND acao NOT IN ('login_aceito', 'login_recusado', 'logout', 'conta_bloqueada') "
+        "ORDER BY id",
         id=entidade_id,
     )
 
@@ -101,8 +104,9 @@ def test_criar_normaliza_email_exige_troca_e_audita(engine, admin_logado):
     assert corpo["deve_trocar_senha"] is True
     assert corpo["perfil"] == "operacional" and corpo["ativo"] is True
     (autor, acao, antes, depois), = _auditorias(engine, corpo["id"])
-    assert (autor, acao, antes) == (admin_id, "create", None)
-    assert depois["email"] == "joao@hupaa.example" and depois["operacao"] == "criar"
+    assert (autor, acao, antes) == (admin_id, "criar", None)
+    assert (depois["email"], depois["perfil"], depois["deve_trocar_senha"]) == (
+        "joao@hupaa.example", "operacional", True)
     _sem_segredo(depois)
     (hash_salvo,) = consultar(engine, "SELECT senha_hash FROM usuarios WHERE id=:id",
                               id=corpo["id"])[0]
@@ -178,10 +182,9 @@ def test_patch_edita_nome_e_perfil_e_audita(engine, admin_logado):
     assert resposta.status_code == 200
     assert (resposta.json()["nome"], resposta.json()["perfil"]) == ("Novo", "administrador")
     (autor, acao, antes, depois), = _auditorias(engine, alvo)
-    assert (autor, acao) == (admin_id, "update")
+    assert (autor, acao) == (admin_id, "atualizar")
     assert (antes["nome"], antes["perfil"]) == ("Antigo", "operacional")
-    assert (depois["nome"], depois["perfil"], depois["operacao"]) == (
-        "Novo", "administrador", "editar")
+    assert (depois["nome"], depois["perfil"]) == ("Novo", "administrador")
     _sem_segredo([antes, depois])
 
 
@@ -239,8 +242,7 @@ def test_desativar_derruba_sessao_aberta_e_impede_login(engine, admin_logado, ap
                      id=alvo) == [("desativacao",)]
     assert logar(api_auth(), "alvo@hupaa.example").status_code == 401
     (_, acao, antes, depois), = _auditorias(engine, alvo)
-    assert (acao, antes["ativo"], depois["ativo"], depois["operacao"]) == (
-        "update", True, False, "desativar")
+    assert (acao, antes, depois) == ("inativar", {"ativo": True}, {"ativo": False})
 
 
 def test_admin_nao_desativa_nem_redefine_a_propria_conta(engine, admin_logado):
@@ -292,7 +294,7 @@ def test_reativar_zera_bloqueio_e_nao_ressuscita_sessao(engine, admin_logado, ap
                      id=alvo)[0][0] == 0
     assert antiga.get("/auth/me").status_code == 401
     assert logar(api_auth(), "alvo@hupaa.example").status_code == 200
-    assert _auditorias(engine, alvo)[-1][3]["operacao"] == "reativar"
+    assert _auditorias(engine, alvo)[-1][1] == "reativar"
 
 
 def test_reativar_apos_desativacao_direta_no_banco_nao_ressuscita(engine, admin_logado,
@@ -347,7 +349,8 @@ def test_redefinir_senha_revoga_sessoes_e_exige_troca(engine, admin_logado, api_
     assert logar(nova, "alvo@hupaa.example", TEMP).status_code == 200
     assert nova.get("/usuarios").status_code == 403
     (autor, acao, _antes, depois), = _auditorias(engine, alvo)
-    assert (autor, acao, depois["operacao"]) == (admin_id, "update", "redefinir_senha")
+    assert (autor, acao, depois["senha"]) == (admin_id, "alterar_senha", "alterada")
+    assert depois["deve_trocar_senha"] is True
     _sem_segredo(_auditorias(engine, alvo))
 
 

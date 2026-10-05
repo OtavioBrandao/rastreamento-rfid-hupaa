@@ -49,10 +49,12 @@ def test_cria_admin_pelo_getpass_sem_troca_obrigatoria_e_audita(engine, rodar, a
         "FROM usuarios u JOIN perfis p ON p.id = u.perfil_id")
     assert (email, perfil, troca) == ("admin@hupaa.example", "administrador", False)
     assert hash_salvo.startswith("$argon2id$")
-    (autor, acao, depois), = consultar(
-        engine, "SELECT usuario_id, acao, dados_depois FROM auditorias WHERE entidade_id=:id",
+    (autor, acao, origem, motivo, depois), = consultar(
+        engine, "SELECT usuario_id, acao, origem, motivo, dados_depois FROM auditorias "
+        "WHERE entidade = 'usuarios' AND entidade_id = :id AND acao = 'criar'",
         id=usuario_id)
-    assert (autor, acao, depois["operacao"]) == (None, "create", "criar_admin_terminal")
+    assert (autor, acao, origem, motivo) == (None, "criar", "sistema", "comando criar_admin")
+    assert (depois["perfil"], depois["deve_trocar_senha"]) == ("administrador", False)
     assert SENHA_ADMIN not in str(depois) and "$argon2" not in str(depois)
     cliente = api_auth()
     assert logar(cliente, "admin@hupaa.example", SENHA_ADMIN).status_code == 200
@@ -95,7 +97,8 @@ def test_recusa_com_admin_ativo_salvo_recuperacao(engine, rodar):
     codigo, _ = rodar([*BASE, "--senha-stdin", "--recuperacao"], entrada=SENHA_ADMIN + "\n")
     assert codigo == 0
     assert consultar(engine, "SELECT count(*) FROM usuarios")[0][0] == 2
-    assert consultar(engine, "SELECT dados_depois->>'recuperacao' FROM auditorias")[0][0] == "true"
+    assert consultar(engine, "SELECT origem, motivo FROM auditorias WHERE acao = 'criar'") == [
+        ("sistema", "comando criar_admin (recuperação de acesso)")]
 
 
 def test_admin_inativo_nao_impede_bootstrap(engine, rodar):

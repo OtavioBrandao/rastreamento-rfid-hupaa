@@ -5,7 +5,7 @@ A REGRA esperada aqui foi escrita a partir das decisões da issue, não do
 código de `api/permissoes.py`:
 - públicas: GET /health, POST /auth/login, POST /auth/logout;
 - qualquer sessão (inclusive senha temporária): GET /auth/me, POST /auth/trocar-senha;
-- operacional CONSULTA tudo (GET), exceto usuários, e não altera nada;
+- operacional CONSULTA tudo (GET), exceto usuários e a trilha de auditoria (ISS-028), e não altera nada;
   hardware/topologia e leituras do laboratório incluídos na consulta;
 - administrador faz tudo.
 
@@ -57,6 +57,7 @@ RECURSO_POR_PREFIXO = [
     ("/portais", "hardware"),
     ("/mapeamentos-antena", "hardware"),
     ("/usuarios", "usuarios"),
+    ("/auditorias", "auditoria"),  # ISS-028: consulta da trilha, só administrador
 ]
 
 PERMISSOES_OPERACIONAL = [
@@ -66,7 +67,7 @@ PERMISSOES_OPERACIONAL = [
 PERMISSOES_ADMINISTRADOR = sorted([
     "equipamentos:consultar", "equipamentos:alterar", "localizacao:consultar",
     "localizacao:alterar", "hardware:consultar", "hardware:alterar",
-    "laboratorio:consultar", "usuarios:administrar",
+    "laboratorio:consultar", "usuarios:administrar", "auditoria:consultar",
 ])
 
 
@@ -119,7 +120,8 @@ def recurso_esperado(caminho: str) -> str:
 
 
 def operacional_pode(metodo: str, caminho: str) -> bool:
-    return metodo in METODOS_DE_CONSULTA and recurso_esperado(caminho) != "usuarios"
+    return (metodo in METODOS_DE_CONSULTA
+            and recurso_esperado(caminho) not in {"usuarios", "auditoria"})
 
 
 def test_descoberta_encontra_todas_as_rotas():
@@ -150,6 +152,8 @@ def test_permissao_declarada_bate_com_as_decisoes(metodo, caminho, rota):
     recurso = recurso_esperado(caminho)
     if recurso == "usuarios":
         esperada = {"usuarios:administrar"}
+    elif recurso == "auditoria":
+        esperada = {"auditoria:consultar"}
     elif metodo in METODOS_DE_CONSULTA:
         esperada = {f"{recurso}:consultar"}
     else:
@@ -308,6 +312,9 @@ def test_perfil_fora_da_matriz_nao_tem_permissao_nenhuma(engine, perfis_logados)
                 assert (resposta.status_code, resposta.json()) == (
                     403, {"detail": "acesso_negado"}), caminho
     finally:
+        # A trilha (append-only) referencia a usuária: só TRUNCATE a limpa. As
+        # sessões são só as DELA — o módulo compartilha sessões logadas.
+        executar(engine, "TRUNCATE TABLE auditorias")
         executar(engine, "DELETE FROM sessoes WHERE usuario_id = :id", id=usuario_id)
         executar(engine, "DELETE FROM usuarios WHERE id = :id", id=usuario_id)
         executar(engine, "DELETE FROM perfis WHERE nome = 'auditor'")
