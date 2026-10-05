@@ -26,6 +26,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
@@ -108,6 +109,12 @@ class Equipamento(Base):
         BigInteger, ForeignKey("historico_movimentacoes.id"), nullable=True
     )
 
+    # ISS-025: versão OTIMISTA. Qualquer escrita incrementa: o ORM via
+    # `version_id_col` (UPDATE ... WHERE versao = :lida, senão StaleDataError) e o
+    # pipeline/correção via `rfid_location.repository.update_location`
+    # (versao = versao + 1). Quem edita envia a versão que viu; se mudou, 409.
+    versao = Column(BigInteger, nullable=False, server_default=text("1"))
+
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     # onupdate=func.now() só dispara em UPDATEs feitos VIA SQLAlchemy.
     # Um UPDATE executado direto em SQL (fora do ORM) não atualiza este
@@ -143,7 +150,9 @@ class Equipamento(Base):
         CheckConstraint(
             "status IN ('ativo', 'inativo')", name="ck_equipamento_status_valido"
         ),
+        CheckConstraint("versao >= 1", name="ck_equipamentos_versao_positiva"),
     )
+    __mapper_args__ = {"version_id_col": versao}
 
 
 class Tag(Base):
@@ -612,6 +621,8 @@ class HistoricoMovimentacao(Base):
     leitura_destino_id = Column(BigInteger, ForeignKey("leituras_brutas.id"), nullable=True)
     movimentada_em = Column(TIMESTAMP(timezone=True), nullable=True)
     justificativa = Column(Text, nullable=True)
+    # ISS-025: identificador externo da correção (chamado, ordem de serviço...).
+    referencia = Column(String(255), nullable=True)
     registro_anterior_id = Column(BigInteger, ForeignKey("historico_movimentacoes.id"), nullable=True)
     origem_registro = Column(String, nullable=False)  # 'passagem_automatica' | 'correcao_manual'
     registrado_em = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
@@ -648,6 +659,11 @@ class HistoricoMovimentacao(Base):
             "AND justificativa IS NOT NULL AND length(btrim(justificativa)) > 0 "
             "AND movimentada_em IS NOT NULL)",
             name="ck_historico_registro_completo",
+        ),
+        CheckConstraint(
+            "referencia IS NULL OR (origem_registro = 'correcao_manual' "
+            "AND length(btrim(referencia)) > 0)",
+            name="ck_historico_referencia_so_manual",
         ),
     )
 

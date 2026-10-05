@@ -21,6 +21,7 @@ class LocationProjectionResult:
     destination_zone_id: int | None = None
     previous_detected_at: datetime | None = None
     movement_at: datetime | None = None
+    versao: int | None = None  # ISS-025: versão do equipamento após o movimento
 
 
 def decide_projection(
