@@ -59,7 +59,8 @@ beforeEach(() => {
         registrado_em: '2026-09-26T12:10:00Z', justificativa: null }],
         page: 1, size: 20, total: 1, pages: 1 }
     } else if (url.pathname === '/tipos-equipamento') body = { items: [{ id: 1, nome: 'Maca' }] }
-    else body = [{ setores: [{ zonas: [{ id: 1, nome: 'Zona 1' }] }] }]
+    else if (url.pathname === '/portais') body = { items: [{ id: 10, nome: 'Portal de teste RFID', zona_a_id: 3, zona_b_id: 4, ativo: true }], pages: 1 }
+    else body = [{ setores: [{ zonas: [{ id: 1, nome: 'Zona 1', referencia_planta: 'zona-1', ativo: true }, { id: 3, nome: 'Sala A', referencia_planta: 'sala-a', ativo: true }, { id: 4, nome: 'Sala B', referencia_planta: 'sala-b', ativo: true }] }] }]
     return { ok: true, json: async () => body }
   }))
 })
@@ -130,7 +131,7 @@ describe('integração da busca', () => {
     expect(await screen.findByText('Não foi possível carregar os equipamentos.')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     assetsFailure = false
-    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar todos os dados' }))
     expect(await screen.findByRole('table')).toBeInTheDocument()
   })
 
@@ -167,7 +168,7 @@ describe('integração da busca', () => {
     expect(await within(region).findByText(/Não foi possível carregar as movimentações/)).toBeInTheDocument()
     expect(region).not.toHaveTextContent('Zona 0 → Zona 1')
     activityFailure = false
-    fireEvent.click(within(region).getByRole('button', { name: 'Tentar novamente' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar todos os dados' }))
     await waitFor(() => expect(region).toHaveTextContent('Maca 1 · Zona 0 → Zona 1'))
   })
 
@@ -180,7 +181,7 @@ describe('integração da busca', () => {
     expect(await screen.findByText(/Não foi possível carregar o histórico/)).toBeInTheDocument()
     expect(screen.queryByText('Zona 0 → Zona 1')).not.toBeInTheDocument()
     historyFailure = false
-    fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar todos os dados' }))
     expect(await screen.findByText('Zona 0 → Zona 1')).toBeInTheDocument()
   })
 })

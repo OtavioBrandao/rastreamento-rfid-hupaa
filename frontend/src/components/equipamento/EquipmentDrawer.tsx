@@ -1,34 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
-import { getMovements } from '../../services/dashboard'
-import type { EquipmentItem, MovementPage } from '../../types/dashboard'
+import { getAllAssets, getMovements } from '../../services/dashboard'
+import type { EquipmentItem } from '../../types/dashboard'
+import { useLiveQuery } from '../../services/live'
 import { LocationBadge, StatusBadge, detectionLabel } from '../DashboardParts'
 import { Icon } from '../layout/Icon'
 
-export function EquipmentDrawer({ item, onClose }: { item: EquipmentItem | null; onClose: () => void }) {
+export function EquipmentDrawer({ item: selected, onClose }: { item: EquipmentItem | null; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyPage, setHistoryPage] = useState(1)
-  const [history, setHistory] = useState<MovementPage | null>(null)
-  const [historyState, setHistoryState] = useState<'idle' | 'loading' | 'error' | 'ready'>('idle')
-  const [historyRetry, setHistoryRetry] = useState(0)
+  const detail = useLiveQuery(selected ? `detail:${selected.id}` : null, async (signal) => {
+    const result = await getAllAssets({ q: selected!.identificador_interno }, signal)
+    const found = result.find((asset) => asset.id === selected!.id)
+    if (!found) throw new Error('Equipamento não encontrado')
+    return found
+  })
+  const item = detail.data ?? selected
+  const historyQuery = useLiveQuery(item && historyOpen ? `history:${item.id}:${historyPage}` : null,
+    (signal) => getMovements(item!.id, historyPage, signal))
+  const history = historyQuery.data
+  const historyState = historyQuery.loading ? 'loading' : historyQuery.error ? 'error' : 'ready'
   useEffect(() => {
     setHistoryOpen(false)
     setHistoryPage(1)
-    setHistory(null)
-    setHistoryState('idle')
-  }, [item?.id])
-  useEffect(() => {
-    if (!item || !historyOpen) return
-    const controller = new AbortController()
-    setHistory(null)
-    setHistoryState('loading')
-    getMovements(item.id, historyPage, controller.signal).then((result) => {
-      if (!controller.signal.aborted) { setHistory(result); setHistoryState('ready') }
-    }).catch(() => {
-      if (!controller.signal.aborted) setHistoryState('error')
-    })
-    return () => controller.abort()
-  }, [item?.id, historyOpen, historyPage, historyRetry])
+  }, [selected?.id])
   useEffect(() => {
     if (!item) return
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -44,13 +39,14 @@ export function EquipmentDrawer({ item, onClose }: { item: EquipmentItem | null;
     }
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('keydown', onKey); previous?.focus() }
-  }, [item, onClose])
+  }, [item?.id, onClose])
   if (!item) return null
   return <div className="drawer-root">
     <button className="drawer-backdrop" type="button" aria-label="Fechar detalhes" onClick={onClose}/>
     <aside className="equipment-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
       <div className="drawer-top"><span className="eyebrow">DETALHE DO EQUIPAMENTO</span><button ref={closeRef} className="icon-button" type="button" aria-label="Fechar painel" onClick={onClose}><Icon name="close"/></button></div>
       <div className="drawer-title-row"><span className="drawer-equipment-icon"><Icon name="equipment" size={26}/></span><div><h2 id="drawer-title">{item.nome}</h2><p>{item.tipo} · {item.identificador_interno}</p></div></div>
+      {detail.error && <p role="alert">Não foi possível atualizar os detalhes. Exibindo a última consulta; tentando novamente...</p>}
       <div className="drawer-badges"><StatusBadge status={item.status}/><LocationBadge item={item}/></div>
       <p className="drawer-caveat">A última zona detectada é aproximada e não indica a posição atual exata.</p>
       <section><h3>Identificação e localização</h3><dl className="drawer-details">
@@ -62,8 +58,8 @@ export function EquipmentDrawer({ item, onClose }: { item: EquipmentItem | null;
         <button className="text-button" type="button" onClick={() => setHistoryOpen((open) => !open)}>{historyOpen ? 'Ocultar histórico' : 'Ver histórico completo'}</button>
         {historyOpen && <div className="movement-history">
           {historyState === 'loading' && <p role="status">Carregando histórico...</p>}
-          {historyState === 'error' && <p role="alert">Não foi possível carregar o histórico. <button type="button" onClick={() => setHistoryRetry((value) => value + 1)}>Tentar novamente</button></p>}
-          {historyState === 'ready' && history && <>
+          {historyState === 'error' && <p role="alert">Não foi possível carregar o histórico. Tentando novamente automaticamente.</p>}
+          {history && <>
             {history.items.length ? <ol>{history.items.map((movement) => <li key={movement.id}>
               <strong>{movement.zona_origem ?? 'Origem não registrada'} → {movement.zona_destino}</strong>
               <span>{movement.movimentada_em ? detectionLabel(movement.movimentada_em) : 'Horário da movimentação indisponível'}</span>

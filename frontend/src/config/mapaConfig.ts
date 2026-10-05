@@ -25,6 +25,29 @@ export interface InfrastructurePosition {
   label: string
 }
 
+export interface PortalPosition {
+  id: string
+  portalId?: number
+  portalName?: string
+  zoneA: string
+  zoneB: string
+  x: number
+  y: number
+}
+
+export const labMainZones: MainZone[] = [
+  { id: 'sala-a', name: 'Sala A', x: 25, y: 38, description: 'Sala A do laboratório' },
+  { id: 'sala-b', name: 'Sala B', x: 75, y: 38, description: 'Sala B do laboratório' },
+]
+
+// Nome estável do seed; o ID real é resolvido pela API e validado pelos lados A/B.
+// Pode-se usar portalId em uma instalação específica em vez de portalName.
+export const labPortals: PortalPosition[] = [
+  { id: 'passagem-easy', portalName: 'Portal de teste RFID', zoneA: 'sala-a', zoneB: 'sala-b', x: 50, y: 54 },
+]
+// Preencher após confirmação da planta e dos portais do setor piloto.
+export const hospitalPortals: PortalPosition[] = []
+
 // Contorno preto: ala superior contínua, volume verde à esquerda, ligação
 // central e bloco inferior. O fundo e as faixas são recortados por este path.
 export const hospitalOutlinePath = 'M13 1 H100 V49 H52 V70 H61 V100 H12 V70 H42 V49 H13 V29 H10 V50 H0 V29 H5 L8 22 H13 Z'
