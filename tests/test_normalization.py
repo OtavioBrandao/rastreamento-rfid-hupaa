@@ -231,6 +231,7 @@ class NormalizationTests(unittest.TestCase):
             with self.assertLogs("rfid_ingestion.mqtt_client") as logs:
                 for raw in raws:
                     receiver._on_message(None, None, Mock(topic=reading_topic(self.reader), qos=1, retain=False, payload=raw))
+                    receiver._flush_pending()
             self.assertFalse(receiver.failed.is_set())
             events = [json.loads(line) for line in path.read_text().splitlines()]
             self.assertEqual(len(events), len(raws))

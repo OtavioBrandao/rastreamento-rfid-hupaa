@@ -89,7 +89,8 @@ def mapped_portal(pg_engine, topology):
 
 def test_temporal_mapping_boundaries_and_ambiguity(pg_engine, mapped_portal):
     portal, antenna_a, _, _, zone_b = mapped_portal
-    repo = PassageRepository(pg_engine)
+    relogio = [0.0]
+    repo = PassageRepository(pg_engine, clock=lambda: relogio[0])
     assert repo.resolve(_observation(antenna_a, 0, 1)).portal_id == portal
     with pg_engine.begin() as connection:
         connection.execute(
@@ -103,6 +104,9 @@ def test_temporal_mapping_boundaries_and_ambiguity(pg_engine, mapped_portal):
                 zona_id=zone_b, funcao="auxiliar", inicio=T0,
             ).returning(MapeamentoAntenaPortal.id)
         ).scalar_one()
+    # Dentro do TTL o cache ainda vê o mapeamento antigo, sem fim.
+    assert repo.resolve(_observation(antenna_a, 0)).side == "a"
+    relogio[0] += PassageRepository.MAPPING_TTL_SECONDS + 1
     assert repo.resolve(_observation(antenna_a, -1, -0.1)).side == "a"
     at_boundary = repo.resolve(_observation(antenna_a, 0))
     assert at_boundary.mapping_id == new_id
@@ -118,6 +122,7 @@ def test_temporal_mapping_boundaries_and_ambiguity(pg_engine, mapped_portal):
                 inicio=T0 - timedelta(seconds=1), fim=T0 + timedelta(seconds=1),
             )
         )
+    relogio[0] += PassageRepository.MAPPING_TTL_SECONDS + 1
     assert repo.resolve(_observation(antenna_a, 0)) is None
 
 
@@ -191,6 +196,7 @@ def test_pipeline_raw_debounce_passage_and_replay(pg_engine, mapped_portal, tmp_
         ]
         for message in (*messages, messages[0]):
             receiver._on_message(client, None, message)
+            receiver._flush_pending()
         receiver.flush_debounce()
 
     with pg_engine.connect() as connection:
@@ -254,3 +260,20 @@ def test_origin_active_detects_reflection_from_raw_readings(pg_engine, mapped_po
     # A continua lendo a tag enquanto B a vê: reflexão, não passagem.
     read(antenna_a, 3.0, 3)
     assert repo.origin_active(origin, destination, grace=grace, hold=hold) is True
+
+
+def test_mapeamento_em_cache_evita_consulta_por_observacao(pg_engine, mapped_portal):
+    from sqlalchemy import event as sql_event
+    _portal, antenna_a, *_ = mapped_portal
+    repo = PassageRepository(pg_engine)
+    consultas = []
+    sql_event.listen(pg_engine, "before_cursor_execute",
+                     lambda *_a: consultas.append(1))
+    for segundo in range(10):
+        assert repo.resolve(_observation(antenna_a, segundo)) is not None
+    assert len(consultas) == 1
+    # Antena sem mapeamento em cache: consulta de novo antes de desistir.
+    assert repo.resolve(_observation(999999, 0)) is None
+    assert len(consultas) == 2
+    assert repo.resolve(_observation(999999, 1)) is None
+    assert len(consultas) == 3

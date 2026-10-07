@@ -290,7 +290,9 @@ def test_full_pipeline_projects_only_confirmed_passages(
             observation_tick_handler=passage.tick,
         )
         receiver._on_message(client, None, _message(1, 1, "2026-09-22T12:00:00.000Z"))
+        receiver._flush_pending()
         receiver._on_message(client, None, _message(2, 2, second_time))
+        receiver._flush_pending()
         receiver.flush_debounce()
     with pg_engine.connect() as connection:
         assert connection.scalar(select(func.count()).select_from(LeituraBruta)) == 2
