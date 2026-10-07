@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -13,7 +15,6 @@ import typer
 from dotenv import dotenv_values
 from sqlalchemy.exc import SQLAlchemyError
 
-from api.epc import normalizar_epc
 from rfid_ingestion.topics import reading_topic
 
 from .config import ROOT, carregar
@@ -30,10 +31,8 @@ from .docker_env import (
 )
 from .session import iniciar as iniciar_sessao
 from .session import parar as parar_sessao
-from .synthetic import epcs_padrao, novo_contador, programa_multitag, publicar, roteiro
 from .tags import epcs_recentes, parse_tag, perguntar_tags
 from .terminals import abrir, encerrar
-from .verify import conferir, inicio
 
 app = typer.Typer(help="Prepara e observa um teste de laboratório RFID.")
 
@@ -51,10 +50,10 @@ def _escolher(valor: str | None, pergunta: str, opcoes: tuple[str, ...]) -> str:
 def _cenario(env: str | None, source: str | None) -> tuple[str, str]:
     if env is None and source is None and sys.stdin.isatty():
         click.clear()
-        typer.echo("1. Local com dados sintéticos")
+        typer.echo("1. Local com simulador visual (dados sintéticos)")
         typer.echo("2. Local com leitor físico")
         typer.echo("3. Broker e banco externos com leitor físico")
-        typer.echo("4. Broker e banco externos com dados sintéticos")
+        typer.echo("4. Broker e banco externos com simulador visual (dados sintéticos)")
         escolha = typer.prompt("Escolha o teste (1-4)", default="1")
         cenarios = {
             "1": ("local", "synthetic"),
@@ -69,18 +68,6 @@ def _cenario(env: str | None, source: str | None) -> tuple[str, str]:
         _escolher(env, "Ambiente", ("local", "managed")),
         _escolher(source, "Origem", ("physical", "synthetic")),
     )
-
-
-def _roteiro_escolhido(valor: int | None, interativo: bool) -> int:
-    if valor is None and interativo:
-        typer.echo("1. Uma tag: aproximação A, permanência e passagem A → B")
-        typer.echo("2. Tags 02 e 03: vai e vem; cruzamento simultâneo em sentidos opostos")
-        typer.echo("3. Tag 02 permanece em B; tag 03 vai e volta entre A e B")
-        valor = int(typer.prompt("Escolha o roteiro (1-3)", default="1"))
-    escolhido = valor or 1
-    if escolhido not in (1, 2, 3):
-        raise ValueError("escolha um roteiro de 1 a 3")
-    return escolhido
 
 
 def _transporte_escolhido(valor: str | None, modo: str, interativo: bool) -> str:
@@ -201,6 +188,12 @@ def _preparar_portas(binds: dict[int, str], projeto: str, force: bool,
         raise RuntimeError("portas TCP ainda indisponíveis: " + ", ".join(map(str, indisponiveis)))
 
 
+def _fechar_simulador(simulador: subprocess.Popen | None) -> None:
+    # Separado de ``encerrar``: no Windows ele preserva as janelas dos observadores.
+    if simulador is not None and simulador.poll() is None:
+        simulador.terminate()
+
+
 @app.command()
 def start(
     env: Annotated[str | None, typer.Option("--env", help="local ou managed")] = None,
@@ -215,12 +208,6 @@ def start(
     portal_id: Annotated[str, typer.Option("--portal-id")] = "portal-01",
     serial: Annotated[str | None, typer.Option("--serial")] = None,
     timestamp_format: Annotated[str | None, typer.Option("--timestamp-format")] = None,
-    passage: Annotated[bool, typer.Option("--passage/--single")] = True,
-    scenario: Annotated[int | None, typer.Option("--scenario", help="Roteiro 1, 2 ou 3")] = None,
-    count: Annotated[int, typer.Option("--count", help="Quantidade de itens sintéticos")] = 1,
-    messages: Annotated[int, typer.Option("--messages", help="Leituras por item/travessia")] = 100,
-    interval: Annotated[float, typer.Option("--interval")] = 0.5,
-    epc: Annotated[list[str] | None, typer.Option("--epc")] = None,
     tag: Annotated[list[str] | None, typer.Option(
         "--tag", help="Leitor físico: EPC=Nome do equipamento (repita por tag)")] = None,
     mqtt_transport: Annotated[str | None, typer.Option(
@@ -232,27 +219,20 @@ def start(
     ambiente = None
     started = False
     marker = None
-    lista: list[str] = []
     tags_fisicas: list[tuple[str, str]] = []
     publisher: dict[str, str] | None = None
+    simulador: subprocess.Popen | None = None
     etapa = "seleção do cenário"
     try:
         modo, origem = _cenario(env, source)
         print(f"Cenário: ambiente {modo}; origem {origem}; leitor {reader_id}")
         interativo = sys.stdin.isatty()
-        if origem == "physical":
-            if scenario is not None or epc:
-                raise ValueError("leitor físico usa --tag EPC=Nome; --scenario e --epc "
-                                 "são do teste sintético")
-            roteiro_id = 1
-        else:
-            if tag:
-                raise ValueError("--tag é do leitor físico; no sintético use --epc")
-            roteiro_id = _roteiro_escolhido(scenario, interativo)
-        if roteiro_id != 1 and not passage:
-            raise ValueError("--single só é compatível com o roteiro 1")
-        if roteiro_id != 1 and count != 1:
-            raise ValueError("--count só é compatível com o roteiro 1; use --epc duas vezes")
+        if origem == "synthetic" and tag:
+            raise ValueError("--tag é do leitor físico; no simulador os nomes são "
+                             "definidos na janela")
+        if origem == "synthetic" and importlib.util.find_spec("flet") is None:
+            raise ValueError("simulador visual exige Flet: pip install -r "
+                             "requirements-lab.txt")
         if fresh and reuse:
             raise ValueError("escolha --fresh ou --reuse")
         if modo == "local" and not fresh and not reuse and interativo:
@@ -275,22 +255,6 @@ def start(
         if origem == "synthetic":
             if timestamp_format not in (None, "counter"):
                 raise ValueError("dados sintéticos reproduzem o timestamp counter do leitor")
-            padrao = epcs_padrao(count) if roteiro_id == 1 else epcs_padrao(3)[1:]
-            lista = [normalizar_epc(item) for item in (epc or padrao)]
-            if len(set(lista)) != len(lista):
-                raise ValueError("não repita o mesmo EPC no teste sintético")
-            if roteiro_id == 1:
-                etapas = roteiro(messages, passage)
-                total_planejado = len(lista) * messages
-                print(f"Plano sintético: {len(lista)} item(ns), {messages} mensagens por item, "
-                      f"total {total_planejado}")
-                for item in etapas:
-                    print(f"  {item.nome}: {item.quantidade} mensagem(ns)")
-            else:
-                programa = programa_multitag(roteiro_id, lista, messages, interval)
-                total_planejado = len(programa)
-                print(f"Roteiro {roteiro_id}: {messages} leituras por travessia; "
-                      f"{total_planejado} leituras no total; EPCs {', '.join(lista)}")
             publisher = _perfil_publicador(modo, valores, publisher_env_file,
                                            interativo)
         ambiente["EZ700_TIMESTAMP_FORMAT"] = timestamp_format or "counter"
@@ -340,7 +304,6 @@ def start(
             seed_env["DATABASE_URL"] = valores["DATABASE_URL"]
         executar([sys.executable, "-m", "tools.lab_launcher.seed", "--reader-id", reader_id,
                   *(["--serial", serial] if serial else []),
-                  *(item for valor in lista for item in ("--epc", valor)),
                   *(item for par in tags_fisicas for item in ("--tag", "=".join(par)))],
                  env=seed_env, mostrar=True)
         etapa = "inicialização do ingestor"
@@ -354,21 +317,19 @@ def start(
             marker = iniciar_sessao()
             processos = abrir(arquivo, modo, ingestor, ambiente, marker)
         if origem == "synthetic":
-            etapa = "publicação das leituras sintéticas"
+            etapa = "abertura do simulador visual"
             assert publisher is not None
-            baseline = inicio(valores["APP_DATABASE_URL"])
-            contador_inicial = novo_contador(total_planejado)
-            total = publicar(publisher, reader_id, epcs=lista, passagem=passage,
-                             intervalo=interval, portal_id=portal_id,
-                             mensagens=messages,
-                             timestamp_format=ambiente["EZ700_TIMESTAMP_FORMAT"],
-                             contador_inicial=contador_inicial, cenario=roteiro_id)
-            print(f"{total} leitura(s) sintética(s) publicada(s)")
-            etapa = "verificação da Sprint 2 no banco"
-            conferir(valores["APP_DATABASE_URL"], baseline, lista,
-                     passagem=passage, mensagens=messages,
-                     contador_inicial=contador_inicial,
-                     programa=programa if roteiro_id != 1 else None)
+            print("Abrindo o simulador visual do laboratório...")
+            # Credencial de publicação sobre o ambiente; banco do seed para o cadastro.
+            ambiente_simulador = {**ambiente, **publisher,
+                                  "DATABASE_URL": seed_env["DATABASE_URL"]}
+            simulador = subprocess.Popen(
+                [sys.executable, "-m", "tools.lab_simulator", "--reader-id", reader_id,
+                 "--portal-id", portal_id],
+                cwd=ROOT, env=ambiente_simulador)
+            processos.append(simulador)
+            print("Defina os itens na janela e arraste-os até as antenas. Use Ctrl+C "
+                  "para encerrar o teste.")
         else:
             if tags_fisicas:
                 print("Equipamentos do ensaio:")
@@ -381,13 +342,17 @@ def start(
             print("Acompanhando o teste. Pressione Ctrl+C para encerrar os serviços.")
             while marker is not None and marker.exists():
                 time.sleep(1)
+        elif simulador is not None:
+            simulador.wait()
     except (KeyboardInterrupt, click.Abort):
+        _fechar_simulador(simulador)
         parar_sessao()
         encerrar(processos)
         if started and arquivo is not None and modo is not None and ambiente is not None:
             compose(arquivo, modo, "down", env=ambiente)
         print("Teste encerrado")
     except (ValueError, RuntimeError, TimeoutError, OSError, SQLAlchemyError) as erro:
+        _fechar_simulador(simulador)
         if marker is not None:
             parar_sessao()
         if started and arquivo is not None and modo is not None and ambiente is not None:

@@ -146,6 +146,7 @@ class ManagedMqttTests(unittest.TestCase):
             receiver = MqttReceiver(Settings(), store, Mock())
             with self.assertLogs("rfid_ingestion.mqtt_client", level="ERROR") as captured:
                 receiver._on_message(None, None, Mock(topic=reading_topic("r"), qos=1, retain=False, payload=b'{}'))
+                receiver._flush_pending()
             self.assertTrue(receiver.failed.is_set())
             self.assertNotIn("synthetic-secret", str(captured.output))
 

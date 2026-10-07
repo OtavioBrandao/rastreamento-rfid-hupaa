@@ -132,11 +132,6 @@ def semear(session: Session, reader_id: str = "reader-01", serial: str | None = 
     return resumo
 
 
-def semear_epcs_sinteticos(session: Session, epcs: list[str]) -> dict[str, str]:
-    """Vincula EPCs de teste antes da publicação para observar a última zona."""
-    return semear_equipamentos(session, [(epc, None) for epc in epcs], TIPO_SINTETICO)
-
-
 def semear_equipamentos(session: Session, tags: list[tuple[str, str | None]],
                         tipo_nome: str = TIPO_FISICO) -> dict[str, str]:
     """Vincula cada EPC a um equipamento de laboratório com o nome informado.
@@ -199,14 +194,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reader-id", default="reader-01")
     parser.add_argument("--serial")
-    parser.add_argument("--epc", action="append", default=[])
     parser.add_argument("--tag", action="append", default=[], type=parse_tag,
                         help="EPC=Nome do equipamento físico a cadastrar")
     args = parser.parse_args()
     with SessionLocal() as session:
         resumo = semear(session, args.reader_id, args.serial)
-        epcs = semear_epcs_sinteticos(session, args.epc)
-        epcs.update(semear_equipamentos(session, args.tag))
+        epcs = semear_equipamentos(session, args.tag)
     print("Cadastro base: " + "; ".join(f"{chave}: {estado}"
                                         for chave, estado in resumo.items()))
     for epc, estado in epcs.items():

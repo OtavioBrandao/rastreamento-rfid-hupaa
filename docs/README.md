@@ -151,6 +151,8 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Correção da aba Banco no launcher do Windows](implementations/lab-launcher-windows-observador-banco.md)
    - [Perfil de publicação no teste externo sintético](implementations/lab-launcher-publicador-hivemq.md)
    - [Verificação da fila de ingestão no ensaio externo sintético](implementations/lab-launcher-verificacao-fila-neon.md)
+   - [Simulador visual do laboratório (substitui os roteiros sintéticos)](implementations/simulador-visual-laboratorio.md)
+   - [Ingestor em lotes para banco remoto](implementations/hotfix-ingestor-lotes-banco-remoto.md)
    - [Guia de Migrations (ISS-002c)](implementations/iss-002c-migrations.md)
    - [Pipeline de CI (ISS-004)](implementations/iss-004-ci.md)
 
