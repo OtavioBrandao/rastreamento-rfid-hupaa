@@ -670,16 +670,12 @@ button,a {
 }
 .map-layout {
   display:grid;
-  grid-template-columns:minmax(0,1fr) 285px;
+  grid-template-columns:minmax(0,1fr);
   gap:16px;
   align-items:start
 }
 .map-main {
   min-width:0
-}
-.map-sidebar {
-  display:grid;
-  gap:16px
 }
 .map-control-heading {
   display:flex;
@@ -848,7 +844,7 @@ button,a {
   transform:translate(-50%,-50%) scale(1.12)
 }
 .marker-equipment {
-  background:var(--available)
+  background:var(--kpi-available)
 }
 .marker-attention,.marker-atencao {
   background:var(--attention)
@@ -1323,9 +1319,6 @@ button,a {
   .map-layout {
     grid-template-columns:1fr
   }
-  .map-sidebar {
-    grid-template-columns:repeat(2,minmax(0,1fr))
-  }
   .filter-panel {
     grid-column:1/-1
   }
@@ -1386,9 +1379,6 @@ button,a {
   }
   .map-layout {
     grid-template-columns:1fr
-  }
-  .map-sidebar {
-    grid-template-columns:repeat(2,minmax(0,1fr))
   }
   .floor-map {
     aspect-ratio:1.9
@@ -1461,7 +1451,7 @@ button,a {
   .kpi-grid {
     grid-template-columns:repeat(2,minmax(0,1fr))
   }
-  .overview-side,.map-sidebar {
+  .overview-side {
     grid-template-columns:1fr
   }
   .filter-panel {
@@ -1617,3 +1607,39 @@ button,a {
 .registered-detections { margin-top:20px }
 .asset-filters .checkbox-label { display:flex; align-items:center; gap:8px; flex:0 1 auto; min-height:40px }
 .asset-filters .checkbox-label input { width:auto; min-height:0 }
+
+/* Abas e inspeção de zona ocupam toda a largura disponível abaixo da planta. */
+.map-equipment-browser { margin-top:20px; min-width:0 }
+.map-data-tabs { display:flex; flex-wrap:wrap; gap:4px; padding:6px 6px 0; background:#eaf0f3; border:1px solid var(--line); border-radius:10px 10px 0 0 }
+.map-data-tabs button { padding:12px 15px; min-height:46px; border:1px solid transparent; border-bottom:0; border-radius:8px 8px 0 0; background:transparent; color:#526772; font-size:.8rem; font-weight:700 }
+.map-data-tabs button[aria-selected="true"] { background:#fff; color:var(--blue); border-color:var(--line); box-shadow:inset 0 3px var(--blue) }
+.map-equipment-browser .panel { margin-top:0; border-radius:0 0 10px 10px }
+.map-equipment-browser .panel-heading { flex-wrap:wrap; gap:12px }
+.map-table-empty { padding:0 20px 20px }
+.zone-equipment-popover { position:absolute; z-index:7; transform:translate(-50%,-50%); width:min(288px,calc(100% - 24px)); border:2px solid #b9ced7; border-radius:28px; padding:12px; background:#fffffff5; box-shadow:0 8px 28px #173b4c40 }
+.zone-popover-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:.82rem }
+.zone-equipment-popover p { font-size:.65rem; color:#526772; margin:5px 0 10px }
+.zone-equipment-dots { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px 6px; max-height:180px; overflow-y:auto; padding:4px }
+.zone-equipment-dot { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; border:0; padding:0; background:none; color:#244257; font-size:.62rem }
+.zone-dot-icon { display:grid; place-items:center; flex:none; width:38px; height:38px; border:2px solid white; border-radius:50%; background:var(--kpi-available); color:#fff; box-shadow:0 2px 5px #173b4c30 }
+.zone-equipment-dot.marker-atencao .zone-dot-icon { background:#e7ad22; color:#513400 }
+.zone-equipment-dot.marker-offline .zone-dot-icon { background:var(--offline) }
+.zone-equipment-dot.marker-fora_de_servico .zone-dot-icon { background:var(--critical) }
+.zone-dot-name { overflow-wrap:anywhere; line-height:1.2; text-align:center }
+.zone-dot-status .status-badge { padding:2px 3px; font-size:.52rem; white-space:normal; text-align:center }
+.zone-equipment-dot:hover .zone-dot-icon,.zone-equipment-dot:focus-visible .zone-dot-icon { outline:2px solid var(--blue); outline-offset:2px }
+.map-equipment-browser [hidden] { display:none }
+@media(max-width:700px) {
+  .map-data-tabs button { flex:1 1 130px; font-size:.72rem; padding:10px 8px }
+  .map-equipment-browser .panel-heading { align-items:flex-start }
+  .map-equipment-browser .equipment-table td { padding:6px 12px }
+  .map-equipment-browser .equipment-table td div { min-width:0; overflow-wrap:anywhere }
+  .map-equipment-browser .equipment-table .table-item-button { overflow-wrap:anywhere }
+  .zone-equipment-popover { border-radius:22px }
+}
+.marker-equipment.marker-atencao { background:#e7ad22; color:#513400 }
+.floor-map-hospital .sector-pin { transform:translate(-50%,-185%) }
+.map-equipment-browser .equipment-table { table-layout:fixed }
+.map-equipment-browser .equipment-table td { overflow-wrap:anywhere }
+.map-equipment-browser .equipment-table td .status-badge { display:table; margin:5px 0 0 }
+.map-equipment-browser .status-disponivel,.zone-dot-status .status-disponivel { color:#146b2e; background:#e9f6ed; border-color:#b9ddc3 }

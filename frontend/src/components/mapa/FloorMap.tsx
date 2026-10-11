@@ -1,6 +1,7 @@
 import { hospitalOutlinePath, type MainZone, type MapZone } from '../../config/mapaConfig'
 import type { AssetStatus } from '../../types/dashboard'
 import { Icon } from '../layout/Icon'
+import type { ReactNode } from 'react'
 
 export interface MapMarker {
   id: string
@@ -14,9 +15,10 @@ export interface MapMarker {
   dimmed?: boolean
   pulse?: boolean
   pulseKey?: number
+  expanded?: boolean
 }
 
-export function FloorMap({ mode, zones = [], mainZones = [], selectedZoneId = '', showZones = true, markers, onMarkerClick, onZoneClick }: { mode: 'hospital' | 'lab'; zones?: MapZone[]; mainZones?: MainZone[]; selectedZoneId?: string; showZones?: boolean; markers: MapMarker[]; onMarkerClick: (marker: MapMarker) => void; onZoneClick?: (id: string) => void }) {
+export function FloorMap({ mode, zones = [], mainZones = [], selectedZoneId = '', showZones = true, markers, onMarkerClick, onZoneClick, expandedZone }: { mode: 'hospital' | 'lab'; zones?: MapZone[]; mainZones?: MainZone[]; selectedZoneId?: string; showZones?: boolean; markers: MapMarker[]; onMarkerClick: (marker: MapMarker) => void; onZoneClick?: (id: string) => void; expandedZone?: { x: number; y: number; content: ReactNode } }) {
   const position = (x: number, y: number) => mode === 'hospital'
     ? { left: `${((x + 1.5) / 103) * 100}%`, top: `${((y + 2) / 104) * 100}%` }
     : { left: `${x}%`, top: `${y}%` }
@@ -40,7 +42,8 @@ export function FloorMap({ mode, zones = [], mainZones = [], selectedZoneId = ''
         <text x="25" y="38" className="room-label">SALA A</text><text x="75" y="38" className="room-label">SALA B</text><text x="50" y="88" className="corridor-label">ÁREA COMUM / PORTAL DE TESTES</text>
       </>}
     </svg>
-    {mode === 'hospital' && <div className="sector-layer" aria-label="Três zonas principais provisórias">{mainZones.map((zone) => <button key={zone.id} type="button" className={`sector-pin ${selectedZoneId === zone.id ? 'sector-pin-selected' : ''}`} style={position(zone.x, zone.y)} aria-label={`${zone.name}: ${zone.description}`} aria-pressed={selectedZoneId === zone.id} onClick={() => onZoneClick?.(selectedZoneId === zone.id ? '' : zone.id)}>{zone.name}</button>)}</div>}
-    <div className="marker-layer">{markers.map((marker) => <button key={`${marker.id}-${marker.pulseKey ?? 0}`} type="button" data-portal-id={marker.portalId} className={`map-marker marker-${marker.kind} ${marker.status ? `marker-${marker.status}` : ''} ${marker.dimmed ? 'marker-dimmed' : ''} ${marker.pulse ? 'marker-pulse' : ''}`} style={position(marker.x, marker.y)} aria-label={`${marker.label}. ${marker.detail}`} title={`${marker.label} — ${marker.detail}`} onClick={() => onMarkerClick(marker)}><Icon name={marker.kind} size={20}/><span className="marker-tooltip"><strong>{marker.label}</strong><small>{marker.detail}</small></span></button>)}</div>
+    {mode === 'hospital' && <div className="sector-layer" aria-label="Três zonas principais provisórias">{mainZones.map((zone) => <button key={zone.id} type="button" className={`sector-pin ${selectedZoneId === zone.id ? 'sector-pin-selected' : ''}`} style={position(zone.x, zone.y)} aria-label={`${zone.name}: ${zone.description}`} aria-pressed={selectedZoneId === zone.id} onClick={() => onZoneClick?.(zone.id)}>{zone.name}</button>)}</div>}
+    <div className="marker-layer">{markers.map((marker) => <button key={`${marker.id}-${marker.pulseKey ?? 0}`} type="button" data-portal-id={marker.portalId} className={`map-marker marker-${marker.kind} ${marker.status ? `marker-${marker.status}` : ''} ${marker.dimmed ? 'marker-dimmed' : ''} ${marker.pulse ? 'marker-pulse' : ''}`} style={position(marker.x, marker.y)} aria-label={`${marker.label}. ${marker.detail}`} aria-expanded={marker.expanded} title={`${marker.label} — ${marker.detail}`} onClick={() => onMarkerClick(marker)}><Icon name={marker.kind} size={20}/><span className="marker-tooltip"><strong>{marker.label}</strong><small>{marker.detail}</small></span></button>)}</div>
+    {expandedZone && <div className="zone-equipment-popover" style={{ left: `clamp(150px, ${position(expandedZone.x, expandedZone.y).left}, calc(100% - 150px))`, top: `clamp(135px, ${position(expandedZone.x, expandedZone.y).top}, calc(100% - 135px))` }}>{expandedZone.content}</div>}
   </div>
 }

@@ -139,6 +139,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Frontend e Dashboard Operacional (ISS-032, Etapa A)](implementations/iss-032-frontend-dashboard.md)
    - [Redesenho do Dashboard e Mapas (ISS-032)](implementations/iss-032-redesign-mapas.md)
    - [Mapa por zonas e portais (ISS-023)](implementations/iss-023-mapa-portais.md)
+   - [Mapas HUPAA/EASY: abas e equipamentos por zona](implementations/mapa-abas-equipamentos.md)
    - [Atualização automática das telas (ISS-033)](implementations/iss-033-atualizacao-automatica.md)
 4. Decisões Arquiteturais:
    - [Índice de ADRs](decisions/README.md)
