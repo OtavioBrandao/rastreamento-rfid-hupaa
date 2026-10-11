@@ -1641,5 +1641,5 @@ button,a {
 .floor-map-hospital .sector-pin { transform:translate(-50%,-185%) }
 .map-equipment-browser .equipment-table { table-layout:fixed }
 .map-equipment-browser .equipment-table td { overflow-wrap:anywhere }
-.map-equipment-browser .equipment-table td .status-badge { display:table; margin:5px 0 0 }
+.map-equipment-browser .equipment-table td .status-badge { display:flex; width:fit-content; max-width:100%; margin:5px 0 0 }
 .map-equipment-browser .status-disponivel,.zone-dot-status .status-disponivel { color:#146b2e; background:#e9f6ed; border-color:#b9ddc3 }
