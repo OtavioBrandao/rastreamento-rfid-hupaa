@@ -109,8 +109,8 @@ local com leitor físico ou com broker e banco externos. Veja
 
 ### Iniciar a API FastAPI:
 ```bash
-python -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --env-file .env.cloud
-# Acesse a documentação interativa em http://127.0.0.1:8000/docs
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8010 --env-file .env.cloud
+# Acesse a documentação interativa em http://127.0.0.1:8010/docs
 ```
 
 O comando acima mantém o fluxo com banco e broker externos já configurados em
