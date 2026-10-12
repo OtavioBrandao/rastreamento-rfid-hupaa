@@ -50,7 +50,10 @@ terminal. Nenhuma rota, contrato de API ou regra de backend foi alterada.
 - Clicar em uma bolinha abre o painel de detalhes do equipamento (histórico,
   EPC, metadados e status).
 - Enquanto a zona está selecionada, as abas são substituídas por uma tabela só
-  com os equipamentos daquela zona. Fechar o cluster (×, Esc, clique fora ou
+  com os equipamentos daquela zona, ordenada por prioridade: primeiro os em
+  trânsito, depois os que pedem atenção e, por último, os marcados com
+  "localização pode estar desatualizada".
+- Fechar o cluster (×, Esc, clique fora ou
   **Fechar zona e voltar às abas**) restaura as abas no estado anterior.
 - Se a topologia deixar de validar a zona selecionada, a seleção é desfeita.
 
@@ -113,6 +116,17 @@ ensaio de 07/10), a janela passava dezenas de minutos mostrando leituras antigas
 como se estivessem chegando naquele momento. Agora ele parte da última leitura,
 da última movimentação e das passagens já existentes, e mostra só o que chegar
 depois de aberto.
+
+### Simulador reaproveita equipamentos pelo nome
+
+Cada "Gerar itens no mapa" sorteava EPCs novos, e o cadastro criava um
+equipamento novo para cada um. Assim, o mesmo nome (ex.: "Bomba X") virava vários
+equipamentos. Agora `epcs_por_nome` (`tools/lab_launcher/seed.py`) procura o
+equipamento sintético com o mesmo nome (sem diferenciar maiúsculas/espaços) e o
+simulador reutiliza a tag dele, mantendo histórico e última zona. Se houver
+homônimos, vale o ativo detectado por último; um equipamento inativo é
+reativado. Só nomes novos recebem EPC sorteado. Duplicatas criadas antes desta
+correção continuam no banco.
 
 ## Validação
 

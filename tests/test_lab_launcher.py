@@ -23,7 +23,7 @@ from db.models import (
 from rfid_ingestion.config import Settings
 from tools.lab_launcher import cli, docker_env, session, tags, terminals, watch
 from tools.lab_launcher.config import carregar
-from tools.lab_launcher.seed import semear, semear_equipamentos
+from tools.lab_launcher.seed import TIPO_SINTETICO, epcs_por_nome, semear, semear_equipamentos
 
 
 def test_seed_laboratorio_reexecutavel(db):
@@ -341,6 +341,26 @@ def test_tags_fisicas_cadastram_equipamentos_com_nome(db):
     assert db.scalar(select(func.count()).select_from(Equipamento)) == 2
     assert db.scalar(select(func.count()).select_from(AssociacaoTagEquipamento)) == 2
     assert "Bomba de infusão 02" in set(db.scalars(select(Equipamento.nome)))
+
+
+def test_simulador_reaproveita_equipamento_pelo_nome(db):
+    from api.service_equipamento import inativar
+
+    semear(db)
+    epc = "E2804C41AAAAAAAAAAAAAAAA"
+    semear_equipamentos(db, [(epc, "Bomba X")], TIPO_SINTETICO)
+
+    # Nome repetido devolve a tag existente; nome novo fica de fora (ganha EPC sorteado).
+    assert epcs_por_nome(db, ["Bomba X ", "Monitor novo"], TIPO_SINTETICO) == {"Bomba X": epc}
+    semear_equipamentos(db, [(epc, "Bomba X")], TIPO_SINTETICO)
+    assert db.scalar(select(func.count()).select_from(Equipamento)
+                     .where(Equipamento.nome == "Bomba X")) == 1
+
+    equipamento = db.scalar(select(Equipamento).where(Equipamento.nome == "Bomba X"))
+    inativar(db, equipamento.id)
+    assert epcs_por_nome(db, ["bomba x"], TIPO_SINTETICO) == {"bomba x": epc}
+    db.refresh(equipamento)
+    assert equipamento.status == "ativo"
 
 
 def test_tag_fisica_nao_renomeia_equipamento_cadastrado_fora_do_laboratorio(db):
