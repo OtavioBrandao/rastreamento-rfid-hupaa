@@ -1,14 +1,22 @@
-"""Sobe ingestor MQTT, API FastAPI e frontend Vite em um só terminal.
+"""Sobe API + frontend e abre o launcher de laboratório em um só comando.
 
-Uso (na raiz do repositório):
+Uso (na raiz do repositório, em Windows 11 ou Ubuntu 24.04):
 
-    python scripts/dev.py                      # usa .env.cloud
-    python scripts/dev.py --env-file .env.local
-    python scripts/dev.py --sem-ingestor       # só API + frontend
+    python scripts/dev.py              # mostra o menu de testes 1-4
+    python scripts/dev.py --teste 4    # escolhe direto, sem menu
 
-Ctrl+C encerra os três processos. A saída de cada um aparece com prefixo
-colorido ([ingestor], [api], [front]). Nenhuma credencial é lida ou exibida
-por este script: o arquivo de ambiente é carregado pelos próprios processos.
+Fluxo:
+1. Mostra o mesmo menu do ``python -m tools.lab_launcher`` (1 a 4).
+2. Sobe a API FastAPI apontando para o banco do cenário escolhido (local ou
+   externo) e o frontend Vite, em segundo plano, e abre o navegador.
+3. Entrega o terminal ao launcher, que continua as perguntas (roteiro,
+   transporte etc.), sobe o backend em Docker, abre os três terminais de
+   observação (MQTT, Ingestor e Banco) e publica o simulador, se for o caso.
+
+Ctrl+C encerra o launcher (que derruba os contêineres) e depois a API e o
+frontend. A saída da API e do frontend vai para ``data/dev/*.log`` para não
+se misturar às perguntas do launcher. Nenhuma credencial é exibida nem passada
+na linha de comando: a API lê o mesmo arquivo de ambiente que o launcher.
 """
 
 from __future__ import annotations
@@ -20,15 +28,23 @@ import signal
 import socket
 import subprocess
 import sys
-import threading
 import time
+import urllib.request
+import webbrowser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
+LOGS = ROOT / "data" / "dev"
 WINDOWS = os.name == "nt"
-CORES = {"ingestor": "\033[35m", "api": "\033[36m", "front": "\033[32m"}
-RESET = "\033[0m"
+
+TESTES = {
+    "1": ("local", "synthetic", "Local com dados sintéticos"),
+    "2": ("local", "physical", "Local com leitor físico"),
+    "3": ("managed", "physical", "Broker e banco externos com leitor físico"),
+    "4": ("managed", "synthetic", "Broker e banco externos com dados sintéticos"),
+    "5": ("managed", None, "Somente API e frontend (banco externo, sem teste)"),
+}
 
 
 def python_do_projeto() -> str:
@@ -38,31 +54,27 @@ def python_do_projeto() -> str:
     return sys.executable
 
 
-def comandos(args: argparse.Namespace, python: str) -> dict[str, tuple[list[str], Path]]:
-    env_file = str(args.env_file)
-    selecionados: dict[str, tuple[list[str], Path]] = {}
-    if not args.sem_ingestor:
-        # O ingestor lê só os.environ; load_dotenv roda no Python da .venv, que já tem python-dotenv.
-        codigo = ("import runpy, sys; from dotenv import load_dotenv; "
-                  "load_dotenv(sys.argv[1]); runpy.run_module('rfid_ingestion', run_name='__main__')")
-        selecionados["ingestor"] = ([python, "-c", codigo, env_file], ROOT)
-    if not args.sem_api:
-        selecionados["api"] = ([python, "-m", "uvicorn", "api.main:app", "--host", args.host,
-                                "--port", str(args.api_port), "--env-file", env_file], ROOT)
-    if not args.sem_front:
-        npm = shutil.which("npm")
-        if npm is None:
-            sys.exit("npm não encontrado no PATH. Instale o Node.js ou use --sem-front.")
-        selecionados["front"] = ([npm, "run", "dev"], FRONTEND)
-    return selecionados
+def servir_api(modo: str, env_file: str | None, host: str, porta: int) -> None:
+    """Roda no Python da .venv: resolve o banco como o launcher e inicia o uvicorn."""
+    sys.path.insert(0, str(ROOT))
+    import uvicorn
+
+    from tools.lab_launcher.config import carregar
+
+    _, valores = carregar(modo, Path(env_file) if env_file else None, interativo=False)
+    os.environ.update(valores)
+    uvicorn.run("api.main:app", host=host, port=porta)
 
 
-def repassar_saida(nome: str, processo: subprocess.Popen[bytes], cor: bool) -> None:
-    prefixo = f"{CORES[nome]}[{nome}]{RESET} " if cor else f"[{nome}] "
-    assert processo.stdout is not None
-    for linha in iter(processo.stdout.readline, b""):
-        texto = linha.decode("utf-8", errors="replace").rstrip()
-        print(f"{prefixo}{texto}", flush=True)
+def escolher_teste(valor: str | None) -> str:
+    if valor is None:
+        print("Ambiente de desenvolvimento RFID\n")
+        for chave, (_, _, descricao) in TESTES.items():
+            print(f"{chave}. {descricao}")
+        valor = input("\nEscolha o teste (1-5) [1]: ").strip() or "1"
+    if valor not in TESTES:
+        sys.exit("Escolha um teste de 1 a 5.")
+    return valor
 
 
 def porta_ocupada(host: str, porta: int) -> bool:
@@ -71,89 +83,137 @@ def porta_ocupada(host: str, porta: int) -> bool:
         return sock.connect_ex((host, porta)) == 0
 
 
-def encerrar(processo: subprocess.Popen[bytes]) -> None:
+def aguardar_http(url: str, processo: subprocess.Popen, timeout: float = 30) -> bool:
+    prazo = time.monotonic() + timeout
+    while time.monotonic() < prazo and processo.poll() is None:
+        try:
+            with urllib.request.urlopen(url, timeout=1):
+                return True
+        except OSError:
+            time.sleep(0.5)
+    return False
+
+
+def iniciar(comando: list[str], pasta: Path, env: dict[str, str], log: Path | None) -> subprocess.Popen:
+    # Grupo próprio: o Ctrl+C do terminal vai só para o launcher; estes são encerrados depois.
+    extras = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if WINDOWS
+              else {"start_new_session": True})
+    saida = open(log, "w", encoding="utf-8") if log else None  # noqa: SIM115 - vive junto do processo
+    return subprocess.Popen(comando, cwd=pasta, env=env, stdin=subprocess.DEVNULL,
+                            stdout=saida, stderr=subprocess.STDOUT if saida else None, **extras)
+
+
+def encerrar(processo: subprocess.Popen) -> None:
     if processo.poll() is not None:
         return
     if WINDOWS:
         # npm.cmd abre node como filho; /T derruba a árvore inteira.
         subprocess.run(["taskkill", "/PID", str(processo.pid), "/T", "/F"],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    else:
-        try:
-            os.killpg(processo.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return
-        try:
-            processo.wait(timeout=8)
-        except subprocess.TimeoutExpired:
-            os.killpg(processo.pid, signal.SIGKILL)
+        return
+    try:
+        os.killpg(processo.pid, signal.SIGTERM)
+        processo.wait(timeout=8)
+    except ProcessLookupError:
+        pass
+    except subprocess.TimeoutExpired:
+        os.killpg(processo.pid, signal.SIGKILL)
+
+
+def ultimas_linhas(log: Path | None, quantidade: int = 15) -> str:
+    if log is None or not log.exists():
+        return ""
+    return "\n".join(log.read_text(encoding="utf-8", errors="replace").splitlines()[-quantidade:])
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Sobe ingestor, API e frontend juntos.")
-    parser.add_argument("--env-file", type=Path, default=Path(".env.cloud"),
-                        help="arquivo de ambiente usado pelo ingestor e pela API (padrão: .env.cloud)")
+    parser = argparse.ArgumentParser(description="Sobe API + frontend e abre o launcher de laboratório.")
+    parser.add_argument("--teste", choices=sorted(TESTES), help="pula o menu e escolhe o teste")
+    parser.add_argument("--env-file", help="arquivo de ambiente (padrão: .env.local ou .env.cloud)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--api-port", type=int, default=8010)
-    parser.add_argument("--sem-ingestor", action="store_true", help="não sobe o ingestor MQTT")
-    parser.add_argument("--sem-api", action="store_true", help="não sobe a API FastAPI")
-    parser.add_argument("--sem-front", action="store_true", help="não sobe o frontend Vite")
-    parser.add_argument("--sem-cor", action="store_true", help="desativa cores nos prefixos")
+    parser.add_argument("--front-port", type=int, default=5173)
+    parser.add_argument("--sem-navegador", action="store_true", help="não abre o navegador")
+    parser.add_argument("--servir-api", choices=("local", "managed"), help=argparse.SUPPRESS)
     args = parser.parse_args()
 
-    if not args.env_file.is_absolute():
-        args.env_file = ROOT / args.env_file
-    if not (args.sem_ingestor and args.sem_api) and not args.env_file.exists():
-        sys.exit(f"Arquivo de ambiente não encontrado: {args.env_file}. Copie o .example correspondente.")
-
-    if not args.sem_api and porta_ocupada(args.host, args.api_port):
-        sys.exit(f"A porta {args.api_port} já está em uso por outro processo. "
-                 f"Use --api-port <outra porta> (o proxy do frontend acompanha).")
+    if args.servir_api:
+        servir_api(args.servir_api, args.env_file, args.host, args.api_port)
+        return 0
 
     for fluxo in (sys.stdout, sys.stderr):
         fluxo.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
-    python = python_do_projeto()
-    selecionados = comandos(args, python)
-    if not selecionados:
-        sys.exit("Nada para subir: todos os processos foram desativados.")
-    if "front" in selecionados and not (FRONTEND / "node_modules").exists():
-        print("[front] node_modules ausente; executando npm ci...", flush=True)
-        subprocess.run([selecionados["front"][0][0], "ci"], cwd=FRONTEND, check=True)
+    escolha = escolher_teste(args.teste)
+    modo, origem, descricao = TESTES[escolha]
+    print(f"\n> {descricao}")
 
-    cor = not args.sem_cor and sys.stdout.isatty()
-    if WINDOWS and cor:
-        os.system("")  # habilita sequências ANSI no console do Windows
+    if porta_ocupada(args.host, args.api_port):
+        sys.exit(f"A porta {args.api_port} já está em uso. Use --api-port <outra porta>.")
+    if porta_ocupada("127.0.0.1", args.front_port):
+        sys.exit(f"A porta {args.front_port} (frontend) já está em uso. Use --front-port <outra porta>.")
+    front_url = f"http://localhost:{args.front_port}/"
+    npm = shutil.which("npm")
+    if npm is None:
+        sys.exit("npm não encontrado no PATH. Instale o Node.js.")
+    if not (FRONTEND / "node_modules").exists():
+        print("Instalando dependências do frontend (npm ci)...", flush=True)
+        subprocess.run([npm, "ci"], cwd=FRONTEND, check=True)
+
+    python = python_do_projeto()
     ambiente = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",
                     RFID_API_URL=f"http://{args.host}:{args.api_port}")
-    ambiente.pop("FORCE_COLOR" if not cor else "NO_COLOR", None)
-    ambiente.update({"FORCE_COLOR": "1"} if cor else {"NO_COLOR": "1"})
-    extras = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if WINDOWS
-              else {"start_new_session": True})
+    # Com o launcher na frente, API e frontend escrevem em arquivo para não poluir o menu.
+    com_launcher = origem is not None
+    LOGS.mkdir(parents=True, exist_ok=True)
+    log_api = LOGS / "api.log" if com_launcher else None
+    log_front = LOGS / "front.log" if com_launcher else None
 
-    processos: dict[str, subprocess.Popen[bytes]] = {}
+    api_cmd = [python, str(Path(__file__).resolve()), "--servir-api", modo,
+               "--host", args.host, "--api-port", str(args.api_port)]
+    if args.env_file:
+        api_cmd += ["--env-file", args.env_file]
+    processos: list[subprocess.Popen] = []
+    launcher: subprocess.Popen | None = None
     try:
-        for nome, (comando, pasta) in selecionados.items():
-            processos[nome] = subprocess.Popen(comando, cwd=pasta, env=ambiente, stdout=subprocess.PIPE,
-                                               stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, **extras)
-            threading.Thread(target=repassar_saida, args=(nome, processos[nome], cor), daemon=True).start()
-        if "front" in processos:
-            print("Frontend: http://localhost:5173/", flush=True)
-        if "api" in processos:
-            print(f"API: http://{args.host}:{args.api_port}/docs", flush=True)
-        print("Ctrl+C encerra tudo.", flush=True)
-        avisados: set[str] = set()
-        while len(avisados) < len(processos):
-            for nome, processo in processos.items():
-                if nome not in avisados and processo.poll() is not None:
-                    avisados.add(nome)
-                    print(f"[{nome}] encerrou com código {processo.returncode}", flush=True)
-            time.sleep(0.5)
-        return max(processo.returncode or 0 for processo in processos.values())
+        api = iniciar(api_cmd, ROOT, ambiente, log_api)
+        front = iniciar([npm, "run", "dev", "--", "--port", str(args.front_port), "--strictPort"], FRONTEND, ambiente, log_front)
+        processos += [api, front]
+        print("Subindo API e frontend...", flush=True)
+        for nome, url, processo, log in (("API", f"http://{args.host}:{args.api_port}/health", api, log_api),
+                                         ("Frontend", front_url, front, log_front)):
+            if not aguardar_http(url, processo):
+                print(f"{nome} não respondeu em {url}.\n{ultimas_linhas(log)}", flush=True)
+                return 1
+        print(f"API: http://{args.host}:{args.api_port}/docs")
+        print(f"Frontend: {front_url}")
+        if log_api:
+            print(f"Logs da API e do frontend: {LOGS}")
+        if not args.sem_navegador:
+            webbrowser.open(front_url)
+
+        if not com_launcher:
+            print("Ctrl+C encerra tudo.", flush=True)
+            while all(processo.poll() is None for processo in processos):
+                time.sleep(0.5)
+            return 1
+
+        print("\nAbrindo o launcher de laboratório...\n", flush=True)
+        comando = [python, "-m", "tools.lab_launcher", "start", "--env", modo, "--source", origem]
+        if args.env_file:
+            comando += ["--env-file", args.env_file]
+        launcher = subprocess.Popen(comando, cwd=ROOT, env=dict(os.environ))
+        return launcher.wait()
     except KeyboardInterrupt:
-        print("\nEncerrando...", flush=True)
+        # O launcher recebe o mesmo Ctrl+C e derruba os contêineres; esperar por ele.
+        while launcher is not None and launcher.poll() is None:
+            try:
+                launcher.wait()
+            except KeyboardInterrupt:
+                pass
         return 0
     finally:
-        for processo in processos.values():
+        print("Encerrando API e frontend...", flush=True)
+        for processo in processos:
             encerrar(processo)
 
 

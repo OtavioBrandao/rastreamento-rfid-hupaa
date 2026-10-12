@@ -121,15 +121,18 @@ existente a partir da pasta original e acrescente
 para o arquivo da pasta original. O frontend deve ser iniciado no mesmo worktree
 para servir o código correspondente ao backend.
 
-### Subir ingestor, API e frontend em um só terminal:
+### Subir tudo com um comando (API, frontend e teste de laboratório):
 
 ```bash
-python scripts/dev.py                 # usa .env.cloud; --env-file .env.local para o ambiente local
-python scripts/dev.py --sem-ingestor  # apenas API + frontend
+python scripts/dev.py
 ```
 
-`Ctrl+C` encerra os três processos. Veja as opções em
-[mapa com abas e script de desenvolvimento](docs/implementations/mapa-abas-cluster-zonas.md).
+O script mostra o menu de testes (1 a 4, mais a opção 5 só com API e frontend),
+sobe a API na porta 8010 e o frontend em http://localhost:5173/ apontando para o
+banco do cenário escolhido e entrega o terminal ao launcher de laboratório, que
+sobe o backend em Docker, abre os três terminais (MQTT, Ingestor e Banco) e
+publica o simulador. `Ctrl+C` encerra tudo. Funciona em Windows 11 e Ubuntu 24.04.
+Veja as opções em [mapa com abas e script de desenvolvimento](docs/implementations/mapa-abas-cluster-zonas.md).
 
 ### Iniciar o frontend operacional (ISS-032B):
 
