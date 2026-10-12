@@ -66,6 +66,7 @@ def test_pipeline_preserves_raw_readings_and_only_debounces_insertions(
         )
         for message in (*messages, messages[1]):
             receiver._on_message(client, None, message)
+            receiver._flush_pending()
         receiver.flush_debounce()
 
     with pg_engine.connect() as connection:
@@ -97,7 +98,9 @@ def test_duplicate_persistence_result_never_increments_debounce(tmp_path) -> Non
             repository,
         )
         receiver._on_message(client, None, incoming)
+        receiver._flush_pending()
         receiver._on_message(client, None, incoming)
+        receiver._flush_pending()
         observation, = receiver.flush_debounce()
 
     assert observation.reading_count == 1
@@ -131,12 +134,15 @@ def test_late_event_is_logged_and_does_not_change_finalized_observation(
         receiver._on_message(
             client, None, mqtt_message(1, 1, "2026-09-22T12:00:00.000Z")
         )
+        receiver._flush_pending()
         receiver._on_message(
             client, None, mqtt_message(2, 1, "2026-09-22T12:00:01.000Z")
         )
+        receiver._flush_pending()
         receiver._on_message(
             client, None, mqtt_message(3, 1, "2026-09-22T12:00:00.050Z")
         )
+        receiver._flush_pending()
         receiver.flush_debounce()
 
     events = [json.loads(record.message) for record in caplog.records]
@@ -165,6 +171,7 @@ def test_debounce_failure_does_not_break_post_commit_ack(tmp_path, caplog) -> No
         receiver._on_message(
             client, None, mqtt_message(1, 1, "2026-09-22T12:00:00.000Z")
         )
+        receiver._flush_pending()
 
     client.ack.assert_called_once_with(1, 1)
     assert "rfid_debounce_failed" in caplog.text
@@ -211,6 +218,7 @@ def test_network_loop_emits_a_then_b_without_shutdown_flush(tmp_path, caplog) ->
             clock[0], incoming = deliveries.pop(0)
             if incoming is not None:
                 receiver._on_message(client, None, incoming)
+                receiver._flush_pending()
             return mqtt.MQTT_ERR_SUCCESS
 
         client.loop.side_effect = loop
