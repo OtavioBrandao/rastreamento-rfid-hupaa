@@ -94,7 +94,7 @@ def main() -> int:
     parser.add_argument("--env-file", type=Path, default=Path(".env.cloud"),
                         help="arquivo de ambiente usado pelo ingestor e pela API (padrão: .env.cloud)")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--api-port", type=int, default=8000)
+    parser.add_argument("--api-port", type=int, default=8010)
     parser.add_argument("--sem-ingestor", action="store_true", help="não sobe o ingestor MQTT")
     parser.add_argument("--sem-api", action="store_true", help="não sobe a API FastAPI")
     parser.add_argument("--sem-front", action="store_true", help="não sobe o frontend Vite")

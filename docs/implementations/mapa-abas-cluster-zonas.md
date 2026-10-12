@@ -66,7 +66,7 @@ cluster e a tabela da zona recalculam a cada atualização.
 python scripts/dev.py                       # ingestor + API + frontend com .env.cloud
 python scripts/dev.py --env-file .env.local
 python scripts/dev.py --sem-ingestor        # só API + frontend
-python scripts/dev.py --api-port 8010       # se a 8000 estiver ocupada
+python scripts/dev.py --api-port 8020       # se a 8010 estiver ocupada
 ```
 
 - Usa o Python da `.venv` quando existir; executa `npm ci` se faltar
@@ -76,7 +76,10 @@ python scripts/dev.py --api-port 8010       # se a 8000 estiver ocupada
 - O arquivo de ambiente é carregado pelos próprios processos; o script não lê
   nem exibe credenciais.
 - `--api-port` é repassado ao proxy do Vite pela variável `RFID_API_URL`
-  (`frontend/vite.config.ts`, padrão `http://127.0.0.1:8000`).
+  (`frontend/vite.config.ts`, padrão `http://127.0.0.1:8010`).
+- A porta padrão da API passou de 8000 para **8010**, porque a 8000 costuma
+  estar ocupada por outros projetos locais. Para subir a API manualmente, use
+  `--port 8010` (como no README da raiz).
 
 ## Validação
 

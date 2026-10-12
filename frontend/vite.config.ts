@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 declare const process: { env: Record<string, string | undefined> }
 
 // scripts/dev.py repassa --api-port por aqui; sem a variável, mantém a porta padrão.
-const api = process.env.RFID_API_URL ?? 'http://127.0.0.1:8000'
+const api = process.env.RFID_API_URL ?? 'http://127.0.0.1:8010'
 
 export default defineConfig({
   plugins: [react()],
