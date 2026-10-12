@@ -82,6 +82,18 @@ def carregar(modo: str, arquivo: Path | None, interativo: bool,
         valores["MQTT_USERNAME"] = ""
         valores["MQTT_PASSWORD"] = ""
     elif transporte == "plain":
+        host = valores["MQTT_PLAIN_HOST"].strip().strip("'\"")
+        if "://" in host or ":" in host:
+            raise ValueError(
+                f"MQTT_PLAIN_HOST deve ser só o nome do host, sem esquema nem porta "
+                f"(recebido {host!r}); a porta vai em MQTT_PLAIN_PORT. Ex.: "
+                f"MQTT_PLAIN_HOST={PLAIN_HOST_SUGERIDO}")
+        if host.endswith(".hivemq.cloud"):
+            raise ValueError(
+                "MQTT_PLAIN_HOST aponta para um cluster HiveMQ Cloud, que só aceita TLS "
+                "(8883) e recusa a porta 1883. Para mqtt sem TLS use outro broker, ex.: "
+                f"{PLAIN_HOST_SUGERIDO}; para o HiveMQ Cloud escolha o transporte mqtts")
+        valores["MQTT_PLAIN_HOST"] = host
         valores["MQTT_MODE"] = "cloud"
         valores["MQTT_TLS_ENABLED"] = "false"
         valores["MQTT_INSECURE_LAB"] = "true"

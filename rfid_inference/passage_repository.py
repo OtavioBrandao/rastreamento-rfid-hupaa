@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from datetime import timedelta
+from typing import Any, Callable
 
-from sqlalchemy import exists, or_, select
+from sqlalchemy import exists, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
@@ -15,21 +17,49 @@ from .passage import DetectedPassage, PortalObservation
 
 
 class PassageRepository:
-    def __init__(self, engine: Engine):
-        self.engine = engine
+    # Cada observação consultava o mapeamento da antena; com banco remoto isso
+    # deixava a inferência dezenas de segundos atrás. Os mapeamentos mudam
+    # raramente: todos os da antena (inclusive históricos) ficam em cache.
+    MAPPING_TTL_SECONDS = 30.0
 
-    def resolve(self, observation: ConsolidatedObservation) -> PortalObservation | None:
-        """Exige exatamente um mapeamento cobrindo a observação completa."""
+    def __init__(self, engine: Engine, *, clock: Callable[[], float] = time.monotonic):
+        self.engine = engine
+        self._clock = clock
+        self._mapeamentos: dict[int, tuple[list[Any], float]] = {}
+
+    def _mapeamentos_da_antena(self, antenna_id: int, *, atualizar: bool = False
+                               ) -> tuple[list[Any], bool]:
+        """Mapeamentos da antena e se vieram do cache."""
+        agora = self._clock()
+        guardado = self._mapeamentos.get(antenna_id)
+        if (not atualizar and guardado is not None
+                and agora - guardado[1] < self.MAPPING_TTL_SECONDS):
+            return guardado[0], True
         mapping = MapeamentoAntenaPortal
         with self.engine.connect() as connection:
             rows = connection.execute(
                 select(mapping.id, mapping.portal_id, mapping.lado, mapping.zona_id,
-                       mapping.inicio, mapping.fim).where(
-                    mapping.antena_id == observation.antenna_id,
-                    mapping.inicio <= observation.last_seen_at,
-                    or_(mapping.fim.is_(None), mapping.fim > observation.first_seen_at),
-                )
+                       mapping.inicio, mapping.fim).where(mapping.antena_id == antenna_id)
             ).all()
+        self._mapeamentos[antenna_id] = (rows, agora)
+        return rows, False
+
+    def resolve(self, observation: ConsolidatedObservation) -> PortalObservation | None:
+        """Exige exatamente um mapeamento cobrindo a observação completa.
+
+        Alterações de mapeamento valem em até ``MAPPING_TTL_SECONDS``; sem
+        nenhum mapeamento em cache para a observação, o banco é consultado de novo.
+        """
+        def cobrindo(rows: list[Any]) -> list[Any]:
+            return [row for row in rows
+                    if row.inicio <= observation.last_seen_at
+                    and (row.fim is None or row.fim > observation.first_seen_at)]
+
+        guardados, do_cache = self._mapeamentos_da_antena(observation.antenna_id)
+        rows = cobrindo(guardados)
+        if not rows and do_cache:
+            rows = cobrindo(self._mapeamentos_da_antena(observation.antenna_id,
+                                                        atualizar=True)[0])
         if len(rows) != 1:
             return None
         row = rows[0]

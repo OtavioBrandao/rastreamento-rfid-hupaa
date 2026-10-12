@@ -9,17 +9,14 @@ acompanhar a sequência MQTT → ingestão → `leituras_brutas`.
 
 ## O que foi implementado
 
-`python -m tools.lab_launcher` limpa a tela e mostra quatro escolhas: local com dados
-sintéticos, local com leitor físico, broker/banco externos com leitor físico e
-broker/banco externos com dados sintéticos. No modo local, também pergunta se
+`python -m tools.lab_launcher` limpa a tela e mostra quatro escolhas: local com
+simulador visual, local com leitor físico, broker/banco externos com leitor físico e
+broker/banco externos com simulador visual. No modo local, também pergunta se
 deve reaproveitar os dados. O modo sem perguntas usa as flags equivalentes:
 
 ```bash
 python -m tools.lab_launcher
-python -m tools.lab_launcher start --env local --source synthetic --passage
-python -m tools.lab_launcher start --env local --source synthetic --count 2 --messages 100
-python -m tools.lab_launcher start --env local --source synthetic --scenario 2
-python -m tools.lab_launcher start --env managed --source synthetic --scenario 3 --env-file .env.cloud
+python -m tools.lab_launcher start --env local --source synthetic
 python -m tools.lab_launcher start --env local --source physical --reader-id reader-01
 python -m tools.lab_launcher start --env local --source physical --tag "3034000000000C40000000E8=Bomba de infusão 01"
 python -m tools.lab_launcher start --env managed --source physical --mqtt-transport plain --tag "3034000000000C40000000E8=Bomba de infusão 01"
@@ -28,60 +25,40 @@ python -m tools.lab_launcher stop --env local
 python -m tools.lab_launcher stop --env local --clear-ports
 ```
 
-Com leitor físico (opções 2 e 3), o launcher não pergunta roteiro: depois das
+Com leitor físico (opções 2 e 3), o launcher não abre o simulador: depois das
 migrations lista os EPCs lidos nas últimas 24 horas e pergunta quais tags
 cadastrar e o nome do equipamento de cada uma (`--tag EPC=Nome` sem menu). No
 broker externo (opções 3 e 4), pergunta também o transporte: `mqtts` (TLS, 8883)
 ou `mqtt` sem TLS (1883, `--mqtt-transport plain`). Veja o
 [hotfix de tags físicas e MQTT sem TLS](implementations/hotfix-lab-tags-fisicas-mqtt-sem-tls.md).
 
-Nos testes sintéticos (opções 1 e 4), o modo interativo pergunta qual roteiro
-executar. `--scenario 1|2|3` faz a mesma seleção sem interação. O roteiro 1
-mantém o ensaio original de uma tag (ou `--count` tags independentes) em A → B;
-`--single` mantém a tag na antena A sem passagem. Os roteiros 2 e 3 usam por
-padrão os EPCs terminados em **02** e **03** e exigem exatamente dois EPCs se
-`--epc` for usado. Neles, `--messages` indica leituras por travessia, com mínimo
-de 10; `--interval` define a pausa entre lados do portal. O roteiro 2 faz 02
-A → B, depois 02 B → A enquanto 03 A → B, e depois 02 A → B enquanto 03
-B → A. O roteiro 3 faz 02 A → B e a mantém lá; 03 atravessa A → B → A → B → A.
-Leituras de tags que se movem ao mesmo tempo são intercaladas; há 3,5 segundos
-entre fases para permitir novas passagens da mesma tag. O payload JSON e o cálculo de `event_id` do ingestor não foram alterados.
+Nos testes sintéticos (opções 1 e 4), depois do ingestor saudável o launcher abre
+o **simulador visual** (`python -m tools.lab_simulator`), uma janela Flet com a
+mesma planta do mapa EASY: salas A e B, leitor 01, portal e as antenas A
+(porta 1) e B (porta 2), cada uma com um círculo de alcance. Na janela:
 
-`--reuse` reaproveita dados sem perguntar. `--fresh` executa
-`docker compose down -v` somente no modo local e apaga os
-volumes de laboratório. Ao iniciar, o launcher verifica os contêineres e os
-processos do host que escutam nas portas TCP locais de MQTT e PostgreSQL. Ele
-mostra nome e PID e pede confirmação antes de encerrá-los; `--force` dispensa
-essa confirmação. Não encerra o daemon Docker nem um processo sem PID acessível.
-Se faltar permissão ou uma porta continuar indisponível, o teste é interrompido
-com erro em vez de alegar que a porta foi liberada. Contêineres do próprio
-projeto são reaproveitados. `--no-terminals` permite execução sem interface
-gráfica. `--count`, `--messages`, `--interval`, `--epc` e `--single` controlam
-as publicações sintéticas. O padrão usa um EPC fixo de laboratório e publica
-**100 mensagens** em quatro etapas: 15 na aproximação da antena 1, 45 enquanto
-o item fica parado nessa antena, 10 ao sair da antena 1 e 30 ao atravessar a
-antena 2. A permanência dura cerca de sete segundos. `--interval` controla a
-pausa antes da antena 2 (500 ms por padrão), maior que a tolerância inicial de
-ambiguidade da direção (100 ms). `--count 2` simula dois itens e publica 100
-mensagens para cada um. Os valores de RSSI variam ilustrativamente entre
--6700 e -5700, na faixa das leituras exibidas pelo leitor, sem calibração
-física do sinal.
-Os EPCs padrão são reutilizados entre execuções; `--epc` permite informar EPCs
-hexadecimais próprios. O seed associa os EPCs sintéticos a equipamentos de
-laboratório antes da publicação, para que passagem confirmada também gere
-histórico de movimentação e última zona. Vínculos existentes são preservados.
-O launcher consulta o banco após publicar e informa, por EPC, as leituras
-persistidas, a passagem, o movimento e a última zona. Para permitir a ingestão
-mais lenta em banco externo, aguarda enquanto houver progresso: falha após 30
-segundos sem novas leituras ou ao atingir o limite total de cinco segundos por
-mensagem esperada. Depois da última leitura, há até 30 segundos para a passagem
-e o movimento serem confirmados. A conferência usa o intervalo do contador
-sintético desta execução, para não contar mensagens pendentes de ensaios
-anteriores com o mesmo EPC. `--single` mantém
-o item na antena 1 e valida somente as leituras, sem esperar passagem.
+1. Informe a quantidade de itens (1 a 12) e clique em **Definir nomes**.
+2. Dê um nome a cada item e clique em **Gerar itens no mapa**. Cada item recebe
+   um EPC aleatório de 96 bits (prefixo `E2804C41`) e é cadastrado no banco do
+   ensaio como equipamento do tipo sintético, com o nome escolhido. Os itens
+   aparecem em posições sorteadas, sempre fora do alcance das antenas;
+   **Novas posições** sorteia de novo.
+3. Arraste um item com o botão esquerdo. Dentro de um círculo, a antena gera uma
+   leitura a cada 0,2 s, com RSSI de -5700 (sobre a antena) a -6700 (na borda);
+   o círculo pulsa e o item fica verde. Para gerar passagem, saia do alcance de
+   uma antena e entre no da outra em até 3 s (`RFID_PASSAGE_MAX_INTERVAL_MS`).
+
+A publicação usa uma thread própria com QoS 1 e não espera cada PUBACK; o
+simulador falha e mostra o erro se uma mensagem ficar mais de 10 s sem PUBACK ou
+se a conexão cair. O cabeçalho da janela mostra destino, leituras publicadas,
+pendentes e a contagem por antena. Os pulsos do mapa EASY no dashboard vêm das
+leituras gravadas no banco, então acompanham o simulador em tempo real. O
+alcance, o RSSI e o período são ilustrativos, sem calibração física. Os roteiros
+fixos anteriores (`--scenario`, `--count`, `--messages`, `--interval`, `--epc`,
+`--single`) e a conferência automática no banco foram removidos.
 
 O launcher usa `--timestamp-format counter` por padrão tanto no teste físico
-quanto no sintético. O publicador sintético usa os campos JSON observados
+quanto no sintético. O simulador usa os campos JSON observados
 (`epc`, `rssi`, `antenna`, `timestamp`) na mesma ordem do JSON capturado do leitor,
 em JSON compacto e sem `readerid` no corpo. O identificador do leitor vem do tópico MQTT. O
 `timestamp` é uma string numérica de sete dígitos, crescente durante o ensaio;
@@ -104,7 +81,8 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
 
 ## Pré-requisitos
 
-- Python 3.12 e `pip install -r requirements.txt` no host.
+- Python 3.12 e `pip install -r requirements-lab.txt` no host (inclui o Flet do
+  simulador visual; na primeira execução o Flet baixa o cliente desktop).
 - Windows 11: Docker Desktop com backend WSL2. O launcher abre três abas
   nomeadas **MQTT**, **Ingestor** e **Banco** no Windows Terminal. Se `wt.exe`
   não estiver disponível, abre janelas `cmd.exe` com esses títulos. O launcher
@@ -127,6 +105,7 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
   confirma que as portas locais ficaram livres e oferece encerrar outros
   processos que ainda as ocupem; `--clear-ports` faz essa limpeza sem pergunta.
   Em execução sem terminal (`--no-terminals`), use `stop` para encerrar o Compose.
+  Com o simulador e `--no-terminals`, o launcher espera a janela ser fechada.
 
 No modo `managed`, configure `.env.cloud` fora do Git com broker e banco de
 testes. O launcher pede campos ausentes e oferece salvá-los no arquivo ignorado
@@ -156,7 +135,7 @@ ponta a ponta exige um daemon Docker ativo e acesso ao broker/banco.
 
 Durante a execução, o terminal principal mostra o cenário, o arquivo de
 configuração, o progresso do Compose e do build, as migrations, o resultado do
-cadastro base (criado ou reutilizado) e cada leitura sintética publicada. Se
+cadastro base (criado ou reutilizado) e a abertura do simulador. Se
 uma etapa falhar, a mensagem identifica a etapa e mostra as últimas linhas do
 comando ou do serviço com falha. Senhas e URLs com credenciais são ocultadas
 nessas mensagens. Use os três terminais de observação para acompanhar a

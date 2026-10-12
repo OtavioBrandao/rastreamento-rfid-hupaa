@@ -18,15 +18,12 @@ from db.models import (
     Leitor,
     MapeamentoAntenaPortal,
     Portal,
-    Tag,
-    TipoEquipamento,
     Zona,
 )
 from rfid_ingestion.config import Settings
-from rfid_ingestion.parsing import build_event
-from tools.lab_launcher import cli, docker_env, session, synthetic, tags, terminals, verify, watch
+from tools.lab_launcher import cli, docker_env, session, tags, terminals, watch
 from tools.lab_launcher.config import carregar
-from tools.lab_launcher.seed import semear, semear_epcs_sinteticos, semear_equipamentos
+from tools.lab_launcher.seed import TIPO_SINTETICO, epcs_por_nome, semear, semear_equipamentos
 
 
 def test_seed_laboratorio_reexecutavel(db):
@@ -43,260 +40,6 @@ def test_seed_laboratorio_reexecutavel(db):
     assert list(lados) == ["a", "b"]
     assert {zona.nome: zona.referencia_planta for zona in db.scalars(select(Zona))} == {
         "Zona A": "sala-a", "Zona B": "sala-b"}
-
-
-@pytest.mark.parametrize("cenario,esperado", [
-    (2, [("02", "a_para_b"), ("02", "b_para_a"), ("03", "a_para_b"),
-         ("02", "a_para_b"), ("03", "b_para_a")]),
-    (3, [("02", "a_para_b"), ("03", "a_para_b"), ("03", "b_para_a"),
-         ("03", "a_para_b"), ("03", "b_para_a")]),
-])
-def test_roteiros_multitag_intercalam_leituras_e_direcoes(cenario, esperado):
-    epcs = synthetic.epcs_padrao(3)[1:]
-    plano = synthetic.programa_multitag(cenario, epcs, 10, 0.5)
-    assert len(plano) == 50
-    assert all(leitura.porta in (1, 2) for leitura in plano)
-    assert sum(leitura.pausa_antes >= 3.5 for leitura in plano) == (2 if cenario == 2 else 3)
-    trajetos = {}
-    for leitura in plano:
-        sufixo = leitura.epc[-2:]
-        portas = trajetos.setdefault(sufixo, [])
-        if not portas or portas[-1] != leitura.porta:
-            portas.append(leitura.porta)
-    direcoes = sorted((epc, "a_para_b" if a == 1 else "b_para_a")
-                      for epc, portas in trajetos.items()
-                      for a, b in zip(portas, portas[1:]))
-    assert direcoes == sorted(esperado)
-    if cenario == 2:
-        assert [leitura.epc for leitura in plano[10:14]] == [epcs[0], epcs[1]] * 2
-    else:
-        assert trajetos["02"] == [1, 2]
-
-
-def test_publicador_multitag_preserva_payload_e_contador(monkeypatch):
-    enviados = []
-
-    class Ack:
-        rc = synthetic.mqtt.MQTT_ERR_SUCCESS
-
-        def wait_for_publish(self, timeout):
-            assert timeout == 10
-
-        def is_published(self):
-            return True
-
-    class Client:
-        def connect(self, *_args):
-            pass
-
-        def loop_start(self):
-            self.on_connect(self, None, None, SimpleNamespace(is_failure=False), None)
-
-        def publish(self, _topic, payload, qos):
-            assert qos == 1
-            enviados.append(json.loads(payload))
-            return Ack()
-
-        def disconnect(self):
-            pass
-
-        def loop_stop(self):
-            pass
-
-    monkeypatch.setattr(synthetic, "create_client", lambda *_args: Client())
-    monkeypatch.setattr(synthetic.time, "sleep", lambda *_args: None)
-    epcs = synthetic.epcs_padrao(3)[1:]
-    total = synthetic.publicar(
-        {"MQTT_HOST": "localhost", "MQTT_PORT": "1883", "MQTT_MODE": "local"},
-        "reader-01", epcs=epcs, passagem=True, intervalo=0.5, mensagens=10,
-        contador_inicial=1_234_567, cenario=2)
-    assert total == 50
-    assert all(list(payload) == ["epc", "rssi", "antenna", "timestamp"] for payload in enviados)
-    assert [payload["timestamp"] for payload in enviados] == [str(1_234_567 + i) for i in range(50)]
-    assert {payload["epc"] for payload in enviados} == set(epcs)
-
-
-def test_verificador_multitag_confere_direcoes_e_zona_final(monkeypatch):
-    epcs = synthetic.epcs_padrao(3)[1:]
-    programa = synthetic.programa_multitag(2, epcs, 10, 0.5)
-
-    class Resultado:
-        def __init__(self, rows):
-            self.rows = rows
-
-        def all(self):
-            return self.rows
-
-        def one_or_none(self):
-            return self.rows[0] if self.rows else None
-
-    class Conexao:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            pass
-
-        def scalar(self, _query, params):
-            return 30 if params["epc"] == epcs[0] else 20
-
-        def execute(self, query, params):
-            if "FROM passagens p" in str(query):
-                direcoes = (["a_para_b", "b_para_a", "a_para_b"]
-                            if params["epc"] == epcs[0] else ["a_para_b", "b_para_a"])
-                return Resultado([SimpleNamespace(id=i + 1, direcao_status="confirmed",
-                                                  direcao=direcao,
-                                                  zona_destino_id=2 if direcao == "a_para_b" else 1)
-                                  for i, direcao in enumerate(direcoes)])
-            return Resultado([SimpleNamespace(id=10, equipamento_id=20,
-                                              ultima_zona_id=2 if params["id"] == 3 else 1)])
-
-    class Engine:
-        def connect(self):
-            return Conexao()
-
-        def dispose(self):
-            pass
-
-    monkeypatch.setattr(verify, "create_engine", lambda *_args, **_kwargs: Engine())
-    verify.conferir("db-local-de-teste", verify.Baseline(0, 0), epcs,
-                    passagem=True, mensagens=10, contador_inicial=1_234_567,
-                    programa=programa)
-
-
-def test_menu_roteiros_disponivel_em_todos_os_modos(monkeypatch):
-    monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: "2")
-    assert cli._roteiro_escolhido(None, True) == 2
-    assert cli._roteiro_escolhido(None, False) == 1
-    with pytest.raises(ValueError, match="roteiro de 1 a 3"):
-        cli._roteiro_escolhido(4, False)
-
-
-def test_epcs_sinteticos_criam_vinculos_reutilizaveis(db):
-    semear(db)
-    epcs = synthetic.epcs_padrao(2)
-    primeiro = semear_epcs_sinteticos(db, epcs)
-    segundo = semear_epcs_sinteticos(db, epcs)
-    assert all("equipamento criado" in valor for valor in primeiro.values())
-    assert all("vínculo existente" in valor for valor in segundo.values())
-    assert db.scalar(select(func.count()).select_from(TipoEquipamento)) == 1
-    assert db.scalar(select(func.count()).select_from(Equipamento)) == 2
-    assert db.scalar(select(func.count()).select_from(Tag)) == 2
-    assert db.scalar(select(func.count()).select_from(AssociacaoTagEquipamento)) == 2
-
-
-def test_publicador_emite_mesmo_epc_em_duas_portas(monkeypatch):
-    publicados = []
-    publicados_raw = []
-    pausas = []
-
-    class Resultado:
-        rc = synthetic.mqtt.MQTT_ERR_SUCCESS
-
-        def wait_for_publish(self, timeout):
-            assert timeout == 10
-
-        def is_published(self):
-            return True
-
-    class Cliente:
-        def connect(self, host, port, keepalive):
-            assert (host, port) == ("localhost", 1883)
-
-        def loop_start(self):
-            self.on_connect(self, None, None, SimpleNamespace(is_failure=False), None)
-
-        def publish(self, topic, payload, qos):
-            publicados_raw.append(payload)
-            publicados.append((topic, json.loads(payload), qos))
-            return Resultado()
-
-        def disconnect(self):
-            pass
-
-        def loop_stop(self):
-            pass
-
-    monkeypatch.setattr(synthetic, "create_client", lambda settings: Cliente())
-    monkeypatch.setattr(synthetic.time, "sleep", lambda seconds: pausas.append(seconds))
-    total = synthetic.publicar(
-        {"MQTT_HOST": "localhost", "MQTT_PORT": "1883", "MQTT_MODE": "local"},
-        "reader-01", epcs=["e2801190a502006016c32f62"], passagem=True, intervalo=0.5,
-    )
-    assert total == 100
-    assert [p[1]["antenna"] for p in publicados] == [1] * 70 + [2] * 30
-    assert pausas.count(0.15) == 44
-    assert pausas.count(0.5) == 1
-    assert all(p[1]["epc"] == "E2801190A502006016C32F62" for p in publicados)
-    assert all(p[0] == "easy/dev/hupaa/portal-01/reader-01/readings" for p in publicados)
-    assert all(p[2] == 1 for p in publicados)
-    assert len({p[1]["timestamp"] for p in publicados}) == 100
-    assert all(list(p[1]) == ["epc", "rssi", "antenna", "timestamp"] for p in publicados)
-    assert all(raw.startswith('{"epc":"') and ',"rssi":' in raw
-               and ',"antenna":' in raw and ',"timestamp":"' in raw
-               and " " not in raw for raw in publicados_raw)
-    assert all(isinstance(p[1]["timestamp"], str)
-               and len(p[1]["timestamp"]) == 7 for p in publicados)
-    assert all(-6700 <= p[1]["rssi"] <= -5700 for p in publicados)
-    settings = Settings.from_env({"EZ700_TIMESTAMP_FORMAT": "counter"})
-    for topic, payload, _ in publicados:
-        evento = build_event(topic=topic, qos=1, retain=False,
-                             payload=json.dumps(payload).encode(), settings=settings,
-                             received_at=datetime.now(timezone.utc))
-        assert evento["validation_errors"] == []
-        assert evento["canonical_event"]["metadata"]["timestamp_original"] == payload[
-            "timestamp"
-        ]
-        assert evento["canonical_event"]["metadata"]["timestamp_format"] == "received_at_utc"
-
-
-def test_publicador_indica_falta_de_puback_apos_desconexao(monkeypatch):
-    class Resultado:
-        rc = synthetic.mqtt.MQTT_ERR_SUCCESS
-
-        def wait_for_publish(self, timeout):
-            assert timeout == 10
-
-        def is_published(self):
-            return False
-
-    class Cliente:
-        def connect(self, *_args):
-            pass
-
-        def loop_start(self):
-            self.on_connect(self, None, None, SimpleNamespace(is_failure=False), None)
-
-        def publish(self, *_args, **_kwargs):
-            self.on_disconnect(self, None, None, None, None)
-            return Resultado()
-
-        def disconnect(self):
-            pass
-
-        def loop_stop(self):
-            pass
-
-    monkeypatch.setattr(synthetic, "create_client", lambda settings: Cliente())
-    with pytest.raises(RuntimeError, match="credencial do publicador tem permissão Publish"):
-        synthetic.publicar({"MQTT_HOST": "localhost", "MQTT_MODE": "local"},
-                           "reader-01", epcs=synthetic.epcs_padrao(1),
-                           passagem=True, intervalo=0.5)
-
-
-def test_epcs_padrao_sao_reutilizaveis_sem_colisao():
-    assert synthetic.epcs_padrao(3) == synthetic.epcs_padrao(3)
-    assert len(set(synthetic.epcs_padrao(3))) == 3
-
-
-def test_roteiro_de_100_mensagens_descreve_aproximacao_parada_e_passagem():
-    etapas = synthetic.roteiro(100, True)
-    assert [(etapa.nome, etapa.porta, etapa.quantidade) for etapa in etapas] == [
-        ("aproximação da antena 1", 1, 15),
-        ("parado na antena 1", 1, 45),
-        ("saída da antena 1", 1, 10),
-        ("passagem pela antena 2", 2, 30),
-    ]
 
 
 def test_modo_local_nao_usa_database_url_externa_do_shell(monkeypatch, tmp_path):
@@ -352,129 +95,6 @@ def test_modo_externo_sintetico_exige_perfil_de_publicacao(monkeypatch, tmp_path
     )
     with pytest.raises(ValueError, match="separada do ingestor"):
         cli._perfil_publicador("managed", valores, perfil, False)
-
-
-@pytest.mark.parametrize("progresso, conclui", [(True, True), (False, False)])
-def test_verificador_aguarda_fila_lenta_mas_detecta_parada(monkeypatch, progresso, conclui):
-    class Relogio:
-        instante = 0.0
-
-        def avancar(self, segundos):
-            self.instante += segundos
-
-    relogio = Relogio()
-
-    class Conexao:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            pass
-
-        def scalar(self, _consulta, _parametros=None):
-            return min(int(relogio.instante), 100 if progresso else 2)
-
-    class Engine:
-        def connect(self):
-            return Conexao()
-
-        def dispose(self):
-            pass
-
-    monkeypatch.setattr(verify, "create_engine", lambda *_args, **_kwargs: Engine())
-    monkeypatch.setattr(verify.time, "monotonic", lambda: relogio.instante)
-    monkeypatch.setattr(verify.time, "sleep", relogio.avancar)
-    def executar():
-        verify.conferir("db-local-de-teste", verify.Baseline(0, 0),
-                        [synthetic.epcs_padrao(1)[0]],
-                        passagem=False, mensagens=100, timeout=3)
-    if conclui:
-        executar()
-        assert relogio.instante >= 100
-    else:
-        with pytest.raises(RuntimeError, match="sem progresso por 3s.*2/100"):
-            executar()
-        assert relogio.instante < 30
-
-
-def test_verificador_usa_apenas_leituras_e_passagem_do_ensaio_atual(monkeypatch):
-    class Resultado:
-        def __init__(self, linha):
-            self.linha = linha
-
-        def one_or_none(self):
-            return self.linha
-
-    class Conexao:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            pass
-
-        def scalar(self, consulta, parametros):
-            assert "timestamp_original" in str(consulta)
-            assert parametros["contador_inicio"] == "1234567"
-            assert parametros["contador_fim"] == "1234568"
-            return 2
-
-        def execute(self, consulta, parametros):
-            if "FROM passagens p" in str(consulta):
-                assert str(consulta).count("timestamp_original") == 2
-                assert parametros["contador_inicio"] == "1234567"
-                return Resultado(SimpleNamespace(id=7, direcao_status="confirmed",
-                                                direcao="a_para_b", zona_destino_id=2))
-            return Resultado(SimpleNamespace(id=8, equipamento_id=9,
-                                            ultima_zona_id=2))
-
-    class Engine:
-        def connect(self):
-            return Conexao()
-
-        def dispose(self):
-            pass
-
-    monkeypatch.setattr(verify, "create_engine", lambda *_args, **_kwargs: Engine())
-    verify.conferir("db-local-de-teste", verify.Baseline(0, 0),
-                    [synthetic.epcs_padrao(1)[0]], passagem=True, mensagens=2,
-                    contador_inicial=1_234_567)
-
-
-def test_verificador_aguarda_fila_anterior_sem_conta_la_no_ensaio(monkeypatch):
-    class Relogio:
-        instante = 0.0
-
-        def avancar(self, segundos):
-            self.instante += segundos
-
-    relogio = Relogio()
-
-    class Conexao:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            pass
-
-        def scalar(self, consulta, _parametros=None):
-            if "MAX(id)" in str(consulta):
-                return int(relogio.instante)
-            return max(0, min(10, int(relogio.instante) - 8))
-
-    class Engine:
-        def connect(self):
-            return Conexao()
-
-        def dispose(self):
-            pass
-
-    monkeypatch.setattr(verify, "create_engine", lambda *_args, **_kwargs: Engine())
-    monkeypatch.setattr(verify.time, "monotonic", lambda: relogio.instante)
-    monkeypatch.setattr(verify.time, "sleep", relogio.avancar)
-    verify.conferir("db-local-de-teste", verify.Baseline(0, 0),
-                    [synthetic.epcs_padrao(1)[0]], passagem=False, mensagens=10,
-                    timeout=3, contador_inicial=1_234_567)
-    assert relogio.instante >= 18
 
 
 def test_detecta_processo_do_host_na_porta_mqtt(monkeypatch):
@@ -723,6 +343,26 @@ def test_tags_fisicas_cadastram_equipamentos_com_nome(db):
     assert "Bomba de infusão 02" in set(db.scalars(select(Equipamento.nome)))
 
 
+def test_simulador_reaproveita_equipamento_pelo_nome(db):
+    from api.service_equipamento import inativar
+
+    semear(db)
+    epc = "E2804C41AAAAAAAAAAAAAAAA"
+    semear_equipamentos(db, [(epc, "Bomba X")], TIPO_SINTETICO)
+
+    # Nome repetido devolve a tag existente; nome novo fica de fora (ganha EPC sorteado).
+    assert epcs_por_nome(db, ["Bomba X ", "Monitor novo"], TIPO_SINTETICO) == {"Bomba X": epc}
+    semear_equipamentos(db, [(epc, "Bomba X")], TIPO_SINTETICO)
+    assert db.scalar(select(func.count()).select_from(Equipamento)
+                     .where(Equipamento.nome == "Bomba X")) == 1
+
+    equipamento = db.scalar(select(Equipamento).where(Equipamento.nome == "Bomba X"))
+    inativar(db, equipamento.id)
+    assert epcs_por_nome(db, ["bomba x"], TIPO_SINTETICO) == {"bomba x": epc}
+    db.refresh(equipamento)
+    assert equipamento.status == "ativo"
+
+
 def test_tag_fisica_nao_renomeia_equipamento_cadastrado_fora_do_laboratorio(db):
     from api.service_associacao import associar
     from api.service_equipamento import criar as criar_equipamento
@@ -788,3 +428,76 @@ def test_transporte_e_tags_respeitam_o_modo(monkeypatch):
     monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: "2")
     assert cli._transporte_escolhido(None, "managed", True) == "plain"
     assert cli._transporte_escolhido(None, "managed", False) == "tls"
+
+
+def test_simulador_sem_flet_falha_antes_de_subir_servicos(monkeypatch, capsys):
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda nome: None)
+    monkeypatch.setattr(cli.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+    monkeypatch.setattr(cli, "compose", lambda *a, **k: pytest.fail("não deve subir serviços"))
+    with pytest.raises(cli.typer.Exit):
+        cli.start(env="local", source="synthetic", no_terminals=True)
+    assert "requirements-lab.txt" in capsys.readouterr().err
+
+
+def test_simulador_nao_aceita_tags_do_leitor_fisico(monkeypatch, capsys):
+    monkeypatch.setattr(cli.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+    with pytest.raises(cli.typer.Exit):
+        cli.start(env="local", source="synthetic", no_terminals=True,
+                  tag=["E2801190A502006016C32F62=Bomba"])
+    assert "definidos na janela" in capsys.readouterr().err
+
+
+def test_opcao_sintetica_abre_simulador_com_publicador_e_banco(monkeypatch, tmp_path):
+    valores = {"MQTT_HOST": "broker", "MQTT_PORT": "8883", "MQTT_USERNAME": "ingestor",
+               "MQTT_PASSWORD": "segredo", "DATABASE_URL": "postgresql://seed",
+               "APP_DATABASE_URL": "postgresql://app"}
+    arquivo = tmp_path / ".env.cloud"
+    abertos = []
+
+    class Processo:
+        def __init__(self, comando, cwd, env):
+            abertos.append((comando, env))
+
+        def poll(self):
+            return 0
+
+        def wait(self):
+            return 0
+
+    monkeypatch.setattr(cli.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+    # O simulador roda em processo separado (Popen simulado); o CI não instala o Flet.
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda nome: object())
+    monkeypatch.setattr(cli, "carregar", lambda *a, **k: (arquivo, dict(valores)))
+    monkeypatch.setattr(cli, "_perfil_publicador", lambda modo, v, *a: dict(
+        v, MQTT_USERNAME="leitor", MQTT_PASSWORD="segredo-leitor",
+        MQTT_TOPIC="easy/dev/hupaa/portal-01/reader-01/readings"))
+    monkeypatch.setattr(cli, "compose", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "aguardar", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "executar", lambda *a, **k: None)
+    monkeypatch.setattr(cli.subprocess, "Popen", Processo)
+
+    cli.start(env="managed", source="synthetic", no_terminals=True)
+
+    comando, env = abertos[0]
+    assert comando[1:] == ["-m", "tools.lab_simulator", "--reader-id", "reader-01",
+                           "--portal-id", "portal-01"]
+    assert env["MQTT_USERNAME"] == "leitor"
+    assert env["MQTT_TOPIC"] == "easy/dev/hupaa/portal-01/reader-01/readings"
+    assert env["DATABASE_URL"] == "postgresql://seed"
+
+
+@pytest.mark.parametrize("host, erro", [
+    ("c.s1.eu.hivemq.cloud:8883", "sem esquema nem porta"),
+    ("mqtt://broker.hivemq.com", "sem esquema nem porta"),
+    ("c.s1.eu.hivemq.cloud", "só aceita TLS"),
+])
+def test_transporte_plain_recusa_host_invalido(monkeypatch, tmp_path, host, erro):
+    for chave in ("MQTT_HOST", "MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_PLAIN_HOST"):
+        monkeypatch.delenv(chave, raising=False)
+    arquivo = tmp_path / ".env.cloud"
+    arquivo.write_text(
+        f"MQTT_PLAIN_HOST='{host}'\nMQTT_CLIENT_ID=ingestor\n"
+        "DATABASE_URL=postgresql://u:p@db/x\nAPP_DATABASE_URL=postgresql://u:p@db/x\n",
+        encoding="utf-8")
+    with pytest.raises(ValueError, match=erro):
+        carregar("managed", arquivo, False, "plain")

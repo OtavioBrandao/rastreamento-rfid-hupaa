@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
 import signal
 import ssl
 import time
+from collections import deque
 from datetime import datetime, timezone
-from threading import Event, Thread, current_thread, main_thread
+from threading import Event, Lock, Thread, current_thread, main_thread
 from typing import Any, Callable
 
 import paho.mqtt.client as mqtt
@@ -47,6 +49,11 @@ def _log(level: int, event_type: str, **fields: Any) -> None:
 class MqttReceiver:
     """Mantém uma sessão MQTT 3.1.1 persistente e recupera quedas transitórias."""
 
+    # Leituras por transação. Com banco remoto, cada ida e volta custa mais que
+    # gravar várias linhas; o lote evita que a fila cresça com o leitor ativo.
+    BATCH_MAX = 200
+    PROCESS_POLL_SECONDS = 0.2
+
     def __init__(
         self,
         settings: Settings,
@@ -80,6 +87,27 @@ class MqttReceiver:
         self._worker: Thread | None = None
         self._shutdown_complete_logged = False
         self._debounce_flushed = False
+        # Rede e banco em threads separadas: o horário de recebimento (único
+        # horário das leituras com contador) não pode esperar o banco remoto.
+        self._fila: queue.Queue[tuple[int, mqtt.MQTTMessage, dict[str, Any], float]] = (
+            queue.Queue()
+        )
+        self._sessao = 0
+        self._processor: Thread | None = None
+        # PUBACKs e desconexões pedidos por outras threads; a rede os executa.
+        self._acks: queue.Queue[tuple[mqtt.MQTTMessage, int]] = queue.Queue()
+        self._desconexao_pedida = Event()
+        # Inferência (debounce, passagem, direção, zona) consulta o banco várias
+        # vezes por passagem; em thread própria, não segura gravação nem ACK.
+        self._fila_inferencia: queue.Queue[tuple[dict[str, Any], PersistenceResult, float]] = (
+            queue.Queue()
+        )
+        self._inferencia: Thread | None = None
+        # Chegadas ainda sem inferência, em ordem. O relógio da inferência não
+        # passa da mais antiga: com a inferência atrasada pelo banco, o debounce
+        # e o detector não tratam como silêncio leituras que já chegaram.
+        self._em_transito: deque[float] = deque()
+        self._transito_lock = Lock()
         self._ever_ready = False
         self._recovering = False
         self._recovery_started_at: float | None = None
@@ -133,7 +161,23 @@ class MqttReceiver:
             "ingestor_failed",
             **fields,
         )
-        self.client.disconnect()
+        self._desconectar()
+
+    def _pode_usar_socket(self) -> bool:
+        """Só a thread de rede lê e escreve no socket.
+
+        Com loop manual, o paho escreve no socket na própria thread de quem chama
+        ``ack``/``disconnect``. Em TLS, leitura e escrita simultâneas de threads
+        diferentes corrompem a sessão SSL e o broker derruba a conexão.
+        """
+        worker = self._worker
+        return worker is None or not worker.is_alive() or current_thread() is worker
+
+    def _desconectar(self) -> None:
+        if self._pode_usar_socket():
+            self.client.disconnect()
+        else:
+            self._desconexao_pedida.set()
 
     def _on_subscribe(self, _client, _userdata, _mid, reason_codes, _properties):
         if not reason_codes or any(
@@ -272,50 +316,68 @@ class MqttReceiver:
         except Exception:
             self._fail("persistência JSONL")
             return
+        # O horário de recebimento já está no evento; banco, debounce e ACK
+        # ficam para o processador, que grava em lote.
+        chegada = self._monotonic_clock()
+        with self._transito_lock:
+            self._em_transito.append(chegada)
+        self._fila.put((self._sessao, message, event, chegada))
+
+    def relogio_inferencia(self) -> float:
+        """Agora, para a inferência: nunca além da leitura mais antiga pendente."""
+        with self._transito_lock:
+            if self._em_transito:
+                return self._em_transito[0]
+        return self._monotonic_clock()
+
+    def _concluir(self, chegada: float) -> None:
+        with self._transito_lock:
+            try:
+                self._em_transito.remove(chegada)
+            except ValueError:
+                pass
+
+    def _flush_pending(self, primeiro=None) -> None:
+        """Grava o lote numa transação e só então processa e confirma cada mensagem.
+
+        Nenhum PUBACK é enviado antes do commit; numa falha temporária do banco o
+        lote inteiro fica sem ACK e o broker o reentrega na sessão persistente.
+        Mensagens de uma sessão MQTT anterior são descartadas sem ACK: o broker
+        as reentrega e o ``event_id`` evita efeito duplicado.
+        """
+        itens = [] if primeiro is None else [primeiro]
+        while len(itens) < self.BATCH_MAX:
+            try:
+                itens.append(self._fila.get_nowait())
+            except queue.Empty:
+                break
+        if self.failed.is_set() or self.database_unavailable.is_set():
+            for _sessao, _message, _event, chegada in itens:
+                self._concluir(chegada)
+            return
+        pendentes = []
+        for sessao, message, event, chegada in itens:
+            if sessao == self._sessao:
+                pendentes.append((message, event, chegada))
+            else:
+                self._concluir(chegada)
+        if not pendentes:
+            return
+        sessao = self._sessao
+        envelopes = [event for _message, event, _chegada in pendentes]
         try:
-            canonical = event["canonical_event"]
-            result = (
-                self.repository.persist(event)
-                if canonical
-                else PersistenceResult("rejected", reason="invalid_input")
+            # Na classe: repositórios de teste (Mock) não têm persist_many real.
+            em_lote = hasattr(type(self.repository), "persist_many")
+            resultados = (
+                self.repository.persist_many(envelopes)
+                if em_lote
+                else [
+                    self.repository.persist(event)
+                    if event["canonical_event"]
+                    else PersistenceResult("rejected", reason="invalid_input")
+                    for event in envelopes
+                ]
             )
-            # A auditoria original precede o banco. Rejeições de topologia
-            # recebem um registro complementar, sem repetir o payload.
-            outcome = {
-                "event_type": "rfid_persistence",
-                "status": result.status,
-                "reason": result.reason,
-                "event_id": canonical["event_id"] if canonical else None,
-                "received_at_utc": event["received_at_utc"],
-            }
-            if canonical and result.status == "rejected":
-                try:
-                    self.store.append(outcome)
-                except Exception:
-                    self._fail("persistência JSONL")
-                    return
-            LOGGER.log(
-                logging.WARNING if result.status == "rejected" else logging.INFO,
-                json.dumps(outcome),
-            )
-            LOGGER.log(
-                logging.INFO if canonical else logging.WARNING,
-                json.dumps(
-                    {
-                        "event_type": "rfid_normalization",
-                        "reader_id": event["reader_id"],
-                        "adapter": event["adapter"],
-                        "result": "accepted" if canonical else "rejected",
-                        "reasons": (
-                            [event["parse_error"]] if event["parse_error"] else []
-                        )
-                        + event["validation_errors"],
-                        "event_id": canonical["event_id"] if canonical else None,
-                    }
-                ),
-            )
-            if canonical:
-                self._process_debounce(canonical, result)
         except PersistenceError as error:
             if error.category == FailureCategory.TEMPORARY_DATABASE:
                 self.ready.clear()
@@ -329,22 +391,117 @@ class MqttReceiver:
                 )
                 # Sem PUBACK. A sessão persistente mantém o trabalho pendente
                 # no broker enquanto a aplicação espera o banco voltar.
-                self.client.disconnect()
+                self._desconectar()
             else:
                 self._fail(
                     "persistência PostgreSQL",
                     FailureCategory.PERMANENT_CONFIGURATION,
                 )
+            for _message, _event, chegada in pendentes:
+                self._concluir(chegada)
             return
-        if message.qos == 1:
+        lote = list(zip(pendentes, resultados, strict=True))
+        # Auditoria completa antes de qualquer ACK: rejeições de topologia
+        # recebem um registro complementar, sem repetir o payload.
+        for (_message, event, _chegada), result in lote:
+            if event["canonical_event"] and result.status == "rejected":
+                try:
+                    self.store.append(self._resultado(event, result))
+                except Exception:
+                    self._fail("persistência JSONL")
+                    return
+        # ACK logo após o commit: a leitura gravada é o que a entrega exige. A
+        # inferência abaixo consulta o banco e, se viesse antes, seguraria a
+        # janela de QoS 1 do broker e atrasaria o horário das próximas leituras.
+        for (message, _event, _chegada), _result in lote:
+            self._ack(message, sessao)
+        for (_message, event, chegada), result in lote:
+            if self._inferencia is not None:
+                self._fila_inferencia.put((event, result, chegada))
+            else:
+                self._registrar_resultado(event, result, chegada)
+
+    @staticmethod
+    def _resultado(event: dict[str, Any], result: PersistenceResult) -> dict[str, Any]:
+        canonical = event["canonical_event"]
+        return {
+            "event_type": "rfid_persistence",
+            "status": result.status,
+            "reason": result.reason,
+            "event_id": canonical["event_id"] if canonical else None,
+            "received_at_utc": event["received_at_utc"],
+        }
+
+    def _registrar_resultado(
+        self, event: dict[str, Any], result: PersistenceResult, chegada: float
+    ) -> None:
+        canonical = event["canonical_event"]
+        outcome = self._resultado(event, result)
+        LOGGER.log(
+            logging.WARNING if result.status == "rejected" else logging.INFO,
+            json.dumps(outcome),
+        )
+        LOGGER.log(
+            logging.INFO if canonical else logging.WARNING,
+            json.dumps(
+                {
+                    "event_type": "rfid_normalization",
+                    "reader_id": event["reader_id"],
+                    "adapter": event["adapter"],
+                    "result": "accepted" if canonical else "rejected",
+                    "reasons": (
+                        [event["parse_error"]] if event["parse_error"] else []
+                    )
+                    + event["validation_errors"],
+                    "event_id": canonical["event_id"] if canonical else None,
+                }
+            ),
+        )
+        try:
+            if canonical:
+                self._process_debounce(canonical, result, chegada)
+        finally:
+            self._concluir(chegada)
+
+    def _ack(self, message: mqtt.MQTTMessage, sessao: int) -> None:
+        if message.qos != 1:
+            return
+        if self._pode_usar_socket():
+            self._enviar_ack(message, sessao)
+        else:
+            self._acks.put((message, sessao))
+
+    def _enviar_acks(self) -> None:
+        while True:
             try:
-                if self.client.ack(message.mid, message.qos) != mqtt.MQTT_ERR_SUCCESS:
-                    self._fail("envio de ACK")
-            except Exception:
-                self._fail("envio de ACK")
+                message, sessao = self._acks.get_nowait()
+            except queue.Empty:
+                return
+            self._enviar_ack(message, sessao)
+
+    def _enviar_ack(self, message: mqtt.MQTTMessage, sessao: int) -> None:
+        if sessao != self._sessao or self.disconnected.is_set():
+            # A conexão caiu entre a leitura e o commit: o broker reentrega e a
+            # leitura volta como duplicata, sem novo efeito no debounce. O mid
+            # não vale numa conexão nova.
+            _log(logging.WARNING, "mqtt_ack_skipped_disconnected", mid=message.mid)
+            return
+        try:
+            resultado = self.client.ack(message.mid, message.qos)
+        except Exception:
+            self._fail("envio de ACK")
+            return
+        if resultado in (mqtt.MQTT_ERR_NO_CONN, mqtt.MQTT_ERR_CONN_LOST):
+            # Queda de conexão é temporária: o loop reconecta e o broker reentrega.
+            _log(logging.WARNING, "mqtt_ack_skipped_disconnected", mid=message.mid)
+        elif resultado != mqtt.MQTT_ERR_SUCCESS:
+            self._fail("envio de ACK")
 
     def _process_debounce(
-        self, canonical: dict[str, Any], result: PersistenceResult
+        self,
+        canonical: dict[str, Any],
+        result: PersistenceResult,
+        received_at_monotonic: float | None = None,
     ) -> None:
         if result.status == "duplicate":
             _log(
@@ -373,7 +530,11 @@ class MqttReceiver:
                     observed_at=observed_at,
                     rssi=canonical["rssi"],
                 ),
-                received_at_monotonic=self._monotonic_clock(),
+                received_at_monotonic=(
+                    self._monotonic_clock()
+                    if received_at_monotonic is None
+                    else received_at_monotonic
+                ),
             )
         except Exception:
             _log(
@@ -449,7 +610,7 @@ class MqttReceiver:
 
     def _poll_debounce(self) -> None:
         try:
-            observations = self.debouncer.advance_time(self._monotonic_clock())
+            observations = self.debouncer.advance_time(self.relogio_inferencia())
         except Exception:
             _log(
                 logging.ERROR,
@@ -470,7 +631,56 @@ class MqttReceiver:
                 late_events=counters.late_events,
             )
 
+    def _processar_uma_vez(self, primeiro=None) -> None:
+        self._flush_pending(primeiro)
+        self._poll_debounce()
+        if self.observation_tick_handler is not None:
+            try:
+                self.observation_tick_handler(self.relogio_inferencia())
+            except Exception:
+                _log(logging.ERROR, "rfid_observation_tick_failed")
+
+    def _processar(self) -> None:
+        """Thread de gravação: lotes e ACK, sem bloquear a rede nem esperar a inferência."""
+        while not self.shutdown.is_set() and not self.failed.is_set():
+            try:
+                primeiro = self._fila.get(timeout=self.PROCESS_POLL_SECONDS)
+            except queue.Empty:
+                continue
+            self._flush_pending(primeiro)
+
+    def _inferir(self) -> None:
+        """Thread de inferência: debounce e serviços na ordem de chegada.
+
+        Ao encerrar, consome o que a gravação já confirmou antes de sair.
+        """
+        while True:
+            parar = self.shutdown.is_set() or self.failed.is_set()
+            gravacao_ativa = self._processor is not None and self._processor.is_alive()
+            try:
+                itens = [self._fila_inferencia.get(timeout=self.PROCESS_POLL_SECONDS)]
+            except queue.Empty:
+                itens = []
+            while True:
+                try:
+                    itens.append(self._fila_inferencia.get_nowait())
+                except queue.Empty:
+                    break
+            # Todas as leituras já chegadas entram no debounce antes da
+            # finalização por tempo, para não partir observações.
+            for event, result, chegada in itens:
+                self._registrar_resultado(event, result, chegada)
+            self._poll_debounce()
+            if self.observation_tick_handler is not None:
+                try:
+                    self.observation_tick_handler(self.relogio_inferencia())
+                except Exception:
+                    _log(logging.ERROR, "rfid_observation_tick_failed")
+            if parar and not gravacao_ativa and not itens:
+                return
+
     def _network_session(self) -> None:
+        self._sessao += 1
         self._mqtt_attempt += 1
         _log(
             logging.INFO,
@@ -527,20 +737,27 @@ class MqttReceiver:
             return
 
         self.disconnected.clear()
+        # Com as threads, o loop volta logo para enviar os PUBACKs da gravação.
+        espera = 0.2 if self._processor is None else 0.05
         while not self.shutdown.is_set() and not self.failed.is_set():
-            result = self.client.loop(timeout=0.2)
-            self._poll_debounce()
-            if self.observation_tick_handler is not None:
-                try:
-                    self.observation_tick_handler(self._monotonic_clock())
-                except Exception:
-                    _log(logging.ERROR, "rfid_observation_tick_failed")
+            result = self.client.loop(timeout=espera)
+            if self._processor is None:
+                # Uso direto do loop, sem as threads de gravação e inferência.
+                self._processar_uma_vez()
+            else:
+                self._enviar_acks()
+            if self._desconexao_pedida.is_set():
+                self._desconexao_pedida.clear()
+                self.client.disconnect()
             if (
                 result != mqtt.MQTT_ERR_SUCCESS
                 or self.disconnected.is_set()
                 or self.database_unavailable.is_set()
             ):
                 break
+        if self._desconexao_pedida.is_set():
+            self._desconexao_pedida.clear()
+            self.client.disconnect()
 
     def _recover_database(self) -> bool:
         delay = self._db_backoff.next_delay()
@@ -620,6 +837,16 @@ class MqttReceiver:
         if self._worker is not None and self._worker.is_alive():
             return
         self.shutdown.clear()
+        self._processor = Thread(
+            target=self._processar,
+            name=f"rfid-processor-{self.settings.mqtt_client_id}",
+        )
+        self._inferencia = Thread(
+            target=self._inferir,
+            name=f"rfid-inference-{self.settings.mqtt_client_id}",
+        )
+        self._processor.start()
+        self._inferencia.start()
         self._worker = Thread(
             target=self._supervise,
             name=f"mqtt-supervisor-{self.settings.mqtt_client_id}",
@@ -647,13 +874,13 @@ class MqttReceiver:
         )
         self.shutdown.set()
         self.ready.clear()
-        self.client.disconnect()
+        self._desconectar()
 
     def stop(self) -> None:
         self.request_shutdown()
-        worker = self._worker
-        if worker is not None and worker is not current_thread():
-            worker.join()
+        for thread in (self._worker, self._processor, self._inferencia):
+            if thread is not None and thread is not current_thread():
+                thread.join()
         self.flush_debounce()
         if not self._shutdown_complete_logged:
             _log(logging.INFO, "shutdown_complete")

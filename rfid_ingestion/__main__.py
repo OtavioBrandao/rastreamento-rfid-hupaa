@@ -75,6 +75,8 @@ def main() -> int:
             observation_handler=passage_service.handle_observation,
             observation_tick_handler=inference_tick,
         )
+        # Mesmo relógio do debounce: a inferência pode estar atrás da rede.
+        passage_service.monotonic_clock = receiver.relogio_inferencia
         return receiver.run()
     except DatabaseConfigurationError as error:
         logging.getLogger(__name__).error("Configuração inválida: %s", error)

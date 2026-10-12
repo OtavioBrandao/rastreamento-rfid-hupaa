@@ -1,12 +1,13 @@
 """Persistência transacional de eventos canônicos, independente de MQTT."""
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Callable, Literal
 
 from sqlalchemy import and_, select, text
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import DBAPIError, DisconnectionError, OperationalError, SQLAlchemyError
 
 from db.models import Antena, Leitor, LeituraBruta
@@ -76,9 +77,138 @@ def _utc(value: str) -> datetime:
     return instant.astimezone(timezone.utc)
 
 
+def _linha(canonical: dict, envelope: dict, antena_id: int) -> dict:
+    return {
+        "event_id": canonical["event_id"], "antena_id": antena_id,
+        "epc": canonical["epc"], "rssi": canonical["rssi"],
+        "lido_em": _utc(canonical["timestamp"]),
+        "recebido_em": _utc(envelope["received_at_utc"]),
+        "dados_origem": {"metadata": canonical.get("metadata", {}),
+                         **{key: envelope[key] for key in
+                            ("topic", "adapter", "qos", "retain")}},
+    }
+
+
 class RawReadingRepository:
-    def __init__(self, engine: Engine):
+    # Topologia ativa muda raramente; o cache evita uma ida ao banco por leitura
+    # em bancos remotos. Só resultados encontrados são guardados.
+    TOPOLOGY_TTL_SECONDS = 30.0
+
+    def __init__(self, engine: Engine, *, clock: Callable[[], float] = time.monotonic):
         self.engine = engine
+        self._clock = clock
+        self._topology: dict[tuple[str, int], tuple[int, float]] = {}
+        self._conexao_lote: Connection | None = None
+
+    def _conexao(self) -> Connection:
+        """Conexão dedicada aos lotes, em autocommit e mantida aberta.
+
+        Evita o ping do pool, o BEGIN e o COMMIT a cada lote: com a topologia em
+        cache, o lote é um único INSERT, atômico por ser um só comando.
+        """
+        conexao = self._conexao_lote
+        if conexao is None or conexao.closed or conexao.invalidated:
+            conexao = self.engine.connect().execution_options(isolation_level="AUTOCOMMIT")
+            self._conexao_lote = conexao
+        return conexao
+
+    def _descartar_conexao(self) -> None:
+        conexao, self._conexao_lote = self._conexao_lote, None
+        if conexao is not None:
+            try:
+                conexao.invalidate()
+                conexao.close()
+            except SQLAlchemyError:
+                pass
+
+    def _antenas(self, connection, chaves: set[tuple[str, int]]
+                 ) -> dict[tuple[str, int], int | None]:
+        """Antena ativa por (reader_id, porta); ``None`` se leitor ou antena faltar.
+
+        A chave ausente do resultado indica leitor desconhecido.
+        """
+        agora = self._clock()
+        resultado: dict[tuple[str, int], int | None] = {}
+        faltantes = set()
+        for chave in chaves:
+            guardado = self._topology.get(chave)
+            if guardado is not None and agora - guardado[1] < self.TOPOLOGY_TTL_SECONDS:
+                resultado[chave] = guardado[0]
+            else:
+                faltantes.add(chave)
+        if faltantes:
+            leitores = {reader for reader, _ in faltantes}
+            linhas = connection.execute(
+                select(Leitor.reader_id, Antena.porta_numero, Antena.id).outerjoin(
+                    Antena, and_(Antena.leitor_id == Leitor.id, Antena.ativo.is_(True))
+                ).where(Leitor.reader_id.in_(leitores))
+            ).all()
+            conhecidos = {reader for reader, _, _ in linhas}
+            antenas = {(reader, porta): antena for reader, porta, antena in linhas
+                       if antena is not None}
+            for chave in faltantes:
+                if chave[0] not in conhecidos:
+                    continue
+                antena = antenas.get(chave)
+                resultado[chave] = antena
+                if antena is not None:
+                    self._topology[chave] = (antena, agora)
+        return resultado
+
+    def persist_many(self, envelopes: list[dict]) -> list[PersistenceResult]:
+        """Grava o lote num único INSERT; resultados na ordem dos envelopes.
+
+        Com banco remoto, o custo é dominado pelas idas e voltas. Com a topologia
+        em cache, o lote inteiro custa uma: o INSERT de várias linhas em
+        autocommit, atômico por ser um só comando. Só usado pela thread de
+        gravação, dona da conexão dedicada.
+        """
+        resultados: list[PersistenceResult | None] = [None] * len(envelopes)
+        validos = []
+        for indice, envelope in enumerate(envelopes):
+            if envelope["canonical_event"] is None:
+                resultados[indice] = PersistenceResult("rejected", reason="invalid_input")
+            else:
+                validos.append(indice)
+        if not validos:
+            return resultados  # type: ignore[return-value]
+        try:
+            connection = self._conexao()
+            chaves = {(envelopes[i]["canonical_event"]["reader_id"],
+                       envelopes[i]["canonical_event"]["antenna"]) for i in validos}
+            antenas = self._antenas(connection, chaves)
+            linhas = []
+            destino: list[tuple[int, int]] = []
+            for indice in validos:
+                canonical = envelopes[indice]["canonical_event"]
+                chave = (canonical["reader_id"], canonical["antenna"])
+                if chave not in antenas:
+                    resultados[indice] = PersistenceResult("rejected",
+                                                           reason="unknown_reader")
+                elif antenas[chave] is None:
+                    resultados[indice] = PersistenceResult("rejected",
+                                                           reason="unknown_antenna")
+                else:
+                    linhas.append(_linha(canonical, envelopes[indice], antenas[chave]))
+                    destino.append((indice, antenas[chave]))
+            inseridos: dict[str, int] = {}
+            if linhas:
+                statement = insert(LeituraBruta).values(linhas).on_conflict_do_nothing(
+                    index_elements=[LeituraBruta.event_id]
+                ).returning(LeituraBruta.event_id, LeituraBruta.id)
+                inseridos = dict(connection.execute(statement).all())
+            # Em autocommit, o INSERT já está confirmado quando retorna.
+            for indice, antena_id in destino:
+                event_id = envelopes[indice]["canonical_event"]["event_id"]
+                # Repetição no mesmo lote: só a primeira ocorrência foi inserida.
+                reading_id = inseridos.pop(event_id, None)
+                resultados[indice] = (
+                    PersistenceResult("inserted", reading_id, antenna_id=antena_id)
+                    if reading_id is not None else PersistenceResult("duplicate"))
+            return resultados  # type: ignore[return-value]
+        except SQLAlchemyError as error:
+            self._descartar_conexao()
+            raise _safe_persistence_error(error) from None
 
     def persist(self, envelope: dict) -> PersistenceResult:
         canonical = envelope["canonical_event"]
