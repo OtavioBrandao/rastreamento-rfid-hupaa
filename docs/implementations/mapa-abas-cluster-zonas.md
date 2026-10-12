@@ -66,35 +66,38 @@ Antes eram necessários vários terminais: o launcher de laboratório
 (`python -m tools.lab_launcher`), a API e o frontend. Agora:
 
 ```bash
-python scripts/dev.py                         # menu 1-5
+python scripts/dev.py                         # menu 1-4
 python scripts/dev.py --teste 4               # escolhe direto
+python scripts/dev.py --sem-teste             # só API e frontend, banco externo
 python scripts/dev.py --api-port 8020 --front-port 5180   # se as portas estiverem ocupadas
 ```
 
 | Opção | O que acontece |
 | --- | --- |
-| 1 | Local com dados sintéticos |
+| 1 | Local com simulador visual (dados sintéticos) |
 | 2 | Local com leitor físico |
 | 3 | Broker e banco externos com leitor físico |
-| 4 | Broker e banco externos com dados sintéticos |
-| 5 | Somente API e frontend com o banco externo, sem teste |
+| 4 | Broker e banco externos com simulador visual (dados sintéticos) |
 
 1. O script mostra o mesmo menu do launcher de laboratório.
 2. Sobe a API (porta padrão **8010**) e o frontend Vite (porta 5173) em segundo
    plano, espera os dois responderem e abre o navegador. A API usa o mesmo
    banco do cenário: o PostgreSQL local (montado a partir do `.env.local`,
    como faz o launcher) nas opções 1 e 2, e o banco externo do `.env.cloud`
-   nas opções 3 a 5.
+   nas opções 3 e 4 (e em `--sem-teste`).
 3. Entrega o terminal ao `tools.lab_launcher start --env ... --source ...`,
-   que segue com as perguntas (roteiro, transporte, tags), sobe Docker,
+   que segue com as perguntas dele (transporte, tags físicas), sobe Docker,
    ingestor e migrations, abre os três terminais de observação (MQTT,
-   Ingestor e Banco) e publica o simulador nos testes sintéticos.
+   Ingestor e Banco) e, nas opções 1 e 4, abre o
+   [simulador visual](simulador-visual-laboratorio.md) para mover os itens
+   pela planta. Sem o Flet (`requirements-lab.txt`), o script avisa antes de
+   subir qualquer coisa.
 4. `Ctrl+C` encerra o launcher (que derruba os contêineres) e depois a API e
    o frontend, inclusive os processos filhos do `npm` (Windows e Ubuntu).
 
 Com o launcher em primeiro plano, a saída da API e do frontend fica em
 `data/dev/api.log` e `data/dev/front.log` (ignorados pelo Git) para não se
-misturar às perguntas. Na opção 5 ela aparece no próprio terminal. Nenhuma
+misturar às perguntas. Com `--sem-teste` ela aparece no próprio terminal. Nenhuma
 credencial é exibida nem passada na linha de comando.
 
 `--api-port` é repassado ao proxy do Vite pela variável `RFID_API_URL`
@@ -107,4 +110,4 @@ projetos locais; para subir a API manualmente, use `--port 8010`.
 - `npm test` (24 testes, incluindo cluster, tabela contextual e restauração das
   abas) e `npm run build`.
 - Verificação manual com API real nas larguras desktop e 375 px.
-- `scripts/dev.py --teste 5` validado no Windows (API, proxy e encerramento).
+- `scripts/dev.py --sem-teste` validado no Windows (API, proxy e encerramento).

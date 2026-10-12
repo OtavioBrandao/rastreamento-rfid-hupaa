@@ -4,14 +4,16 @@ Uso (na raiz do repositório, em Windows 11 ou Ubuntu 24.04):
 
     python scripts/dev.py              # mostra o menu de testes 1-4
     python scripts/dev.py --teste 4    # escolhe direto, sem menu
+    python scripts/dev.py --sem-teste  # só API e frontend, no banco externo
 
 Fluxo:
 1. Mostra o mesmo menu do ``python -m tools.lab_launcher`` (1 a 4).
-2. Sobe a API FastAPI apontando para o banco do cenário escolhido (local ou
+2. Sobe a API FastAPI apontando para o banco do teste escolhido (local ou
    externo) e o frontend Vite, em segundo plano, e abre o navegador.
-3. Entrega o terminal ao launcher, que continua as perguntas (roteiro,
-   transporte etc.), sobe o backend em Docker, abre os três terminais de
-   observação (MQTT, Ingestor e Banco) e publica o simulador, se for o caso.
+3. Entrega o terminal ao launcher, que segue com as perguntas dele, sobe o
+   backend em Docker, abre os três terminais de observação (MQTT, Ingestor e
+   Banco) e, nas opções 1 e 4, abre o simulador visual (``tools.lab_simulator``)
+   para mover os itens pela planta.
 
 Ctrl+C encerra o launcher (que derruba os contêineres) e depois a API e o
 frontend. A saída da API e do frontend vai para ``data/dev/*.log`` para não
@@ -39,11 +41,10 @@ LOGS = ROOT / "data" / "dev"
 WINDOWS = os.name == "nt"
 
 TESTES = {
-    "1": ("local", "synthetic", "Local com dados sintéticos"),
+    "1": ("local", "synthetic", "Local com simulador visual (dados sintéticos)"),
     "2": ("local", "physical", "Local com leitor físico"),
     "3": ("managed", "physical", "Broker e banco externos com leitor físico"),
-    "4": ("managed", "synthetic", "Broker e banco externos com dados sintéticos"),
-    "5": ("managed", None, "Somente API e frontend (banco externo, sem teste)"),
+    "4": ("managed", "synthetic", "Broker e banco externos com simulador visual (dados sintéticos)"),
 }
 
 
@@ -67,14 +68,18 @@ def servir_api(modo: str, env_file: str | None, host: str, porta: int) -> None:
 
 
 def escolher_teste(valor: str | None) -> str:
+    # Mesmo menu do tools.lab_launcher; aqui só para saber qual banco a API deve usar.
     if valor is None:
-        print("Ambiente de desenvolvimento RFID\n")
         for chave, (_, _, descricao) in TESTES.items():
             print(f"{chave}. {descricao}")
-        valor = input("\nEscolha o teste (1-5) [1]: ").strip() or "1"
+        valor = input("Escolha o teste (1-4) [1]: ").strip() or "1"
     if valor not in TESTES:
-        sys.exit("Escolha um teste de 1 a 5.")
+        sys.exit("Escolha um teste de 1 a 4.")
     return valor
+
+
+def flet_disponivel(python: str) -> bool:
+    return subprocess.run([python, "-c", "import flet"], capture_output=True).returncode == 0
 
 
 def porta_ocupada(host: str, porta: int) -> bool:
@@ -129,6 +134,8 @@ def ultimas_linhas(log: Path | None, quantidade: int = 15) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Sobe API + frontend e abre o launcher de laboratório.")
     parser.add_argument("--teste", choices=sorted(TESTES), help="pula o menu e escolhe o teste")
+    parser.add_argument("--sem-teste", action="store_true",
+                        help="sobe só API e frontend no banco externo, sem o launcher")
     parser.add_argument("--env-file", help="arquivo de ambiente (padrão: .env.local ou .env.cloud)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--api-port", type=int, default=8010)
@@ -143,9 +150,15 @@ def main() -> int:
 
     for fluxo in (sys.stdout, sys.stderr):
         fluxo.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
-    escolha = escolher_teste(args.teste)
-    modo, origem, descricao = TESTES[escolha]
-    print(f"\n> {descricao}")
+    python = python_do_projeto()
+    if args.sem_teste:
+        modo, origem = "managed", None
+    else:
+        modo, origem, descricao = TESTES[escolher_teste(args.teste)]
+        print(f"\n> {descricao}")
+        if origem == "synthetic" and not flet_disponivel(python):
+            sys.exit("O simulador visual precisa do Flet. Instale com:\n"
+                     f"  {python} -m pip install -r requirements-lab.txt")
 
     if porta_ocupada(args.host, args.api_port):
         sys.exit(f"A porta {args.api_port} já está em uso. Use --api-port <outra porta>.")
@@ -159,7 +172,6 @@ def main() -> int:
         print("Instalando dependências do frontend (npm ci)...", flush=True)
         subprocess.run([npm, "ci"], cwd=FRONTEND, check=True)
 
-    python = python_do_projeto()
     ambiente = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",
                     RFID_API_URL=f"http://{args.host}:{args.api_port}")
     # Com o launcher na frente, API e frontend escrevem em arquivo para não poluir o menu.

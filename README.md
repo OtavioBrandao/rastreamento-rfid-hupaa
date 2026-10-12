@@ -130,11 +130,13 @@ para servir o código correspondente ao backend.
 python scripts/dev.py
 ```
 
-O script mostra o menu de testes (1 a 4, mais a opção 5 só com API e frontend),
-sobe a API na porta 8010 e o frontend em http://localhost:5173/ apontando para o
-banco do cenário escolhido e entrega o terminal ao launcher de laboratório, que
-sobe o backend em Docker, abre os três terminais (MQTT, Ingestor e Banco) e
-publica o simulador. `Ctrl+C` encerra tudo. Funciona em Windows 11 e Ubuntu 24.04.
+O script mostra o menu do launcher de laboratório (1 a 4), sobe a API na porta
+8010 e o frontend em http://localhost:5173/ apontando para o banco do teste
+escolhido e entrega o terminal ao launcher, que sobe o backend em Docker, abre os
+três terminais (MQTT, Ingestor e Banco) e, nas opções 1 e 4, o simulador visual.
+`--sem-teste` sobe só API e frontend no banco externo. `Ctrl+C` encerra tudo.
+Funciona em Windows 11 e Ubuntu 24.04. As opções 1 e 4 exigem
+`pip install -r requirements-lab.txt` (Flet).
 Veja as opções em [mapa com abas e script de desenvolvimento](docs/implementations/mapa-abas-cluster-zonas.md).
 
 ### Iniciar o frontend operacional (ISS-032B):
