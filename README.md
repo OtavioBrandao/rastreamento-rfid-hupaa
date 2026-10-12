@@ -121,6 +121,16 @@ existente a partir da pasta original e acrescente
 para o arquivo da pasta original. O frontend deve ser iniciado no mesmo worktree
 para servir o código correspondente ao backend.
 
+### Subir ingestor, API e frontend em um só terminal:
+
+```bash
+python scripts/dev.py                 # usa .env.cloud; --env-file .env.local para o ambiente local
+python scripts/dev.py --sem-ingestor  # apenas API + frontend
+```
+
+`Ctrl+C` encerra os três processos. Veja as opções em
+[mapa com abas e script de desenvolvimento](docs/implementations/mapa-abas-cluster-zonas.md).
+
 ### Iniciar o frontend operacional (ISS-032B):
 
 ```bash
@@ -130,7 +140,7 @@ npm run dev
 # Abra http://localhost:5173/
 ```
 
-O Dashboard consulta `GET /api/ativos`, `/api/dashboard/resumo` e `/api/dashboard/atividade`; os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. No EASY, as leituras recentes das antenas aparecem separadas da última zona confirmada. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), os [roteiros e leituras ao vivo](docs/implementations/roteiros-laboratorio-mapa-ao-vivo.md), a [integração do painel](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
+O Dashboard consulta `GET /api/ativos`, `/api/dashboard/resumo` e `/api/dashboard/atividade`; os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. No EASY, o pulso das antenas mostra cada leitura recebida; o fluxo completo fica na página Leituras. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), os [roteiros e leituras ao vivo](docs/implementations/roteiros-laboratorio-mapa-ao-vivo.md), a [integração do painel](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
 
 ---
 

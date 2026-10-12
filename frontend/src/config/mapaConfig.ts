@@ -14,6 +14,8 @@ export interface MainZone {
   x: number
   y: number
   description: string
+  /** Retângulo clicável da sala no esquema (coordenadas do SVG), quando houver. */
+  area?: { x: number; y: number; width: number; height: number }
 }
 
 export interface InfrastructurePosition {
@@ -36,8 +38,8 @@ export interface PortalPosition {
 }
 
 export const labMainZones: MainZone[] = [
-  { id: 'sala-a', name: 'Sala A', x: 25, y: 38, description: 'Sala A do laboratório' },
-  { id: 'sala-b', name: 'Sala B', x: 75, y: 38, description: 'Sala B do laboratório' },
+  { id: 'sala-a', name: 'Sala A', x: 25, y: 38, description: 'Sala A do laboratório', area: { x: 1, y: 5, width: 49, height: 60 } },
+  { id: 'sala-b', name: 'Sala B', x: 75, y: 38, description: 'Sala B do laboratório', area: { x: 50, y: 5, width: 49, height: 60 } },
 ]
 
 // Nome estável do seed; o ID real é resolvido pela API e validado pelos lados A/B.
