@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-import math
 import secrets
 import time
-from dataclasses import dataclass
+from collections import deque
 from threading import Event
 from uuid import uuid4
 
@@ -17,86 +16,16 @@ from rfid_ingestion.config import Settings
 from rfid_ingestion.connection import create_client
 from rfid_ingestion.topics import reading_topic
 
-
-@dataclass(frozen=True)
-class Etapa:
-    nome: str
-    porta: int
-    quantidade: int
-    pausa: float
-    rssi_inicial: int
-    rssi_final: int
-
-
-@dataclass(frozen=True)
-class LeituraPlanejada:
-    epc: str
-    porta: int
-    pausa_antes: float
-    rssi: int
-
-
-def programa_multitag(cenario: int, epcs: list[str], mensagens: int,
-                      intervalo: float) -> tuple[LeituraPlanejada, ...]:
-    """Percursos em fases; leituras de tags simultâneas são intercaladas."""
-    if cenario not in (2, 3) or len(epcs) != 2:
-        raise ValueError("roteiros 2 e 3 exigem exatamente dois EPCs")
-    if not 10 <= mensagens <= 1000:
-        raise ValueError("cada travessia exige entre 10 e 1000 mensagens por EPC")
-    if not math.isfinite(intervalo) or intervalo < 0:
-        raise ValueError("intervalo entre antenas deve ser finito e não negativo")
-    a, b = epcs
-    fases = (
-        (((a, 1, 2),), ((a, 2, 1), (b, 1, 2)),
-         ((a, 1, 2), (b, 2, 1))) if cenario == 2 else
-        (((a, 1, 2), (b, 1, 2)), ((b, 2, 1),),
-         ((b, 1, 2),), ((b, 2, 1),))
-    )
-    origem = mensagens // 2
-    destino = mensagens - origem
-    resultado: list[LeituraPlanejada] = []
-    for indice_fase, fase in enumerate(fases):
-        for indice in range(origem):
-            for epc, porta_origem, _ in fase:
-                pausa = 3.5 if indice_fase and indice == 0 and epc == fase[0][0] else 0.10
-                resultado.append(LeituraPlanejada(epc, porta_origem, pausa, -6000))
-        for indice in range(destino):
-            for epc, _, porta_destino in fase:
-                pausa = intervalo if indice == 0 and epc == fase[0][0] else 0.10
-                resultado.append(LeituraPlanejada(epc, porta_destino, pausa, -5700))
-    return tuple(resultado)
-
-
-def roteiro(mensagens: int, passagem: bool) -> tuple[Etapa, ...]:
-    """Cenário ilustrativo: aproximação, permanência e travessia do portal."""
-    if passagem and mensagens < 10:
-        raise ValueError("passagem sintética exige ao menos 10 mensagens por EPC")
-    if mensagens < 1:
-        raise ValueError("quantidade de mensagens deve ser positiva")
-    if not passagem:
-        aproximacao = max(1, round(mensagens * 0.2))
-        return (
-            Etapa("aproximação da antena 1", 1, aproximacao, 0.10, -6700, -5700),
-            Etapa("parado na antena 1", 1, mensagens - aproximacao, 0.15, -5700, -5700),
-        )
-    aproximacao = round(mensagens * 0.15)
-    permanencia = round(mensagens * 0.45)
-    saida = round(mensagens * 0.10)
-    travessia = mensagens - aproximacao - permanencia - saida
-    return (
-        Etapa("aproximação da antena 1", 1, aproximacao, 0.10, -6700, -5700),
-        Etapa("parado na antena 1", 1, permanencia, 0.15, -5700, -5700),
-        Etapa("saída da antena 1", 1, saida, 0.08, -5700, -6700),
-        Etapa("passagem pela antena 2", 2, travessia, 0.10, -6700, -5700),
-    )
+ASSINATURA_PADRAO = "easy/dev/hupaa/+/+/readings"
+LIMITE_PUBACK_S = 10.0
 
 
 def _falha_puback(topic: str, desconectado: bool) -> str:
     if desconectado:
         return (f"conexão MQTT encerrada antes do PUBACK para {topic}; confira se a "
                 "credencial do publicador tem permissão Publish nesse tópico")
-    return (f"sem PUBACK QoS 1 em 10 s para {topic}; confira conexão, permissão "
-            "Publish e tópico da credencial do publicador")
+    return (f"sem PUBACK QoS 1 em {LIMITE_PUBACK_S:g} s para {topic}; confira conexão, "
+            "permissão Publish e tópico da credencial do publicador")
 
 
 def novo_contador(total: int) -> int:
@@ -106,102 +35,98 @@ def novo_contador(total: int) -> int:
     return 1_000_000 + secrets.randbelow(9_000_000 - total)
 
 
-def publicar(config: dict[str, str], reader_id: str, *, epcs: list[str],
-             passagem: bool, intervalo: float, portal_id: str = "portal-01",
-             mensagens: int = 100,
-             timestamp_format: str = "counter",
-             contador_inicial: int | None = None, cenario: int = 1) -> int:
-    if not math.isfinite(intervalo) or intervalo < 0:
-        raise ValueError("intervalo entre antenas deve ser finito e não negativo")
-    if timestamp_format != "counter":
-        raise ValueError("o JSON sintético do leitor exige timestamp no formato counter")
-    if not epcs:
-        raise ValueError("informe EPCs hexadecimais válidos")
-    etapas = roteiro(mensagens, passagem) if cenario == 1 else ()
-    epcs = [normalizar_epc(epc) for epc in epcs]
-    programa = programa_multitag(cenario, epcs, mensagens, intervalo) if cenario != 1 else ()
-    total_esperado = len(programa) if programa else len(epcs) * mensagens
-    contador = novo_contador(total_esperado) if contador_inicial is None else contador_inicial
-    if contador < 1_000_000 or contador + total_esperado > 10_000_000:
-        raise ValueError("intervalo do contador sintético deve ter sete dígitos")
-    assinatura = config.get("MQTT_TOPIC", "easy/dev/hupaa/+/+/readings").split("/")
+def topico_sintetico(config: dict[str, str], reader_id: str, portal_id: str) -> str:
+    """Tópico do leitor, no mesmo ambiente/site assinado pelo ingestor."""
+    assinatura_texto = config.get("MQTT_TOPIC", ASSINATURA_PADRAO)
+    assinatura = assinatura_texto.split("/")
     ambiente = assinatura[1] if len(assinatura) == 6 and assinatura[1] != "+" else "dev"
     site = assinatura[2] if len(assinatura) == 6 and assinatura[2] != "+" else "hupaa"
     topic = reading_topic(reader_id, ambiente, site, portal_id)
-    source = dict(config, MQTT_TOPIC=topic, MQTT_CLIENT_ID=f"lab-publisher-{uuid4().hex[:12]}")
-    settings = Settings.from_env(source)
-    if not mqtt.topic_matches_sub(config.get("MQTT_TOPIC", "easy/dev/hupaa/+/+/readings"),
-                                  topic):
+    if not mqtt.topic_matches_sub(assinatura_texto, topic):
         raise ValueError("tópico sintético não corresponde à assinatura do ingestor")
-    client = create_client(settings)
-    conectado = Event()
-    desconectado = Event()
-    erro = []
+    return topic
 
-    def on_connect(_client, _userdata, _flags, reason_code, _properties):
-        if reason_code.is_failure:
-            erro.append("conexão MQTT do publicador recusada; confira a credencial")
-        conectado.set()
 
-    def on_disconnect(_client, _userdata, _flags, _reason_code, _properties):
-        desconectado.set()
+def payload(epc: str, porta: int, rssi: int, contador: int) -> str:
+    """JSON compacto na ordem observada no leitor; sem ``readerid`` no corpo."""
+    return json.dumps({"epc": epc, "rssi": rssi, "antenna": porta,
+                       "timestamp": str(contador)}, separators=(",", ":"))
 
-    client.on_connect = on_connect
-    client.on_disconnect = on_disconnect
-    try:
-        client.connect(settings.mqtt_host, settings.mqtt_port, settings.mqtt_keepalive)
-        client.loop_start()
-        if not conectado.wait(10):
+
+class Publicador:
+    """Conexão MQTT do simulador; publica QoS 1 sem bloquear a cada PUBACK.
+
+    As mensagens ficam em voo até o PUBACK; ``conferir`` falha se alguma
+    esperar mais que ``LIMITE_PUBACK_S`` ou se a conexão cair.
+    """
+
+    def __init__(self, config: dict[str, str], reader_id: str, *,
+                 portal_id: str = "portal-01", capacidade: int = 1_000_000,
+                 contador_inicial: int | None = None) -> None:
+        self.topic = topico_sintetico(config, reader_id, portal_id)
+        self.contador = (novo_contador(capacidade) if contador_inicial is None
+                         else contador_inicial)
+        self._fim = self.contador + capacidade
+        if self.contador < 1_000_000 or self._fim > 10_000_000:
+            raise ValueError("intervalo do contador sintético deve ter sete dígitos")
+        source = dict(config, MQTT_TOPIC=self.topic,
+                      MQTT_CLIENT_ID=f"lab-simulador-{uuid4().hex[:12]}")
+        self._settings = Settings.from_env(source)
+        self._client = create_client(self._settings)
+        self._conectado = Event()
+        self._desconectado = Event()
+        self._erro: list[str] = []
+        self._em_voo: deque[tuple[float, mqtt.MQTTMessageInfo]] = deque()
+        self.publicadas = 0
+        self.confirmadas = 0
+
+    def conectar(self, timeout: float = 10) -> None:
+        def on_connect(_client, _userdata, _flags, reason_code, _properties):
+            if reason_code.is_failure:
+                self._erro.append("conexão MQTT do publicador recusada; confira a credencial")
+            self._conectado.set()
+
+        def on_disconnect(_client, _userdata, _flags, _reason_code, _properties):
+            self._desconectado.set()
+
+        self._client.on_connect = on_connect
+        self._client.on_disconnect = on_disconnect
+        self._client.connect(self._settings.mqtt_host, self._settings.mqtt_port,
+                             self._settings.mqtt_keepalive)
+        self._client.loop_start()
+        if not self._conectado.wait(timeout):
             raise RuntimeError("publicador não recebeu CONNACK do broker em 10 s")
-        if erro:
-            raise RuntimeError(erro[0])
-        total = 0
-        def emitir(epc: str, porta: int, rssi: int) -> None:
-            nonlocal total
-            payload = {"epc": epc, "rssi": rssi, "antenna": porta,
-                       "timestamp": str(contador + total)}
-            result = client.publish(topic, json.dumps(payload, separators=(",", ":")), qos=1)
-            if result.rc != mqtt.MQTT_ERR_SUCCESS:
-                raise RuntimeError(f"MQTT não enfileirou a leitura para {topic}: "
-                                   f"{mqtt.error_string(result.rc)}")
-            try:
-                result.wait_for_publish(timeout=10)
-            except RuntimeError:
-                raise RuntimeError(_falha_puback(topic, desconectado.is_set())) from None
-            if not result.is_published():
-                raise RuntimeError(_falha_puback(topic, desconectado.is_set()))
-            total += 1
-            print(f"Mensagem {total}/{total_esperado}: EPC {epc}, antena {porta}", flush=True)
+        if self._erro:
+            raise RuntimeError(self._erro[0])
 
-        if programa:
-            for leitura in programa:
-                time.sleep(leitura.pausa_antes)
-                emitir(leitura.epc, leitura.porta, leitura.rssi)
-            return total
-        for epc in epcs:
-            for etapa in etapas:
-                if etapa.porta == 2:
-                    print(f"EPC {epc}: deslocamento até a antena 2 ({intervalo:g}s)",
-                          flush=True)
-                    time.sleep(intervalo)
-                print(f"EPC {epc}: {etapa.nome}, {etapa.quantidade} mensagem(ns)",
-                      flush=True)
-                for indice in range(etapa.quantidade):
-                    fracao = indice / max(etapa.quantidade - 1, 1)
-                    rssi = round(etapa.rssi_inicial
-                                 + (etapa.rssi_final - etapa.rssi_inicial) * fracao)
-                    emitir(epc, etapa.porta, rssi)
-                    if indice + 1 < etapa.quantidade:
-                        time.sleep(etapa.pausa)
-        return total
-    finally:
-        client.disconnect()
-        client.loop_stop()
+    def emitir(self, epc: str, porta: int, rssi: int) -> None:
+        if self.contador >= self._fim:
+            raise RuntimeError("contador sintético esgotado; reinicie o simulador")
+        result = self._client.publish(
+            self.topic, payload(normalizar_epc(epc), porta, rssi, self.contador), qos=1)
+        if result.rc != mqtt.MQTT_ERR_SUCCESS:
+            raise RuntimeError(f"MQTT não enfileirou a leitura para {self.topic}: "
+                               f"{mqtt.error_string(result.rc)}")
+        self.contador += 1
+        self.publicadas += 1
+        self._em_voo.append((time.monotonic(), result))
+        self.conferir()
 
+    def conferir(self) -> None:
+        """Descarta mensagens confirmadas; falha na mais antiga sem PUBACK."""
+        while self._em_voo and self._em_voo[0][1].is_published():
+            self._em_voo.popleft()
+            self.confirmadas += 1
+        if not self._em_voo:
+            return
+        enviada_em, _ = self._em_voo[0]
+        if self._desconectado.is_set() or time.monotonic() - enviada_em > LIMITE_PUBACK_S:
+            raise RuntimeError(_falha_puback(self.topic, self._desconectado.is_set()))
 
-def epcs_padrao(quantidade: int) -> list[str]:
-    if quantidade < 1:
-        raise ValueError("quantidade deve ser positiva")
-    if quantidade > 0xFFFFFFFFFFFF:
-        raise ValueError("quantidade excede o limite de EPCs sintéticos")
-    return [f"E2804C414200{indice:012X}" for indice in range(1, quantidade + 1)]
+    @property
+    def pendentes(self) -> int:
+        return len(self._em_voo)
+
+    def fechar(self) -> None:
+        self._client.disconnect()
+        self._client.loop_stop()

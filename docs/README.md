@@ -140,6 +140,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Redesenho do Dashboard e Mapas (ISS-032)](implementations/iss-032-redesign-mapas.md)
    - [Mapa por zonas e portais (ISS-023)](implementations/iss-023-mapa-portais.md)
    - [Atualização automática das telas (ISS-033)](implementations/iss-033-atualizacao-automatica.md)
+   - [Mapa com abas, cluster por zona e script de desenvolvimento](implementations/mapa-abas-cluster-zonas.md)
 4. Decisões Arquiteturais:
    - [Índice de ADRs](decisions/README.md)
 5. Ambiente e Testes:
@@ -151,6 +152,8 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Correção da aba Banco no launcher do Windows](implementations/lab-launcher-windows-observador-banco.md)
    - [Perfil de publicação no teste externo sintético](implementations/lab-launcher-publicador-hivemq.md)
    - [Verificação da fila de ingestão no ensaio externo sintético](implementations/lab-launcher-verificacao-fila-neon.md)
+   - [Simulador visual do laboratório (substitui os roteiros sintéticos)](implementations/simulador-visual-laboratorio.md)
+   - [Ingestor em lotes para banco remoto](implementations/hotfix-ingestor-lotes-banco-remoto.md)
    - [Guia de Migrations (ISS-002c)](implementations/iss-002c-migrations.md)
    - [Pipeline de CI (ISS-004)](implementations/iss-004-ci.md)
 

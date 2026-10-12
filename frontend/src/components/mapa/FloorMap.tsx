@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { hospitalOutlinePath, type MainZone, type MapZone } from '../../config/mapaConfig'
 import type { AssetStatus } from '../../types/dashboard'
 import { Icon } from '../layout/Icon'
@@ -14,9 +15,12 @@ export interface MapMarker {
   dimmed?: boolean
   pulse?: boolean
   pulseKey?: number
+  /** Nome acessível completo quando o tooltip visual é só uma instrução. */
+  ariaLabel?: string
+  selected?: boolean
 }
 
-export function FloorMap({ mode, zones = [], mainZones = [], selectedZoneId = '', showZones = true, markers, onMarkerClick, onZoneClick }: { mode: 'hospital' | 'lab'; zones?: MapZone[]; mainZones?: MainZone[]; selectedZoneId?: string; showZones?: boolean; markers: MapMarker[]; onMarkerClick: (marker: MapMarker) => void; onZoneClick?: (id: string) => void }) {
+export function FloorMap({ mode, zones = [], mainZones = [], selectedZoneId = '', showZones = true, markers, onMarkerClick, onZoneClick, overlay }: { mode: 'hospital' | 'lab'; zones?: MapZone[]; mainZones?: MainZone[]; selectedZoneId?: string; showZones?: boolean; markers: MapMarker[]; onMarkerClick: (marker: MapMarker) => void; onZoneClick?: (id: string) => void; overlay?: ReactNode }) {
   const position = (x: number, y: number) => mode === 'hospital'
     ? { left: `${((x + 1.5) / 103) * 100}%`, top: `${((y + 2) / 104) * 100}%` }
     : { left: `${x}%`, top: `${y}%` }
@@ -40,7 +44,9 @@ export function FloorMap({ mode, zones = [], mainZones = [], selectedZoneId = ''
         <text x="25" y="38" className="room-label">SALA A</text><text x="75" y="38" className="room-label">SALA B</text><text x="50" y="88" className="corridor-label">ÁREA COMUM / PORTAL DE TESTES</text>
       </>}
     </svg>
-    {mode === 'hospital' && <div className="sector-layer" aria-label="Três zonas principais provisórias">{mainZones.map((zone) => <button key={zone.id} type="button" className={`sector-pin ${selectedZoneId === zone.id ? 'sector-pin-selected' : ''}`} style={position(zone.x, zone.y)} aria-label={`${zone.name}: ${zone.description}`} aria-pressed={selectedZoneId === zone.id} onClick={() => onZoneClick?.(selectedZoneId === zone.id ? '' : zone.id)}>{zone.name}</button>)}</div>}
-    <div className="marker-layer">{markers.map((marker) => <button key={`${marker.id}-${marker.pulseKey ?? 0}`} type="button" data-portal-id={marker.portalId} className={`map-marker marker-${marker.kind} ${marker.status ? `marker-${marker.status}` : ''} ${marker.dimmed ? 'marker-dimmed' : ''} ${marker.pulse ? 'marker-pulse' : ''}`} style={position(marker.x, marker.y)} aria-label={`${marker.label}. ${marker.detail}`} title={`${marker.label} — ${marker.detail}`} onClick={() => onMarkerClick(marker)}><Icon name={marker.kind} size={20}/><span className="marker-tooltip"><strong>{marker.label}</strong><small>{marker.detail}</small></span></button>)}</div>
+    {mode === 'lab' && <div className="room-layer">{mainZones.filter((zone) => zone.area).map((zone) => <button key={zone.id} type="button" className={`room-hit ${selectedZoneId === zone.id ? 'room-hit-selected' : ''}`} style={{ left: `${zone.area!.x}%`, top: `${zone.area!.y}%`, width: `${zone.area!.width}%`, height: `${zone.area!.height}%` }} aria-label={`${zone.name}: clique para ver os equipamentos`} title="Clique para ver os equipamentos" aria-pressed={selectedZoneId === zone.id} onClick={() => onZoneClick?.(zone.id)}/>)}</div>}
+    {mode === 'hospital' && <div className="sector-layer" aria-label="Três zonas principais provisórias">{mainZones.map((zone) => <button key={zone.id} type="button" className={`sector-pin ${selectedZoneId === zone.id ? 'sector-pin-selected' : ''}`} style={position(zone.x, zone.y)} aria-label={`${zone.name}: ${zone.description}`} title="Clique para ver os equipamentos" aria-pressed={selectedZoneId === zone.id} onClick={() => onZoneClick?.(zone.id)}>{zone.name}</button>)}</div>}
+    <div className="marker-layer">{markers.map((marker) => <button key={`${marker.id}-${marker.pulseKey ?? 0}`} type="button" data-portal-id={marker.portalId} className={`map-marker marker-${marker.kind} ${marker.status ? `marker-${marker.status}` : ''} ${marker.dimmed ? 'marker-dimmed' : ''} ${marker.pulse ? 'marker-pulse' : ''} ${marker.selected ? 'marker-selected' : ''}`} style={position(marker.x, marker.y)} aria-label={marker.ariaLabel ?? `${marker.label}. ${marker.detail}`} aria-pressed={marker.selected === undefined ? undefined : marker.selected} onClick={() => onMarkerClick(marker)}><Icon name={marker.kind} size={20}/><span className="marker-tooltip"><strong>{marker.label}</strong>{marker.detail && <small>{marker.detail}</small>}</span></button>)}</div>
+    {overlay}
   </div>
 }

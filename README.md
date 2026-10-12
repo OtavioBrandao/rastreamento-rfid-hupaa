@@ -33,6 +33,8 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Passagens em vai e vem (hotfix):** passagens consecutivas sem exigir 3 s de silêncio, com refratário e rejeição de reflexão quando a antena de origem continua lendo a tag. Veja o [hotfix](docs/implementations/hotfix-passagem-vai-e-vem.md).
 - **Leituras e presença (hotfix):** página Leituras com contagem por tag e antena, tabela de equipamentos detectados abaixo dos mapas e última leitura no dashboard, separada da zona confirmada. Veja o [hotfix](docs/implementations/hotfix-leituras-presenca.md).
 - **Ensaio físico no launcher (hotfix):** opções 2 e 3 perguntam as tags e o nome de cada equipamento; o broker externo aceita `mqtt` sem TLS por opt-in de laboratório. Veja o [hotfix](docs/implementations/hotfix-lab-tags-fisicas-mqtt-sem-tls.md).
+- **Ingestor em lotes para banco remoto (hotfix):** gravação em lote, threads separadas para rede, gravação e inferência, e relógio da inferência limitado à leitura pendente; com o banco externo, passagem, direção e zona voltam a funcionar. Veja o [hotfix](docs/implementations/hotfix-ingestor-lotes-banco-remoto.md).
+- **Simulador visual do laboratório:** opções 1 e 4 do launcher abrem uma janela Flet com a planta EASY; os itens nomeados recebem EPCs aleatórios e, arrastados até uma antena, geram leituras sintéticas para o broker local ou externo. Substitui os roteiros sintéticos. Veja a [implementação](docs/implementations/simulador-visual-laboratorio.md).
 - **Atualização automática (ISS-033):** dashboard, mapas, detalhes e histórico atualizados a cada 2 s; leituras EASY a cada 1 s; botão global de recuperação e rótulo “Em trânsito”. Veja [comportamento e validação](docs/implementations/iss-033-atualizacao-automatica.md).
 
 ### ⏳ Próximos Passos (Backlog Imediato):
@@ -96,21 +98,22 @@ tail -n 3 data/raw_events.jsonl
 ### Teste de laboratório assistido:
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-lab.txt
 python -m tools.lab_launcher
 ```
 
 O launcher limpa a tela, mostra o menu, prepara o cadastro e abre observação
-MQTT, logs do ingestor e leituras no banco. O cenário sintético padrão publica
-100 mensagens de um item, da aproximação à passagem pelo portal. O menu oferece
-teste local sintético,
-local com leitor físico ou com broker e banco externos. Veja
+MQTT, logs do ingestor e leituras no banco. Nas opções sintéticas (1 e 4), abre o
+simulador visual: escolha quantos itens e seus nomes, e arraste cada item até as
+antenas A e B para gerar leituras. O menu oferece leitor físico ou simulador, com
+broker e banco locais ou externos. `requirements-lab.txt` inclui o Flet do
+simulador; a imagem Docker continua usando somente `requirements.txt`. Veja
 [instruções para Windows 11 e Ubuntu](docs/lab_test_launcher.md).
 
 ### Iniciar a API FastAPI:
 ```bash
-python -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --env-file .env.cloud
-# Acesse a documentação interativa em http://127.0.0.1:8000/docs
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8010 --env-file .env.cloud
+# Acesse a documentação interativa em http://127.0.0.1:8010/docs
 ```
 
 O comando acima mantém o fluxo com banco e broker externos já configurados em
@@ -121,6 +124,21 @@ existente a partir da pasta original e acrescente
 para o arquivo da pasta original. O frontend deve ser iniciado no mesmo worktree
 para servir o código correspondente ao backend.
 
+### Subir tudo com um comando (API, frontend e teste de laboratório):
+
+```bash
+python scripts/dev.py
+```
+
+O script mostra o menu do launcher de laboratório (1 a 4), sobe a API na porta
+8010 e o frontend em http://localhost:5173/ apontando para o banco do teste
+escolhido e entrega o terminal ao launcher, que sobe o backend em Docker, abre os
+três terminais (MQTT, Ingestor e Banco) e, nas opções 1 e 4, o simulador visual.
+`--sem-teste` sobe só API e frontend no banco externo. `Ctrl+C` encerra tudo.
+Funciona em Windows 11 e Ubuntu 24.04. As opções 1 e 4 exigem
+`pip install -r requirements-lab.txt` (Flet).
+Veja as opções em [mapa com abas e script de desenvolvimento](docs/implementations/mapa-abas-cluster-zonas.md).
+
 ### Iniciar o frontend operacional (ISS-032B):
 
 ```bash
@@ -130,7 +148,7 @@ npm run dev
 # Abra http://localhost:5173/
 ```
 
-O Dashboard consulta `GET /api/ativos`, `/api/dashboard/resumo` e `/api/dashboard/atividade`; os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. No EASY, as leituras recentes das antenas aparecem separadas da última zona confirmada. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), os [roteiros e leituras ao vivo](docs/implementations/roteiros-laboratorio-mapa-ao-vivo.md), a [integração do painel](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
+O Dashboard consulta `GET /api/ativos`, `/api/dashboard/resumo` e `/api/dashboard/atividade`; os mapas HUPAA/EASY consultam `GET /api/ativos`. A planta continua esquemática e não indica posição exata. No EASY, o pulso das antenas mostra cada leitura recebida; o fluxo completo fica na página Leituras. Veja a [integração da ISS-019](docs/implementations/iss-019-busca-ativos.md), os [roteiros e leituras ao vivo](docs/implementations/roteiros-laboratorio-mapa-ao-vivo.md), a [integração do painel](docs/implementations/iss-032-frontend-dashboard.md) e o [redesenho com mapas](docs/implementations/iss-032-redesign-mapas.md).
 
 ---
 

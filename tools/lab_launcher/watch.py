@@ -69,9 +69,20 @@ def db_watch() -> None:
     if not url:
         raise ValueError("APP_DATABASE_URL ou DATABASE_URL ausente")
     engine = create_engine(url, pool_pre_ping=True)
-    ultimo = 0
-    ultimo_movimento = 0
-    passagens_vistas: dict[int, tuple] = {}
+    # Começa do fim: com o histórico grande, partir do id 0 reexibia leituras de dias
+    # anteriores por dezenas de minutos, como se estivessem chegando agora.
+    with engine.connect() as conn:
+        ultimo = conn.execute(text("SELECT COALESCE(MAX(id), 0) FROM leituras_brutas")).scalar_one()
+        ultimo_movimento = conn.execute(text(
+            "SELECT COALESCE(MAX(id), 0) FROM historico_movimentacoes")).scalar_one()
+        # Passagens já existentes só voltam a aparecer se mudarem de estado.
+        passagens_vistas: dict[int, tuple] = {
+            linha.id: (linha.direcao_status, linha.direcao, linha.zona_origem_id,
+                       linha.zona_destino_id)
+            for linha in conn.execute(text(
+                "SELECT id, direcao_status, direcao, zona_origem_id, zona_destino_id "
+                "FROM passagens ORDER BY id DESC LIMIT 100")).all()
+        }
     ultimo_status = 0.0
     print("Acompanhando leituras, passagens, movimentos e última zona...", flush=True)
     try:

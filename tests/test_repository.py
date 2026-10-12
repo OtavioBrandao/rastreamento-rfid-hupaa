@@ -241,3 +241,44 @@ def test_database_error_classification_does_not_expose_details():
         repository.check_available()
     assert authentication.value.category == "permanent_configuration"
     assert "PRIVATE" not in str(authentication.value)
+
+
+def test_lote_preserva_ordem_e_resultado_de_cada_leitura(pg_engine, topology):
+    repository = RawReadingRepository(pg_engine)
+    lote = [
+        envelope(),
+        envelope(epc="EPC-OUTRA"),
+        envelope(),  # mesma leitura repetida no lote
+        envelope(reader_id="reader-desconhecido"),
+        envelope(antenna=2),
+        envelope(epc=""),
+    ]
+    statuses = [(r.status, r.reason) for r in repository.persist_many(lote)]
+    assert statuses == [("inserted", None), ("inserted", None), ("duplicate", None),
+                        ("rejected", "unknown_reader"), ("rejected", "unknown_antenna"),
+                        ("rejected", "invalid_input")]
+    resultados = repository.persist_many(lote[:2])
+    assert [r.status for r in resultados] == ["duplicate", "duplicate"]
+    with pg_engine.connect() as connection:
+        assert connection.scalar(select(func.count()).select_from(LeituraBruta)) == 2
+
+
+def test_lote_usa_uma_transacao_e_cache_da_topologia(pg_engine, topology):
+    relogio = [0.0]
+    repository = RawReadingRepository(pg_engine, clock=lambda: relogio[0])
+    comandos = []
+    sql_event.listen(pg_engine, "before_cursor_execute",
+                     lambda _c, _cur, stmt, *_: comandos.append(stmt.split()[0].upper()))
+    repository.persist_many([envelope(epc=f"EPC-{i}") for i in range(20)])
+    assert comandos == ["SELECT", "INSERT"]
+    comandos.clear()
+    repository.persist_many([envelope(epc="EPC-NOVA")])
+    assert comandos == ["INSERT"]
+    # Antena desativada: o cache vale até o TTL; depois a rejeição volta.
+    with pg_engine.begin() as connection:
+        connection.execute(
+            Antena.__table__.update().where(Antena.id == topology["antenna"]).values(ativo=False)
+        )
+    relogio[0] += RawReadingRepository.TOPOLOGY_TTL_SECONDS + 1
+    resultado, = repository.persist_many([envelope(epc="EPC-DEPOIS")])
+    assert (resultado.status, resultado.reason) == ("rejected", "unknown_antenna")
