@@ -445,6 +445,8 @@ def test_opcao_sintetica_abre_simulador_com_publicador_e_banco(monkeypatch, tmp_
             return 0
 
     monkeypatch.setattr(cli.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+    # O simulador roda em processo separado (Popen simulado); o CI não instala o Flet.
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda nome: object())
     monkeypatch.setattr(cli, "carregar", lambda *a, **k: (arquivo, dict(valores)))
     monkeypatch.setattr(cli, "_perfil_publicador", lambda modo, v, *a: dict(
         v, MQTT_USERNAME="leitor", MQTT_PASSWORD="segredo-leitor",
