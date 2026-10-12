@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from api.database import SessionLocal
@@ -14,8 +14,10 @@ from api.normalizacao import normalizar_nome
 from api.seed_localizacao_piloto import ConfigLocalizacaoPiloto
 from api.seed_localizacao_piloto import semear as semear_zonas
 from api.service_associacao import associar as associar_tag
+from api.service_equipamento import STATUS_ATIVO
 from api.service_equipamento import atualizar as atualizar_equipamento
 from api.service_equipamento import criar as criar_equipamento
+from api.service_equipamento import reativar as reativar_equipamento
 from api.service_hardware import criar_antena, criar_leitor, criar_portal
 from api.service_tipos_equipamento import criar as criar_tipo
 from api.service_topologia_portal import criar_mapeamento
@@ -130,6 +132,47 @@ def semear(session: Session, reader_id: str = "reader-01", serial: str | None = 
         else:
             resumo[f"mapeamento {porta}"] = "reutilizado"
     return resumo
+
+
+def epcs_por_nome(session: Session, nomes: list[str],
+                  tipo_nome: str = TIPO_SINTETICO) -> dict[str, str]:
+    """EPC do equipamento de laboratório já cadastrado com cada nome.
+
+    Repetir um nome no simulador deve reaproveitar o mesmo equipamento (e seu
+    histórico) em vez de criar outro. Entre homônimos, vale o ativo detectado
+    por último. Um equipamento inativo é reativado.
+    """
+    tipo = session.scalar(select(TipoEquipamento).where(
+        TipoEquipamento.nome_normalizado == normalizar_nome(tipo_nome)
+    ))
+    if tipo is None:
+        return {}
+    encontrados: dict[str, str] = {}
+    for nome in nomes:
+        chave = nome.strip()
+        if not chave:
+            continue
+        equipamento = session.scalar(
+            select(Equipamento)
+            .where(Equipamento.tipo_id == tipo.id,
+                   Equipamento.identificador_interno.like("LAB-RFID-%"),
+                   func.lower(func.trim(Equipamento.nome)) == chave.lower())
+            .order_by((Equipamento.status == STATUS_ATIVO).desc(),
+                      Equipamento.ultima_deteccao_em.desc().nulls_last(),
+                      Equipamento.id.desc())
+            .limit(1)
+        )
+        if equipamento is None:
+            continue
+        if equipamento.status != STATUS_ATIVO:
+            reativar_equipamento(session, equipamento.id)
+        vinculada = session.scalar(
+            select(Tag.epc).join(AssociacaoTagEquipamento).where(
+                AssociacaoTagEquipamento.equipamento_id == equipamento.id,
+                AssociacaoTagEquipamento.fim.is_(None)))
+        encontrados[chave] = vinculada or equipamento.identificador_interno.removeprefix(
+            "LAB-RFID-")
+    return encontrados
 
 
 def semear_equipamentos(session: Session, tags: list[tuple[str, str | None]],

@@ -4,6 +4,7 @@ import type { EquipmentItem } from '../../types/dashboard'
 import { LocationBadge, PresenceBadge, StatusBadge, detectionLabel } from '../DashboardParts'
 import { MapReferences } from './MapReferences'
 import { RegisteredDetections } from './RegisteredDetections'
+import { clusterTone } from './ZoneCluster'
 
 const tabs = [
   { id: 'detectados', label: 'Equipamentos detectados' },
@@ -13,6 +14,12 @@ const tabs = [
   { id: 'outras', label: 'Outras zonas' },
 ] as const
 type TabId = typeof tabs[number]['id']
+
+// Na zona selecionada, quem está em trânsito vem antes de quem pode estar com a localização desatualizada.
+export function zonePriority(items: EquipmentItem[], now = Date.now()) {
+  const rank = (item: EquipmentItem) => item.localizacao_desatualizada ? 2 : clusterTone(item, now) === 'recente' ? 0 : 1
+  return [...items].sort((a, b) => rank(a) - rank(b) || a.nome.localeCompare(b.nome, 'pt-BR'))
+}
 
 function EquipmentTable({ items, onSelect, empty }: { items: EquipmentItem[]; onSelect: (item: EquipmentItem) => void; empty: string }) {
   return items.length ? <div className="table-wrap"><table className="equipment-table">
@@ -51,7 +58,7 @@ export function MapDataTabs({ mode, zones, portals, items, onSelect, selectedZon
     setTab(tabs[next].id)
     document.getElementById(tabId(tabs[next].id))?.focus()
   }
-  const zoneItems = selectedZone ? items.filter((item) => belongsToZone(item, selectedZone)) : []
+  const zoneItems = selectedZone ? zonePriority(items.filter((item) => belongsToZone(item, selectedZone))) : []
   return <div className="map-data">
     <div className="map-data-tabs-wrap" hidden={!!selectedZone}>
       <div className="map-data-tabs" role="tablist" aria-label="Dados da planta">

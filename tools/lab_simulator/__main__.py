@@ -16,11 +16,18 @@ from .modelo import Item
 
 
 def cadastrar(itens: list[Item]) -> dict[str, str]:
-    """Vincula cada EPC sorteado a um equipamento com o nome escolhido."""
+    """Vincula cada item a um equipamento com o nome escolhido.
+
+    Nome já usado antes reaproveita o equipamento e a tag existentes; só nomes
+    novos usam o EPC sorteado.
+    """
     from api.database import SessionLocal
-    from tools.lab_launcher.seed import TIPO_SINTETICO, semear_equipamentos
+    from tools.lab_launcher.seed import TIPO_SINTETICO, epcs_por_nome, semear_equipamentos
 
     with SessionLocal() as session:
+        existentes = epcs_por_nome(session, [item.nome for item in itens], TIPO_SINTETICO)
+        for item in itens:
+            item.epc = existentes.get(item.nome.strip(), item.epc)
         return semear_equipamentos(session, [(item.epc, item.nome) for item in itens],
                                    TIPO_SINTETICO)
 
