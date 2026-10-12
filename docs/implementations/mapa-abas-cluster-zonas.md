@@ -105,6 +105,15 @@ credencial é exibida nem passada na linha de comando.
 passou de 8000 para 8010 porque a 8000 costuma estar ocupada por outros
 projetos locais; para subir a API manualmente, use `--port 8010`.
 
+### Janela "Banco" do launcher reexibia o histórico
+
+O observador do banco (`tools/lab_launcher/watch.py`) começava do `id` 0 e lia
+100 leituras a cada 2 s. Com mais de 130 mil leituras guardadas (a maioria do
+ensaio de 07/10), a janela passava dezenas de minutos mostrando leituras antigas
+como se estivessem chegando naquele momento. Agora ele parte da última leitura,
+da última movimentação e das passagens já existentes, e mostra só o que chegar
+depois de aberto.
+
 ## Validação
 
 - `npm test` (24 testes, incluindo cluster, tabela contextual e restauração das
