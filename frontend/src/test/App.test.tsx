@@ -140,7 +140,7 @@ describe('integração da busca', () => {
   })
 
   it('abre o cluster da zona, troca as abas pela tabela da zona e restaura ao fechar', async () => {
-    render(<App/>)
+    await renderApp()
     fireEvent.click(screen.getByRole('link', { name: 'Mapa / Planta' }))
     fireEvent.click(await screen.findByRole('tab', { name: 'Laboratório de Testes (EASY)' }))
     const marker = await screen.findByRole('button', { name: /1 equipamento em Sala A/ })
@@ -164,7 +164,7 @@ describe('integração da busca', () => {
   })
 
   it('mostra leituras por tag separando cadastradas de avulsas', async () => {
-    render(<App/>)
+    await renderApp()
     fireEvent.click(screen.getByRole('link', { name: 'Leituras' }))
     const table = await within(await screen.findByRole('region', { name: 'Tags lidas' })).findByRole('table')
     const rows = within(table).getAllByRole('row')
