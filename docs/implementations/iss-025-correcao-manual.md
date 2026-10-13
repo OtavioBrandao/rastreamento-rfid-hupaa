@@ -76,7 +76,12 @@ No painel de detalhes, a seção **Correção manual** aparece só para quem tem
 4. **Confirmar correção** envia só os campos alterados mais a `versao_esperada` vista.
 5. **Conflito (409):** o painel recarrega o atual e a versão. **Só os campos que a pessoa editou mantêm o valor escolhido; os outros voltam ao valor atual.** Sem isso, o formulário guardaria o valor velho de um campo que a outra operação mudou, e a segunda confirmação apagaria essa mudança em silêncio. Exemplo: alguém corrige o patrimônio, outra pessoa muda a descrição no meio; depois do conflito a descrição nova aparece no formulário e não é enviada.
 6. Outros erros voltam para a edição com a mensagem e preservam o que foi digitado.
-7. Depois do sucesso: mensagem, o histórico é recarregado (com "(ref. X)" depois da justificativa), e a lista, o mapa e o item aberto são atualizados.
+7. Depois do sucesso: mensagem, o histórico abre na primeira página (com "(ref. X)" depois da justificativa) e o painel dispara a **atualização global** da ISS-033. Detalhe, histórico, lista e mapa recarregam na hora, sem esperar o ciclo de 2 s.
+8. O detalhe aberto é recarregado **pelo ID** (`GET /api/ativos/{id}`), e não por busca textual. Depois de corrigir o patrimônio para algo genérico (por exemplo "1"), a busca paginada por nome ou patrimônio pode não trazer o equipamento na primeira página, e o painel continuaria mostrando os dados antigos (achado na revisão do PR #77).
+
+### `GET /api/ativos/{id}`
+
+Devolve um ativo no **mesmo formato** dos itens de `GET /api/ativos`, com zona, recência, EPC e última leitura, ou 404. Exige `equipamentos:consultar`, liberado ao operacional. O painel de detalhe usa essa rota em toda atualização, não só depois de uma correção.
 
 ## Migration `b025a1b2c3d4` (filha de `e028a1b2c3d4`)
 
