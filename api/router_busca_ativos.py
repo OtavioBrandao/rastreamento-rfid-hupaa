@@ -10,8 +10,8 @@ from api.database import get_db
 from api.epc import EpcInvalido, normalizar_epc
 from api.permissoes import Permissao, exigir_por_metodo
 from api.router_equipamento import get_recency_context
-from api.schemas_busca_ativos import BuscaAtivosPagina, StatusAtivo
-from api.service_busca_ativos import PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, buscar
+from api.schemas_busca_ativos import AtivoBusca, BuscaAtivosPagina, StatusAtivo
+from api.service_busca_ativos import PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, buscar, obter
 
 _PERMISSAO = exigir_por_metodo(
     consultar=Permissao.EQUIPAMENTOS_CONSULTAR, alterar=Permissao.EQUIPAMENTOS_ALTERAR
@@ -45,3 +45,15 @@ def buscar_ativos(
     return buscar(db, now=recency_context[0], threshold=recency_context[1], q=q,
                   tipo=tipo, epc=epc, status=status, zona=zona, page=page,
                   page_size=page_size, sort=sort)
+
+
+@router.get("/{equipamento_id}", response_model=AtivoBusca, summary="Consultar um ativo pelo ID")
+def obter_ativo(
+    equipamento_id: int,
+    db: Session = Depends(get_db),
+    recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
+) -> AtivoBusca:
+    ativo = obter(db, equipamento_id, now=recency_context[0], threshold=recency_context[1])
+    if ativo is None:
+        raise HTTPException(404, detail="equipamento inexistente")
+    return ativo

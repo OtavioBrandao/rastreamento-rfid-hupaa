@@ -55,6 +55,7 @@ Tabela **gerada por introspecção** com `python -m tools.tabela_permissoes`; re
 | GET | `/antenas/{antena_id}/mapeamentos` | hardware:consultar | ✓ | ✓ |
 | POST | `/antenas/{antena_id}/reativar` | hardware:alterar | — | ✓ |
 | GET | `/api/ativos` | equipamentos:consultar | ✓ | ✓ |
+| GET | `/api/ativos/{equipamento_id}` | equipamentos:consultar | ✓ | ✓ |
 | GET | `/api/dashboard/atividade` | equipamentos:consultar | ✓ | ✓ |
 | GET | `/api/dashboard/resumo` | equipamentos:consultar | ✓ | ✓ |
 | GET | `/api/laboratorio/leituras` | laboratorio:consultar | ✓ | ✓ |
@@ -127,7 +128,7 @@ Tabela **gerada por introspecção** com `python -m tools.tabela_permissoes`; re
 | POST | `/zonas/{zona_id}/inativar` | localizacao:alterar | — | ✓ |
 | POST | `/zonas/{zona_id}/reativar` | localizacao:alterar | — | ✓ |
 
-86 rotas.
+87 rotas.
 
 ## Como funciona
 
