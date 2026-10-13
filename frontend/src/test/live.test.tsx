@@ -6,7 +6,12 @@ import { getMapTopology } from '../services/dashboard'
 let revision: number
 let fail: string
 let calls: string[]
-const response = (body: unknown) => ({ ok: true, json: async () => body })
+const response = (body: unknown) => ({ ok: true, status: 200, json: async () => body })
+const SESSAO_ADMIN = {
+  usuario: { id: 1, nome: 'Ana Admin', email: 'ana@hupaa.example', perfil: 'administrador', ativo: true, deve_trocar_senha: false },
+  sessao_expira_em: '2026-10-05T20:00:00Z',
+  permissoes: ['equipamentos:consultar', 'equipamentos:alterar', 'laboratorio:consultar'],
+}
 beforeEach(() => {
   vi.useFakeTimers()
   revision = 0; fail = ''; calls = []
@@ -15,6 +20,8 @@ beforeEach(() => {
     const url = new URL(input, 'http://localhost')
     calls.push(url.pathname)
     if (fail === url.pathname) return { ok: false, status: 503 }
+    // ISS-027: o painel (e a atualização automática) só monta com sessão.
+    if (url.pathname === '/auth/me') return response(SESSAO_ADMIN)
     const zones = [{ id: 31, nome: 'Sala A', referencia_planta: 'sala-a', ativo: true },
       { id: 82, nome: 'Sala B', referencia_planta: 'sala-b', ativo: true }]
     if (url.pathname === '/localizacoes/arvore') return response([{ setores: [{ zonas: zones }] }])

@@ -21,7 +21,7 @@ A matriz existe em **um só lugar**: `api/permissoes.py` (`Permissao` e `MATRIZ`
 | `localizacao:alterar` | idem, escrita | — | ✓ |
 | `hardware:consultar` | leitores, antenas, portais, mapeamentos, topologia | ✓ | ✓ |
 | `hardware:alterar` | idem, escrita (e a escrita do laboratório, que hoje não existe) | — | ✓ |
-| `laboratorio:consultar` | `/api/laboratorio/leituras` | ✓ | ✓ |
+| `laboratorio:consultar` | leituras brutas: `/api/laboratorio/leituras` e `/api/leituras/resumo` (página Leituras) | ✓ | ✓ |
 | `usuarios:administrar` | todo `/usuarios` | — | ✓ |
 
 ## Regras gerais
@@ -56,6 +56,7 @@ Tabela **gerada por introspecção** com `python -m tools.tabela_permissoes`; re
 | GET | `/api/dashboard/atividade` | equipamentos:consultar | ✓ | ✓ |
 | GET | `/api/dashboard/resumo` | equipamentos:consultar | ✓ | ✓ |
 | GET | `/api/laboratorio/leituras` | laboratorio:consultar | ✓ | ✓ |
+| GET | `/api/leituras/resumo` | laboratorio:consultar | ✓ | ✓ |
 | POST | `/auth/login` | pública | ✓ | ✓ |
 | POST | `/auth/logout` | pública | ✓ | ✓ |
 | GET | `/auth/me` | qualquer sessão | ✓ | ✓ |
@@ -120,7 +121,7 @@ Tabela **gerada por introspecção** com `python -m tools.tabela_permissoes`; re
 | POST | `/zonas/{zona_id}/inativar` | localizacao:alterar | — | ✓ |
 | POST | `/zonas/{zona_id}/reativar` | localizacao:alterar | — | ✓ |
 
-81 rotas.
+82 rotas.
 
 ## Como funciona
 
