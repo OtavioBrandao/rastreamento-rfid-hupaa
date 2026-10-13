@@ -12,6 +12,13 @@ const SESSAO_ADMIN = {
   sessao_expira_em: '2026-10-05T20:00:00Z',
   permissoes: ['equipamentos:consultar', 'equipamentos:alterar', 'laboratorio:consultar'],
 }
+const ativoAtual = (single: boolean) => {
+  const zones = [{ id: 31, nome: 'Sala A', referencia_planta: 'sala-a', ativo: true },
+    { id: 82, nome: 'Sala B', referencia_planta: 'sala-b', ativo: true }]
+  const item = { id: 1, nome: `Maca ${revision}`, identificador_interno: 'PAT-1', epc: 'E20001', tipo: 'Maca', tipo_id: 1, status: 'disponivel', localizacao_desatualizada: revision > 0,
+    ultima_zona: { ...zones[revision > 0 ? 1 : 0], caminho: revision > 0 ? 'EASY → Sala B' : 'EASY → Sala A' }, ultima_deteccao_em: '2026-10-05T12:00:00Z' }
+  return single ? item : { items: [item], total: 1, page: 1, page_size: 20 }
+}
 beforeEach(() => {
   vi.useFakeTimers()
   revision = 0; fail = ''; calls = []
@@ -27,8 +34,7 @@ beforeEach(() => {
     if (url.pathname === '/localizacoes/arvore') return response([{ setores: [{ zonas: zones }] }])
     if (url.pathname === '/tipos-equipamento') return response({ items: [{ id: 1, nome: `Tipo ${revision}` }] })
     if (url.pathname === '/portais') return response({ items: [{ id: 907, nome: 'Portal de teste RFID', ativo: true, zona_a_id: 31, zona_b_id: 82 }], pages: 1 })
-    if (url.pathname === '/api/ativos') return response({ items: [{ id: 1, nome: `Maca ${revision}`, identificador_interno: 'PAT-1', epc: 'E20001', tipo: 'Maca', tipo_id: 1, status: 'disponivel', localizacao_desatualizada: revision > 0,
-      ultima_zona: { ...zones[revision > 0 ? 1 : 0], caminho: revision > 0 ? 'EASY → Sala B' : 'EASY → Sala A' }, ultima_deteccao_em: '2026-10-05T12:00:00Z' }], total: 1, page: 1, page_size: 20 })
+    if (url.pathname === '/api/ativos' || url.pathname === '/api/ativos/1') return response(ativoAtual(url.pathname === '/api/ativos/1'))
     if (url.pathname === '/api/dashboard/resumo') return response({ registered: 10 + revision, disponivel: 2 + revision, atencao: 0, fora_de_servico: 0, nunca_detectado: 0 })
     if (url.pathname === '/api/dashboard/atividade') return response({ items: [{ id: revision + 1, equipamento_nome: `Evento ${revision}`, zona_origem: 'Sala A', zona_destino: 'Sala B', movimentada_em: '2026-10-05T12:00:00Z' }] })
     if (url.pathname.endsWith('/movimentacoes')) return response({ items: [{ id: revision + 1, zona_origem: 'Sala A', zona_destino: `Destino ${revision}`, movimentada_em: '2026-10-05T12:00:00Z' }], page: 1, pages: 1 })

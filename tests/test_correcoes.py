@@ -545,3 +545,40 @@ def test_uso_interno_faz_strip_da_referencia_e_vazia_vira_null(engine, cenario):
 
     assert consultar(engine, "SELECT referencia FROM historico_movimentacoes ORDER BY id") == [
         ("OS-55",), (None,)]
+
+
+# --- recarga pelo ID (revisão do PR #77) -----------------------------------------
+
+
+def test_ativo_por_id_reflete_correcao_mesmo_fora_da_primeira_pagina_da_busca(cenario):
+    """O painel recarrega por GET /api/ativos/{id}: depois de corrigir o patrimônio
+    para "1", a busca textual paginada pode não trazer o equipamento; o ID sim."""
+    cliente = cenario.cliente
+    for numero in range(21):
+        _ok(cliente.post("/equipamentos", json={
+            "nome": f"Aaa {numero:02d}", "tipo_id": cenario.tipos["Bomba"],
+            "identificador_interno": f"1-{numero:02d}"}))
+    _ok(_localizacao(cenario, cenario.zonas["D"], _versao_api(cenario)))
+    _ok(_cadastro(cenario, _versao_api(cenario), identificador_interno="1"))
+
+    pagina = _ok(cliente.get("/api/ativos", params={"q": "1"}))
+    assert pagina["total"] == 22
+    assert cenario.equipamento_id not in [item["id"] for item in pagina["items"]]
+
+    ativo = _ok(cliente.get(f"/api/ativos/{cenario.equipamento_id}"))
+    assert (ativo["id"], ativo["identificador_interno"], ativo["ultima_zona"]["nome"]) == (
+        cenario.equipamento_id, "1", "Zona D")
+    assert ativo.keys() == pagina["items"][0].keys()  # mesmo formato da busca
+
+
+def test_ativo_por_id_404_e_permissao_de_consulta(engine, cenario, api_auth):
+    assert cenario.cliente.get("/api/ativos/999999").status_code == 404
+    inserir_usuario(engine, "op-ativo@hupaa.example")
+    operacional = api_auth()
+    assert logar(operacional, "op-ativo@hupaa.example").status_code == 200
+    assert operacional.get(f"/api/ativos/{cenario.equipamento_id}").status_code == 200
+    assert api_auth().get(f"/api/ativos/{cenario.equipamento_id}").status_code == 401
+
+
+def _versao_api(cenario) -> int:
+    return _ok(cenario.cliente.get(f"/equipamentos/{cenario.equipamento_id}"))["versao"]
