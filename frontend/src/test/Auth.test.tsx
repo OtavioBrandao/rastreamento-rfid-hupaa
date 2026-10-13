@@ -160,7 +160,8 @@ describe('sessão no dashboard', () => {
     render(<App/>)
     await screen.findByRole('searchbox', { name: 'Nome ou patrimônio' })
     sessaoAtual = null  // expirou, conta desativada ou logout em outra aba
-    fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
+    // A busca é ao vivo (ISS-033): o botão global força a próxima consulta, que recebe 401.
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar todos os dados' }))
     expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Sua sessão expirou. Entre novamente.')
   })
