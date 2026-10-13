@@ -51,6 +51,12 @@ beforeEach(() => {
     if (assetsFailure && url.pathname === '/api/ativos') return { ok: false, status: 503 }
     if (activityFailure && url.pathname === '/api/dashboard/atividade') return { ok: false, status: 503 }
     let body: unknown
+    const porId = url.pathname.match(/^\/api\/ativos\/(\d+)$/)
+    if (porId) {
+      // ISS-025: o painel de detalhe recarrega o equipamento pelo ID.
+      const found = assets.find((asset) => asset.id === Number(porId[1]))
+      return found ? { ok: true, status: 200, json: async () => found } : { ok: false, status: 404 }
+    }
     if (url.pathname === '/api/ativos') {
       const epc = url.searchParams.get('epc')
       const page = Number(url.searchParams.get('page') ?? '1')

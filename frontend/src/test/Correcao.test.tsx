@@ -13,14 +13,18 @@ let registro: Registro
 let permissoes: string[]
 let proximaResposta: { status: number; detail: unknown } | null
 let posts: { path: string; body: Record<string, unknown> }[]
+// Revisão do #77: a busca textual pode não trazer o equipamento na 1ª página.
+let buscaSemOEquipamento: boolean
 
 const ativo = () => ({
   id: 1, nome: registro.nome, identificador_interno: registro.identificador_interno,
   tipo: registro.tipo_nome, tipo_id: registro.tipo_id, epc: null, status: 'disponivel',
-  ultima_zona: { id: 3, nome: 'Zona C', referencia_planta: 'zona-c', andar: '2º andar',
-    setor: 'Bloco B', caminho: '2º andar → Bloco B → Zona C' },
+  ultima_zona: registro.ultima_zona_id === 4
+    ? { id: 4, nome: 'Zona D', referencia_planta: 'zona-d', andar: '2º andar', setor: 'Bloco B', caminho: '2º andar → Bloco B → Zona D' }
+    : { id: 3, nome: 'Zona C', referencia_planta: 'zona-c', andar: '2º andar', setor: 'Bloco B', caminho: '2º andar → Bloco B → Zona C' },
   ultima_deteccao_em: '2026-09-26T12:00:00Z', localizacao_desatualizada: false,
 })
+const outro = (id: number) => ({ ...ativo(), id, nome: `Bomba ${id}`, identificador_interno: `${id}1` })
 const json = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body })
 
 beforeEach(() => {
@@ -31,6 +35,7 @@ beforeEach(() => {
   permissoes = ['equipamentos:consultar', 'equipamentos:alterar', 'equipamentos:corrigir']
   proximaResposta = null
   posts = []
+  buscaSemOEquipamento = false
   vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost')
     if (url.pathname === '/auth/me') {
@@ -66,7 +71,13 @@ beforeEach(() => {
         zona_destino: 'Zona D', movimentada_em: '2026-09-26T13:00:00Z', registrado_em: '2026-09-26T13:00:00Z',
         justificativa: 'Vista na sala D', referencia: 'OS-9' }], page: 1, size: 20, total: 1, pages: 1 })
     }
-    if (url.pathname === '/api/ativos') return json(200, { items: [ativo()], total: 1, page: 1, page_size: 20 })
+    if (url.pathname === '/api/ativos/1') return json(200, ativo())
+    if (url.pathname === '/api/ativos') {
+      if (buscaSemOEquipamento) {
+        return json(200, { items: Array.from({ length: 20 }, (_, i) => outro(i + 2)), total: 21, page: 1, page_size: 20 })
+      }
+      return json(200, { items: [ativo()], total: 1, page: 1, page_size: 20 })
+    }
     if (url.pathname === '/api/dashboard/resumo') return json(200, { registered: 1, disponivel: 1, atencao: 0, fora_de_servico: 0, nunca_detectado: 0 })
     if (url.pathname === '/api/dashboard/atividade') return json(200, { items: [] })
     if (url.pathname === '/tipos-equipamento') return json(200, { items: [{ id: 1, nome: 'Maca' }, { id: 2, nome: 'Bomba' }] })
@@ -205,5 +216,33 @@ describe('correção manual no painel do equipamento', () => {
     expect(posts.at(-1)?.body).toEqual({ identificador_interno: 'PAT-101',
       justificativa: 'Patrimônio errado', versao_esperada: 4 })
     await waitFor(() => expect(registro.descricao).toBe('Descrição da outra operação'))
+  })
+
+  it('depois de corrigir, o painel recarrega o equipamento pelo ID, não pela busca textual', async () => {
+    const regiao = await abrirCorrecao('Corrigir cadastro')
+    await regiao.findByText('(atual: PAT-001)')
+    fireEvent.change(regiao.getByLabelText(/^Patrimônio/), { target: { value: '1' } })
+    preencherJustificativa(regiao, 'Etiqueta errada')
+    fireEvent.click(regiao.getByRole('button', { name: 'Revisar correção' }))
+    // A partir daqui, "1" casa com 21 equipamentos e o corrigido não está na 1ª página.
+    buscaSemOEquipamento = true
+    fireEvent.click(regiao.getByRole('button', { name: 'Confirmar correção' }))
+    expect(await screen.findByText('Cadastro corrigido.')).toBeInTheDocument()
+    const painel = screen.getByRole('dialog')
+    await waitFor(() => expect(within(painel).getByText('Maca · 1')).toBeInTheDocument())
+    expect(within(painel).queryByText('Maca · PAT-001')).not.toBeInTheDocument()
+    expect(within(painel).queryByText(/Não foi possível atualizar os detalhes/)).not.toBeInTheDocument()
+  })
+
+  it('a localização corrigida aparece no painel sem fechar e reabrir', async () => {
+    const regiao = await abrirCorrecao('Corrigir localização')
+    await regiao.findByRole('group', { name: 'Localização atual' })
+    fireEvent.change(regiao.getByLabelText('Nova zona'), { target: { value: '4' } })
+    preencherJustificativa(regiao)
+    fireEvent.click(regiao.getByRole('button', { name: 'Revisar correção' }))
+    fireEvent.click(regiao.getByRole('button', { name: 'Confirmar correção' }))
+    expect(await screen.findByText('Localização corrigida.')).toBeInTheDocument()
+    const painel = screen.getByRole('dialog')
+    await waitFor(() => expect(within(painel).getByText('2º andar → Bloco B → Zona D')).toBeInTheDocument())
   })
 })
