@@ -41,6 +41,8 @@ METODOS_DE_CONSULTA = {"GET", "HEAD", "OPTIONS"}
 # Recurso esperado por prefixo de caminho, a partir das decisões da issue.
 RECURSO_POR_PREFIXO = [
     ("/api/laboratorio", "laboratorio"),
+    # Presença por leitura bruta (página Leituras): mesma permissão das leituras do laboratório.
+    ("/api/leituras", "laboratorio"),
     ("/api/ativos", "equipamentos"),
     ("/api/dashboard", "equipamentos"),
     ("/equipamentos", "equipamentos"),
