@@ -150,7 +150,7 @@ A projeção de localização e `versao` não entram em `dados_antes`/`dados_dep
 
 ## Limites
 
-- **Não há tela de histórico das correções de cadastro.** Elas ficam na trilha (`GET /auditorias?acao=correcao_manual`). O histórico do painel mostra só movimentações.
+- **Correções de cadastro** ficam na trilha (`GET /auditorias?acao=correcao_manual`) e na [tela complementar de auditoria](iss-026-028-frontend-administracao.md). O histórico do painel mostra só movimentações.
 - **A correção não retroage**: vale a partir de agora. Não reescreve movimentos passados nem corrige uma detecção anterior.
 - **Não mexe em vínculo de EPC**: troca de tag continua pelas rotas de associação.
 - **`versao_esperada` só é opcional no uso interno** (`corrigir_localizacao` e `apply_manual_location_correction`); na API é obrigatória.

@@ -58,6 +58,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks()
   SENHAS['tina@hupaa.example'] = 'temporaria-1'
+  SENHAS['ana@hupaa.example'] = 'senha-correta-1'
 })
 
 async function entrar(email: string, senha: string) {
@@ -68,6 +69,35 @@ async function entrar(email: string, senha: string) {
 const dadosConsultados = () => chamadas.filter(({ path }) => !path.startsWith('/auth/'))
 
 describe('sessão no dashboard', () => {
+  it('permite trocar a própria senha mesmo sem troca obrigatória', async () => {
+    sessaoAtual = { ...ADMIN }
+    window.location.hash = '#/senha'
+    render(<App/>)
+    await screen.findByRole('heading', { name: 'Trocar minha senha' })
+    fireEvent.change(screen.getByLabelText('Senha atual'), { target: { value: 'senha-correta-1' } })
+    fireEvent.change(screen.getByLabelText('Nova senha'), { target: { value: 'nova-senha-9' } })
+    fireEvent.change(screen.getByLabelText('Confirmar nova senha'), { target: { value: 'nova-senha-9' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Trocar senha' }))
+    await screen.findByRole('searchbox', { name: 'Nome ou patrimônio' })
+    expect(window.location.hash).toBe('#/')
+    expect(chamadas.filter(({ path }) => path === '/auth/trocar-senha')).toHaveLength(1)
+    expect(screen.queryByLabelText('Senha atual')).not.toBeInTheDocument()
+  })
+
+  it('oferece cancelamento apenas quando a troca não é obrigatória', async () => {
+    sessaoAtual = { ...ADMIN }; window.location.hash = '#/senha'
+    render(<App/>)
+    await screen.findByRole('heading', { name: 'Trocar minha senha' })
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    await screen.findByRole('searchbox', { name: 'Nome ou patrimônio' })
+    expect(screen.getByRole('link', { name: 'Trocar minha senha' })).toHaveAttribute('href', '#/senha')
+    expect(chamadas.filter(({ path }) => path === '/auth/trocar-senha')).toHaveLength(0)
+    cleanup(); sessaoAtual = { ...TEMPORARIA }; window.location.hash = '#/senha'
+    render(<App/>)
+    await screen.findByRole('heading', { name: 'Troca de senha obrigatória' })
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
+  })
+
   it('sem sessão mostra o login e não consulta dados', async () => {
     render(<App/>)
     expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()

@@ -9,7 +9,7 @@ Esta issue entrega:
 - **registro central automático** de toda mudança nas tabelas de cadastro, sem chamada espalhada pelos serviços;
 - **eventos de segurança** na mesma trilha: login aceito e recusado, bloqueio, logout e acesso negado;
 - **imutabilidade garantida pelo banco**: um trigger recusa `UPDATE` e `DELETE`;
-- **consulta só pela API** (`GET /auditorias`, administrador). Não há tela.
+- **consulta pela API** (`GET /auditorias`, administrador), com [tela complementar de auditoria](iss-026-028-frontend-administracao.md).
 
 ## Catálogo de ações (e quem gera cada uma)
 
@@ -123,4 +123,4 @@ Exige `auditoria:consultar`, que só o administrador tem ([matriz da ISS-027](is
 - **O seed do laboratório** (`tools/lab_launcher/seed.py`) importa o pacote `api` e usa os serviços de cadastro: ele **é** auditado, com origem `sistema` e sem autor (não há sessão HTTP); o seed não escreve por SQL direto.
 - **SQL direto** (`psql`, scripts com `text(...)`) não passa pelo listener e não é auditado. O trigger impede adulterar a trilha, mas não registra o que não passou pelo ORM.
 - **Testes com sessão simulada** (o administrador transiente do `conftest`, sem linha no banco) gravam origem `sistema`: o autor só é definido pela `sessao_autenticada` real.
-- **Não há tela, exportação nem política de retenção** da trilha.
+- **Exportação e política de retenção** da trilha continuam pendentes. A [consulta no frontend](iss-026-028-frontend-administracao.md) foi adicionada como complemento.

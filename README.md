@@ -39,6 +39,8 @@ O projeto priorizou a solidez da infraestrutura, a confiabilidade da ingestão e
 - **Simulador visual do laboratório:** opções 1 e 4 do launcher abrem uma janela Flet com a planta EASY; os itens nomeados recebem EPCs aleatórios e, arrastados até uma antena, geram leituras sintéticas para o broker local ou externo. Substitui os roteiros sintéticos. Veja a [implementação](docs/implementations/simulador-visual-laboratorio.md).
 - **Atualização automática (ISS-033):** dashboard, mapas, detalhes e histórico atualizados a cada 2 s; leituras EASY a cada 1 s; botão global de recuperação e rótulo “Em trânsito”. Veja [comportamento e validação](docs/implementations/iss-033-atualizacao-automatica.md).
 
+- **Administração na interface (ISS-026/ISS-028):** telas de usuários e auditoria com permissões, confirmação das ações, filtros e comparação antes/depois. Veja [implementação e validação](docs/implementations/iss-026-028-frontend-administracao.md).
+
 ### ⏳ Próximos Passos (Backlog Imediato):
 - **Validação física:** Calibrar debounce, janela de passagem e tolerância de direção no HUPAA.
 
