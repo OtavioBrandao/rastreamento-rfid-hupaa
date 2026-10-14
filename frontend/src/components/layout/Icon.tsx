@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react'
 
-export type IconName = 'dashboard' | 'map' | 'search' | 'equipment' | 'antenna' | 'reader' | 'portal' | 'refresh' | 'alert' | 'check' | 'clock' | 'close' | 'arrow' | 'layers' | 'question'
+export type IconName = 'dashboard' | 'map' | 'search' | 'equipment' | 'antenna' | 'reader' | 'portal' | 'refresh' | 'alert' | 'check' | 'clock' | 'close' | 'arrow' | 'layers' | 'question' | 'users' | 'audit'
 
 const paths: Record<IconName, ReactNode> = {
+  users: <><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 4v3"/></>,
+  audit: <><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></>,
   portal: <><path d="M5 21V3h14v18M2 21h6M16 21h6M8 12h8m-3-3 3 3-3 3"/></>,
   refresh: <><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></>,
   dashboard: <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>,
