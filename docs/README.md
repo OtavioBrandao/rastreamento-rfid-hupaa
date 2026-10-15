@@ -144,6 +144,8 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Perfis e Permissões / RBAC (ISS-027)](implementations/iss-027-perfis-rbac.md)
    - [Trilha de Auditoria Imutável (ISS-028)](implementations/iss-028-auditoria.md)
    - [Correção Manual de Cadastro e Localização (ISS-025)](implementations/iss-025-correcao-manual.md)
+   - [Frontend de usuários e auditoria (ISS-026/ISS-028)](implementations/iss-026-028-frontend-administracao.md)
+   - [Revisão dos PRs do Thiego em 14/10/2026](implementations/revisao-prs-thiego-2026-10-14.md)
    - [Frontend e Dashboard Operacional (ISS-032, Etapa A)](implementations/iss-032-frontend-dashboard.md)
    - [Redesenho do Dashboard e Mapas (ISS-032)](implementations/iss-032-redesign-mapas.md)
    - [Mapa por zonas e portais (ISS-023)](implementations/iss-023-mapa-portais.md)
