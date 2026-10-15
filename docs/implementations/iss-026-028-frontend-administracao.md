@@ -65,9 +65,10 @@ O cabeçalho oferece “Trocar minha senha” a qualquer usuário autenticado. A
 
 ## Dependências e execução
 
-Este complemento parte do head `66d442a` do PR #77, que já inclui a `main`
-`324a32c` e a pilha #72 → #73 → #75 → #77. Não modifica o backend nem cria
-migrations. Integrar a pilha nessa ordem e depois este frontend.
+Este complemento partiu do head `66d442a` do PR #77. Em 15/10/2026, depois
+da integração dos PRs #72, #73, #75 e #77, foi sincronizado com a `main`
+`efac17b`, resolvendo os conflitos da antiga pilha. O PR #81 passa a ter
+`main` como base. Não modifica o backend nem cria migrations.
 
 Use as instruções de execução do README para API e frontend. O banco precisa
 estar na migration `b025a1b2c3d4` e deve existir um administrador criado pelo
@@ -99,6 +100,19 @@ Evidências com dados sintéticos:
 ![Usuários no celular](assets/admin-usuarios-mobile.jpg)
 
 ![Detalhe da auditoria no celular](assets/admin-auditoria-mobile.jpg)
+
+## Validação da integração em 15/10/2026
+
+Os nove arquivos em conflito foram conciliados com a `main` `efac17b`.
+O resultado preserva o backend integrado e acrescenta somente o complemento
+de frontend e sua documentação. Não houve alteração de migrations.
+
+- `npm test`: 58 testes passaram.
+- `npm run build`: TypeScript e Vite aprovados.
+- Ruff (`E4,E7,E9,F,I`): aprovado.
+- `alembic upgrade head` e `alembic check`: aprovados em PostgreSQL 16
+  descartável local, sem diferenças de schema.
+- `git diff --check`: aprovado, sem marcadores de conflito restantes.
 
 ## Limites
 
