@@ -68,6 +68,7 @@ PERMISSOES_ADMINISTRADOR = sorted([
     "equipamentos:consultar", "equipamentos:alterar", "localizacao:consultar",
     "localizacao:alterar", "hardware:consultar", "hardware:alterar",
     "laboratorio:consultar", "usuarios:administrar", "auditoria:consultar",
+    "equipamentos:corrigir",
 ])
 
 
@@ -150,7 +151,10 @@ def test_permissao_declarada_bate_com_as_decisoes(metodo, caminho, rota):
     if (metodo, caminho) in PUBLICAS | QUALQUER_SESSAO:
         return
     recurso = recurso_esperado(caminho)
-    if recurso == "usuarios":
+    if "/correcoes/" in caminho:
+        # ISS-025: correção manual é permissão própria, só do administrador.
+        esperada = {"equipamentos:corrigir"}
+    elif recurso == "usuarios":
         esperada = {"usuarios:administrar"}
     elif recurso == "auditoria":
         esperada = {"auditoria:consultar"}

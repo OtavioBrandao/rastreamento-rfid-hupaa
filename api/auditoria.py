@@ -60,8 +60,10 @@ CAMPOS_FORA_POR_TABELA = {
     # Segredo e estado de login (ruído a cada tentativa).
     "usuarios": frozenset({"senha_hash", "tentativas_falhas", "bloqueado_ate", "ultimo_login_em"}),
     # Projeção da última localização: escrita pelo pipeline (ISS-017), não é cadastro.
+    # `versao` (ISS-025) é controle de concorrência, também não é cadastro.
     "equipamentos": frozenset({
         "ultima_zona_id", "ultima_deteccao_em", "ultima_passagem_id", "ultima_movimentacao_id",
+        "versao",
     }),
     # Conectividade ao vivo, não cadastro.
     "leitores": frozenset({"status", "ultimo_heartbeat_em"}),
@@ -70,6 +72,7 @@ CAMPOS_FORA_POR_TABELA = {
 CHAVE_AUTOR = "auditoria.autor"
 CHAVE_MOTIVO = "auditoria.motivo"
 CHAVE_CORRELACAO = "auditoria.correlacao"
+CHAVE_CORRECAO = "auditoria.correcao"  # ISS-025: referência da correção em curso
 
 correlacao_da_requisicao: ContextVar[str | None] = ContextVar(
     "correlacao_da_requisicao", default=None
@@ -86,6 +89,21 @@ def definir_autor(db: Session, usuario_id: int | None) -> None:
 
 def definir_motivo(db: Session, texto: str | None) -> None:
     db.info[CHAVE_MOTIVO] = texto
+
+
+def definir_correcao(db: Session, justificativa: str, referencia: str | None) -> None:
+    """
+    ISS-025: o próximo flush é uma correção manual — a alteração vira
+    `correcao_manual`, com a justificativa como motivo. Sempre pareado com
+    `encerrar_correcao` (em `finally`) para a marca não vazar na sessão.
+    """
+    db.info[CHAVE_MOTIVO] = justificativa
+    db.info[CHAVE_CORRECAO] = {"referencia": referencia}
+
+
+def encerrar_correcao(db: Session) -> None:
+    db.info.pop(CHAVE_MOTIVO, None)
+    db.info.pop(CHAVE_CORRECAO, None)
 
 
 def correlation_id_valido(valor: str | None) -> str:
@@ -115,6 +133,11 @@ def _json(valor):
     if isinstance(valor, Decimal):
         return str(valor)
     return valor
+
+
+def _json_raso(dados: dict | None) -> dict | None:
+    """Serializa um nível (datetimes viram texto) para caber em JSONB."""
+    return None if dados is None else {chave: _json(valor) for chave, valor in dados.items()}
 
 
 def _colunas(objeto):
@@ -198,7 +221,12 @@ def _alteracao(db: Session, conexao, objeto) -> dict | None:
     if senha_mudou:
         depois["senha"] = "alterada"  # nunca o valor
 
-    if senha_mudou:
+    correcao = db.info.get(CHAVE_CORRECAO)
+    if correcao is not None:
+        acao = "correcao_manual"
+        if correcao.get("referencia"):
+            depois["referencia"] = correcao["referencia"]
+    elif senha_mudou:
         acao = "alterar_senha"
     elif "ativo" in mudou:
         acao = "reativar" if mudou["ativo"][1] else "inativar"
@@ -285,6 +313,7 @@ def registrar(
     origem: str | None = None,
     motivo: str | None = None,
     dados: dict | None = None,
+    antes: dict | None = None,
 ) -> Auditoria:
     """Evento de segurança (login, logout, negação...). Sem commit: vai na transação do chamador."""
     linha = Auditoria(
@@ -295,7 +324,8 @@ def registrar(
         acao=acao,
         motivo=motivo,
         correlation_id=correlacao(db),
-        dados_depois=dados,
+        dados_antes=_json_raso(antes),
+        dados_depois=_json_raso(dados),
     )
     db.add(linha)
     return linha

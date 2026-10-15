@@ -75,6 +75,7 @@ def append_manual_correction(
     connection: Connection, *, equipamento_id: int, zona_destino_id: int,
     movimentada_em: datetime, justificativa: str,
     registro_anterior_id: int | None = None, zona_origem_id: int | None = None,
+    referencia: str | None = None,
 ) -> MovementWriteResult:
     if movimentada_em.tzinfo is None or movimentada_em.utcoffset() is None:
         raise ValueError("movimentada_em exige fuso horário")
@@ -102,6 +103,7 @@ def append_manual_correction(
         origem_registro="correcao_manual",
         justificativa=justificativa.strip(),
         registro_anterior_id=registro_anterior_id,
+        referencia=(referencia or "").strip() or None,
     )
     movement_id, _ = repository.append(connection, event)
     logger.info("rfid_movement_manual_correction", extra={
