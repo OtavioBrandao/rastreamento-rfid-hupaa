@@ -32,6 +32,7 @@ def buscar(
     epc: str | None = None,
     status: str | None = None,
     zona: int | None = None,
+    equipamento_id: int | None = None,
     page: int = 1,
     page_size: int = PAGE_SIZE_DEFAULT,
     sort: str = "nome",
@@ -68,6 +69,8 @@ def buscar(
         query = query.filter(Tag.epc == epc)
     if zona is not None:
         query = query.filter(Equipamento.ultima_zona_id == zona)
+    if equipamento_id is not None:
+        query = query.filter(Equipamento.id == equipamento_id)
 
     cutoff = now - threshold
     # Predicados diretos permitem ao planner usar os índices de status e recência.
@@ -127,3 +130,11 @@ def buscar(
             if active_epc in leituras else None,
         ))
     return BuscaAtivosPagina(items=items, total=total, page=page, page_size=page_size)
+
+
+def obter(db: Session, equipamento_id: int, *, now: datetime, threshold: timedelta) -> AtivoBusca | None:
+    """Um ativo pelo ID, no mesmo formato da busca. O painel de detalhe recarrega por
+    aqui: o ID é a identidade estável depois de uma correção de nome ou patrimônio
+    (ISS-025), e uma busca textual paginada pode não trazer o item na 1ª página."""
+    pagina = buscar(db, now=now, threshold=threshold, equipamento_id=equipamento_id, page_size=1)
+    return pagina.items[0] if pagina.items else None

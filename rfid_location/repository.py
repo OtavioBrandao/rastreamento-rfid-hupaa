@@ -12,7 +12,7 @@ def lock_equipment(connection: Connection, equipment_id: int):
         select(
             Equipamento.id, Equipamento.ultima_zona_id,
             Equipamento.ultima_deteccao_em, Equipamento.ultima_passagem_id,
-            Equipamento.ultima_movimentacao_id,
+            Equipamento.ultima_movimentacao_id, Equipamento.versao, Equipamento.status,
         ).where(Equipamento.id == equipment_id).with_for_update(
             of=Equipamento, key_share=True
         )
@@ -22,13 +22,19 @@ def lock_equipment(connection: Connection, equipment_id: int):
 def update_location(
     connection: Connection, equipment_id: int, *, zone_id: int,
     movement_at, passage_id: int | None, movement_id: int,
-) -> None:
-    connection.execute(
+) -> int:
+    """
+    Ponto ÚNICO por onde o pipeline e a correção manual movem a projeção.
+    Incrementa a versão otimista (ISS-025): uma correção de cadastro ou de
+    localização preparada antes deste movimento recebe 409. Devolve a versão nova.
+    """
+    return connection.execute(
         update(Equipamento).where(Equipamento.id == equipment_id).values(
             ultima_zona_id=zone_id, ultima_deteccao_em=movement_at,
             ultima_passagem_id=passage_id, ultima_movimentacao_id=movement_id,
-        )
-    )
+            versao=Equipamento.versao + 1,
+        ).returning(Equipamento.versao)
+    ).scalar_one()
 
 
 def pending_ids(engine: Engine, *, limit: int = 100, after_id: int = 0) -> tuple[int, ...]:

@@ -69,8 +69,11 @@ class EquipamentoResposta(BaseModel):
     identificador_interno_normalizado: str
     descricao: str | None
     status: str
+    ultima_zona_id: int | None
     ultima_deteccao_em: datetime | None
     estado_recencia: RecencyStatus
+    # ISS-025: versão otimista; o cliente a devolve como `versao_esperada` na correção.
+    versao: int
     created_at: datetime
     updated_at: datetime
 

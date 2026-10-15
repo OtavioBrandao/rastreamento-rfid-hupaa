@@ -17,6 +17,7 @@ export interface MovementItem {
   movimentada_em: string | null
   registrado_em: string
   justificativa: string | null
+  referencia?: string | null  // ISS-025: chamado/OS da correção manual
 }
 
 export interface MovementPage {

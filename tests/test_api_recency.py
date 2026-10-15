@@ -19,7 +19,7 @@ def equipment(id: int, detected_at: datetime | None):
         id=id, nome=f"Maca {id}", tipo_id=1, tipo=SimpleNamespace(nome="Maca"),
         identificador_interno=f"PAT-{id}",
         identificador_interno_normalizado=f"pat-{id}", descricao=None,
-        status="ativo", ultima_deteccao_em=detected_at,
+        status="ativo", ultima_zona_id=None, ultima_deteccao_em=detected_at, versao=1,
         created_at=NOW, updated_at=NOW,
     )
 

@@ -20,6 +20,66 @@ from .types import LocationProjectionResult, decide_projection
 LOGGER = logging.getLogger(__name__)
 
 
+class CorrecaoRecusada(ValueError):
+    """Regra de negócio recusou a correção. `codigo` é estável para a API."""
+
+    def __init__(self, codigo: str, mensagem: str) -> None:
+        super().__init__(mensagem)
+        self.codigo = codigo
+
+
+class ConflitoDeVersao(Exception):
+    """O equipamento mudou desde que o cliente o leu (versão otimista, ISS-025)."""
+
+    def __init__(self, versao_atual: int) -> None:
+        super().__init__(f"equipamento alterado por outra operação (versão atual {versao_atual})")
+        self.versao_atual = versao_atual
+
+
+def corrigir_localizacao(
+    connection, *, equipment_id: int, destination_zone_id: int, movimentada_em: datetime,
+    justificativa: str, referencia: str | None = None, versao_esperada: int | None = None,
+) -> LocationProjectionResult:
+    """
+    Correção manual da última zona, na transação de quem chama (sem commit).
+    Ordem fixa: fuso → lock → existe → versão → zona → horário → ledger → projeção.
+    """
+    if movimentada_em.tzinfo is None or movimentada_em.utcoffset() is None:
+        raise ValueError("movimentada_em exige fuso horário")
+    equipment = repository.lock_equipment(connection, equipment_id)
+    if equipment is None:
+        raise CorrecaoRecusada("equipamento_inexistente", "equipamento inexistente")
+    if versao_esperada is not None and equipment.versao != versao_esperada:
+        raise ConflitoDeVersao(equipment.versao)
+    if equipment.ultima_zona_id == destination_zone_id:
+        raise CorrecaoRecusada("sem_mudanca", "o equipamento já está nesta zona")
+    if equipment.ultima_deteccao_em is not None:
+        if movimentada_em < equipment.ultima_deteccao_em:
+            raise CorrecaoRecusada("anterior_a_ultima_localizacao",
+                                   "correção manual anterior à última localização")
+        if movimentada_em == equipment.ultima_deteccao_em:
+            raise CorrecaoRecusada("conflito_de_horario",
+                                   "correção manual conflita com timestamp existente")
+    written = append_manual_correction(
+        connection, equipamento_id=equipment_id,
+        zona_origem_id=equipment.ultima_zona_id,
+        zona_destino_id=destination_zone_id,
+        movimentada_em=movimentada_em, justificativa=justificativa,
+        registro_anterior_id=equipment.ultima_movimentacao_id,
+        referencia=referencia,
+    )
+    versao = repository.update_location(
+        connection, equipment_id, zone_id=destination_zone_id,
+        movement_at=movimentada_em, passage_id=None,
+        movement_id=written.movement_id,
+    )
+    return LocationProjectionResult(
+        "updated", equipment_id, written.movement_id, None,
+        equipment.ultima_zona_id, destination_zone_id,
+        equipment.ultima_deteccao_em, movimentada_em, versao,
+    )
+
+
 @dataclass(slots=True)
 class LocationCounters:
     processed: int = 0
@@ -106,35 +166,15 @@ class LocationProjectionService:
     def apply_manual_location_correction(
         self, *, equipment_id: int, destination_zone_id: int,
         movimentada_em: datetime, justificativa: str,
+        referencia: str | None = None, versao_esperada: int | None = None,
     ) -> LocationProjectionResult:
-        """Serviço interno: o chamador futuro deve autorizar o usuário antes da chamada."""
-        if movimentada_em.tzinfo is None or movimentada_em.utcoffset() is None:
-            raise ValueError("movimentada_em exige fuso horário")
+        """Uso interno: autorização é do chamador. Delega a `corrigir_localizacao`."""
         with self.engine.begin() as connection:
-            equipment = repository.lock_equipment(connection, equipment_id)
-            if equipment is None:
-                raise ValueError("equipamento inexistente")
-            if equipment.ultima_deteccao_em is not None:
-                if movimentada_em < equipment.ultima_deteccao_em:
-                    raise ValueError("correção manual anterior à última localização")
-                if movimentada_em == equipment.ultima_deteccao_em:
-                    raise ValueError("correção manual conflita com timestamp existente")
-            written = append_manual_correction(
-                connection, equipamento_id=equipment_id,
-                zona_origem_id=equipment.ultima_zona_id,
-                zona_destino_id=destination_zone_id,
-                movimentada_em=movimentada_em, justificativa=justificativa,
-                registro_anterior_id=equipment.ultima_movimentacao_id,
-            )
-            repository.update_location(
-                connection, equipment_id, zone_id=destination_zone_id,
-                movement_at=movimentada_em, passage_id=None,
-                movement_id=written.movement_id,
-            )
-            result = LocationProjectionResult(
-                "updated", equipment_id, written.movement_id, None,
-                equipment.ultima_zona_id, destination_zone_id,
-                equipment.ultima_deteccao_em, movimentada_em,
+            result = corrigir_localizacao(
+                connection, equipment_id=equipment_id,
+                destination_zone_id=destination_zone_id, movimentada_em=movimentada_em,
+                justificativa=justificativa, referencia=referencia,
+                versao_esperada=versao_esperada,
             )
         self._count(result)
         self._log(result)

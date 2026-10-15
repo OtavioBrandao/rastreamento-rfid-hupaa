@@ -19,6 +19,7 @@ class MovementEvent:
     leitura_destino_id: int | None = None
     justificativa: str | None = None
     registro_anterior_id: int | None = None
+    referencia: str | None = None  # ISS-025: só em correcao_manual
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ class MovementRecord:
     registrado_em: datetime
     justificativa: str | None
     registro_anterior_id: int | None
+    referencia: str | None = None
 
 
 @dataclass(frozen=True)
