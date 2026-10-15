@@ -7,7 +7,7 @@ import { detectionLabel } from '../components/DashboardParts'
 
 export function DashboardPage({ onSelect }: { onSelect: (item: EquipmentItem) => void }) {
   const [draft, setDraft] = useState({ q: '', epc: '' })
-  const [filters, setFilters] = useState<AssetFilters>({ page: 1, page_size: 20 })
+  const [filters, setFilters] = useState<AssetFilters>({ page: 1, page_size: 20, sort: 'prioridade' })
   const assets = useLiveQuery(`assets:${JSON.stringify(filters)}`, (signal) => getAssets(filters, signal))
   const options = useLiveQuery('filters', async (signal) => {
     const [types, zones] = await Promise.all([getTypes(signal), getZones(signal)])
