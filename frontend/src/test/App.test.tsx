@@ -104,6 +104,21 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('integração da busca', () => {
+  it('solicita prioridade global no inventário e a preserva nos filtros e páginas', async () => {
+    paginationMode = true
+    await renderApp()
+    await screen.findByRole('button', { name: /Maca 1/ })
+    const assetCalls = () => calls.map((call) => new URL(call, 'http://localhost')).filter((url) => url.pathname === '/api/ativos')
+    expect(assetCalls().at(-1)!.searchParams.get('sort')).toBe('prioridade')
+    fireEvent.click(screen.getByRole('button', { name: 'Próxima' }))
+    await screen.findByRole('button', { name: /Maca 99/ })
+    expect(assetCalls().at(-1)!.searchParams.get('page')).toBe('2')
+    fireEvent.change(screen.getByLabelText('Status', { exact: true }), { target: { value: 'atencao' } })
+    await waitFor(() => expect(assetCalls().at(-1)!.searchParams.get('status')).toBe('atencao'))
+    expect(assetCalls().every((url) => url.searchParams.get('sort') === 'prioridade')).toBe(true)
+    expect(assetCalls().at(-1)!.searchParams.get('page')).toBe('1')
+  })
+
   it('mostra a badge de localização na tabela e no detalhe; preserva null', async () => {
     await renderApp()
     const table = await screen.findByRole('table')

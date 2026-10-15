@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { AdminPagination, AdminQueryState } from '../components/admin/AdminParts'
 import { accessDenied, adminDate, adminErrorMessage, getAudit, getAudits, type Filtros } from '../services/admin'
 import { useLiveQuery } from '../services/live'
@@ -67,9 +67,19 @@ export function AuditPage() {
 }
 
 function AuditDetail({ id, onClose, onCorrelate }: { id: number; onClose: () => void; onCorrelate: (id: string) => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = dialogRef.current!
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    dialog.showModal()
+    return () => { dialog.close(); previous?.focus() }
+  }, [id])
   const query = useLiveQuery(`audit:${id}`, (signal) => getAudit(id, signal))
   const audit = accessDenied(query.error) ? null : query.data
-  return <section className="panel admin-editor" aria-labelledby="audit-detail-title">
+  return <dialog ref={dialogRef} className="panel admin-editor audit-dialog" aria-labelledby="audit-detail-title"
+    onCancel={(event) => { event.preventDefault(); onClose() }}
+    onClick={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="audit-dialog-content">
     <div className="panel-heading"><h2 id="audit-detail-title">Registro #{id}</h2><button type="button" onClick={onClose}>Fechar registro</button></div>
     <AdminQueryState loading={query.loading} error={query.error ? adminErrorMessage(query.error) : null}/>
     {audit && <><dl className="admin-audit-meta"><div><dt>Ação</dt><dd>{audit.acao.replaceAll('_', ' ')}</dd></div><div><dt>Entidade</dt><dd>{audit.entidade} {audit.entidade_id !== null ? `#${audit.entidade_id}` : ''}</dd></div>
@@ -77,5 +87,6 @@ function AuditDetail({ id, onClose, onCorrelate }: { id: number; onClose: () => 
       {audit.correlation_id && <p className="admin-correlation">Correlação: <code>{audit.correlation_id}</code> <button type="button" onClick={() => onCorrelate(audit.correlation_id!)}>Ver eventos relacionados</button></p>}
       <div className="admin-diff"><section><h3>Antes</h3><pre>{audit.dados_antes ? JSON.stringify(audit.dados_antes, null, 2) : 'Sem valores anteriores'}</pre></section><section><h3>Depois</h3><pre>{audit.dados_depois ? JSON.stringify(audit.dados_depois, null, 2) : 'Sem valores posteriores'}</pre></section></div>
     </>}
-  </section>
+    </div>
+  </dialog>
 }

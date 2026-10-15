@@ -117,8 +117,7 @@ simulador; a imagem Docker continua usando somente `requirements.txt`. Veja
 ### Iniciar a API FastAPI:
 ```bash
 # Primeira vez (ISS-026): criar o administrador inicial; a senha é pedida no terminal
-set -a; source .env.cloud; set +a
-python -m api.criar_admin --nome "Seu Nome" --email voce@hupaa.example
+python -m api.criar_admin --env-file .env.cloud --nome "Seu Nome" --email voce@hupaa.example
 
 python -m uvicorn api.main:app --host 127.0.0.1 --port 8010 --env-file .env.cloud
 # Acesse a documentação interativa em http://127.0.0.1:8010/docs
