@@ -21,6 +21,16 @@ sem leitura, permitindo comparar presença, zona confirmada e ausência de detec
 [Veja a galeria completa, o histórico e a evidência do pipeline](docs/experiments/galeria-pipeline.md).
 As imagens não representam ensaio RF nem dados de operação do hospital.
 
+### Planta de referência do HU
+
+![Planta esquemática do segundo pavimento do HUPAA com três zonas provisórias](docs/assets/screenshots/mapa-hupaa-referencia.jpg)
+
+A visualização do HU usa a planta de referência do segundo pavimento e três
+zonas provisórias. Nomes, limites e posições de hardware serão conferidos com
+a equipe do hospital. A captura mostra o esquema e seus vínculos de cadastro;
+os equipamentos do ensaio EASY continuam em suas próprias zonas.
+[Como mapear leitores, antenas, portais e cadastrar as tags no HU](docs/operations/implantacao-hupaa.md).
+
 ## Executar o projeto
 
 Requisitos: **Python 3.12**, **Node.js 22**, Docker com Compose v2 e ambiente gráfico para o simulador Flet. O desenvolvimento contempla Ubuntu 24.04 e Windows 11 com Docker Desktop/WSL2. Execute os comandos na raiz do repositório.
@@ -156,6 +166,29 @@ flowchart LR
 O tópico identifica o leitor; o cadastro resolve sua porta em uma antena ativa. Mapeamentos temporais definem lado, portal e zona. A consolidação de leituras alimenta o detector de passagens, que rejeita situações de sobreposição e respeita um período refratário. Apenas direção confirmada alimenta a movimentação automática. Histórico e projeção de localização são atualizados na mesma transação, sem fazer a zona regredir por eventos atrasados.
 
 Leitores e notebook usam a rede disponível. Mosquitto e PostgreSQL podem operar localmente; os modos externos substituem esses serviços por endpoints configurados. O funcionamento completo em campo depende da topologia real, da rede institucional e da calibração das antenas. [Arquitetura detalhada com hardware](docs/architecture/system-overview.md#arquitetura-com-leitores).
+
+### Mapeamento para o setor piloto do HU
+
+O cadastro segue **andar → setor → zona**. As zonas ligam-se ao desenho por
+`referencia_planta` (`zona-1`, `zona-2`, `zona-3`). Cada leitor recebe um
+`reader_id` próprio; cada porta é cadastrada como antena e associada ao portal,
+lado A/B e zona adjacente. Um portal pode reunir antenas de leitores diferentes.
+
+```mermaid
+flowchart LR
+    R[Leitor / reader_id] --> A[Antena / porta]
+    A --> P[Portal / lado A ou B / zona]
+    T[EPC da etiqueta] --> E[Equipamento cadastrado]
+    P --> PASS[Passagem com direção confirmada]
+    E --> PASS
+    PASS --> H[Histórico e última zona no mapa do HU]
+```
+
+Após cadastrar o tipo e o equipamento com seu identificador interno, associe o
+EPC efetivamente lido da etiqueta. Cadastrar uma tag não define sua localização:
+a zona é confirmada pelo pipeline de passagem ou por correção manual auditada.
+Os ícones da planta usam posições configuradas, sem cálculo de coordenadas por RSSI.
+[Guia técnico: cadastros, endpoints, mapeamentos, rede e conferência em campo](docs/operations/implantacao-hupaa.md).
 
 ## Arquitetura com simulador
 

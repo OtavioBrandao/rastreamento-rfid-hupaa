@@ -1,0 +1,23 @@
+{
+  "capturado_em_utc": "2026-10-15T23:41:15.615945+00:00",
+  "origem": "Base local isolada, com dados sintéticos. Planta esquemática existente no frontend.",
+  "zonas_hu": [
+    {
+      "nome": "Zona 1",
+      "referencia_planta": "zona-1"
+    },
+    {
+      "nome": "Zona 2",
+      "referencia_planta": "zona-2"
+    },
+    {
+      "nome": "Zona 3",
+      "referencia_planta": "zona-3"
+    }
+  ],
+  "equipamentos_na_base": 4,
+  "equipamentos_localizados_nas_zonas_hu": 0,
+  "passagens_do_ensaio_easy": 3,
+  "movimentacoes_do_ensaio_easy": 3,
+  "limite": "Zonas do HU são provisórias. Não foram cadastrados portais ou leitores físicos do hospital. Os quatro equipamentos pertencem ao cenário EASY; nenhum foi posicionado artificialmente na planta hospitalar."
+}
