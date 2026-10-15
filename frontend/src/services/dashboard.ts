@@ -4,7 +4,7 @@ import type { MapTopology, RegisteredPortal, RegisteredZone } from './mapTopolog
 
 const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
-async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
+export async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const controller = new AbortController()
   const abort = () => controller.abort()
   if (signal?.aborted) controller.abort()
@@ -72,12 +72,12 @@ export async function getZones(signal?: AbortSignal): Promise<FilterOption[]> {
   return result.flatMap((floor) => floor.setores.flatMap((sector) => sector.zonas))
 }
 
-export function getOverviewSummary(signal?: AbortSignal): Promise<OverviewSummary> {
-  return readJson('/api/dashboard/resumo', signal)
+export function getOverviewSummary(signal?: AbortSignal, somenteAtivos = true): Promise<OverviewSummary> {
+  return readJson(`/api/dashboard/resumo?somente_ativos=${somenteAtivos}`, signal)
 }
 
-export async function getRecentActivity(signal?: AbortSignal): Promise<ActivityItem[]> {
-  const result = await readJson<{ items: ActivityItem[] }>('/api/dashboard/atividade?limit=8', signal)
+export async function getRecentActivity(signal?: AbortSignal, somenteAtivos = true): Promise<ActivityItem[]> {
+  const result = await readJson<{ items: ActivityItem[] }>(`/api/dashboard/atividade?limit=8&somente_ativos=${somenteAtivos}`, signal)
   return result.items
 }
 
@@ -97,7 +97,7 @@ export async function getMapTopology(signal?: AbortSignal): Promise<MapTopology>
 }
 
 export function getReadSummary(windowSeconds: number, registeredOnly = false, signal?: AbortSignal): Promise<ReadSummary> {
-  const params = new URLSearchParams({ janela_segundos: String(windowSeconds) })
+  const params = new URLSearchParams({ janela_segundos: String(windowSeconds), somente_ativos: 'true' })
   if (registeredOnly) params.set('somente_cadastradas', 'true')
   return readJson(`/api/leituras/resumo?${params}`, signal)
 }

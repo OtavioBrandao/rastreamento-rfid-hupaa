@@ -140,3 +140,13 @@ Logs do lançador completo: `data/dev/api.log` e `data/dev/front.log`. Observado
 mostram MQTT, ingestor e banco. `GET /health` da API confirma vida do processo;
 não certifica conectividade com o banco. O healthcheck do ingestor verifica MQTT
 e consulta ao banco. Consulte [validações](validation.md) antes de preparar uma versão.
+
+## Monitoramento de leitores
+
+Após atualizar o checkout, aplique `python -m alembic -c config/alembic.ini upgrade head`
+no perfil correto antes de iniciar a nova API e o ingestor. O launcher já aplica
+migrations. A tela **Status dos leitores** usa os limites
+`RFID_READER_DEGRADED_SECONDS` e `RFID_READER_OFFLINE_SECONDS`, iguais nos dois
+processos. Leitura válida renova contato; `MQTT_HEARTBEAT_TOPIC` permite heartbeat
+independente de tags quando a fonte e a ACL forem configuradas.
+[Contrato, motivos, agregação e publicador de ensaio](../implementations/iss-024-status-leitores.md).

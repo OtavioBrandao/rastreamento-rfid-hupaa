@@ -1,7 +1,7 @@
 # Galeria — pipeline RFID com dados sintéticos
 
 Capturas da aplicação em 15/10/2026, com viewport desktop de 1440 × 1000.
-As páginas extensas foram capturadas por inteiro. Nomes, EPCs e usuário são
+Foram capturados o topo, o inventário/rodapé e o esquema da planta. Nomes, EPCs e usuário são
 fictícios; banco e broker pertencem a um projeto Docker Compose descartável.
 
 ## Caminho exercitado
@@ -48,9 +48,11 @@ operacional e nome, sem trocar posições conforme aumenta a contagem de leitura
 
 ![Dashboard com inventário, presença e movimentações](../assets/screenshots/dashboard-simulacao.jpg)
 
+![Inventário completo e histórico com a faixa azul contínua até o final da página](../assets/screenshots/dashboard-inventario-simulacao.jpg)
+
 ## Planta EASY
 
-A planta apresenta um equipamento na Zona A e dois na Zona B. A tabela abaixo
+A planta apresenta um equipamento na Zona A e dois na Zona B. Na aplicação, a tabela de detectados
 mostra a antena da leitura atual separada da última zona confirmada. Os marcadores
 são agregados e ilustrativos; não representam coordenadas físicas dos ativos.
 
@@ -58,7 +60,7 @@ são agregados e ilustrativos; não representam coordenadas físicas dos ativos.
 
 ## Leituras por antena
 
-A janela de cinco minutos mostra as leituras de ambos os lados das travessias,
+A janela de uma hora mostra as leituras de ambos os lados das travessias,
 os EPCs cadastrados e a ausência de leituras do quarto equipamento. A contagem é
 calculada a partir das leituras persistidas e não mede desempenho RF do hardware.
 
@@ -71,6 +73,19 @@ Zona A → Zona B. Nenhuma correção manual de localização foi usada para pro
 esse resultado: a movimentação nasceu da passagem inferida.
 
 ![Detalhe da bomba e histórico automático A para B](../assets/screenshots/historico-simulacao.jpg)
+
+## Status dos leitores
+
+O primeiro registro do ensaio distingue `reader-01` online por leituras de
+`reader-reserva` nunca conectado. Depois, um heartbeat MQTT válido do contrato
+do software colocou o leitor de reserva online **sem nenhuma leitura de tag**.
+A captura mostra a origem de contato de cada um e o portal com os lados A/B.
+O JSON do ensaio guarda o estado inicial e o resultado do heartbeat separado.
+
+![Leitor principal por leituras e leitor de reserva por heartbeat, ambos sintéticos](../assets/screenshots/status-leitores-simulacao.jpg)
+
+Os testes com relógio controlado cobrem interrupção, timeout, retorno e falha
+parcial de portal com dois leitores. [Contrato e regras de monitoramento](../implementations/iss-024-status-leitores.md).
 
 ## Reproduzir uma demonstração semelhante
 

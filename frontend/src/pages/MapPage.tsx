@@ -10,7 +10,7 @@ export function MapPage({ onSelect }: { onSelect: (item: EquipmentItem) => void 
   const [mode, setMode] = useState<'hospital' | 'lab'>('hospital')
   const [draftEpc, setDraftEpc] = useState('')
   const [epc, setEpc] = useState('')
-  const assets = useLiveQuery(`map-assets:${epc}`, (signal) => getAllAssets(epc ? { epc } : {}, signal))
+  const assets = useLiveQuery(`map-assets:${epc}`, (signal) => getAllAssets({ epc: epc || undefined, somente_ativos: true }, signal))
   const metadata = useLiveQuery('map-topology', getMapTopology)
   const items = assets.data ?? []
   const topology = metadata.error ? emptyTopology : metadata.data ?? emptyTopology

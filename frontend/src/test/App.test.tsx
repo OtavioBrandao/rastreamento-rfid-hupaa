@@ -278,6 +278,14 @@ describe('integração da busca', () => {
     await waitFor(() => expect(screen.queryByRole('table')).not.toBeInTheDocument())
   })
 
+  it('permite consultar ensaios arquivados sem misturá-los na visão inicial', async () => {
+    await renderApp()
+    await waitFor(() => expect(calls.some((url) => url.includes('/api/ativos?') && url.includes('somente_ativos=true'))).toBe(true))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Mostrar cadastros inativos (ensaios arquivados)' }))
+    await waitFor(() => expect(calls.some((url) => url.includes('/api/ativos?') && url.includes('somente_ativos=false'))).toBe(true))
+    await waitFor(() => expect(calls.some((url) => url.includes('/api/dashboard/resumo?somente_ativos=false'))).toBe(true))
+  })
+
   it('exibe erro da atividade e recupera sem dados antigos', async () => {
     activityFailure = true
     await renderApp()

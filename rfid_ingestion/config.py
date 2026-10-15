@@ -75,6 +75,7 @@ class Settings:
   mqtt_host: str = DEFAULT_MQTT_HOST
   mqtt_port: int = DEFAULT_MQTT_PORT
   mqtt_topic: str = DEFAULT_MQTT_TOPIC
+  mqtt_heartbeat_topic: str | None = None
   mqtt_username: str | None = field(default=None, repr=False)
   mqtt_password: str | None = field(default=None, repr=False)
   mqtt_client_id: str = DEFAULT_MQTT_CLIENT_ID
@@ -133,6 +134,7 @@ class Settings:
           mqtt_host=source.get("MQTT_HOST", DEFAULT_MQTT_HOST).strip(),
           mqtt_port=_integer_value(source, "MQTT_PORT", 8883 if mode == "cloud" else DEFAULT_MQTT_PORT),
           mqtt_topic=source.get("MQTT_TOPIC", DEFAULT_MQTT_TOPIC).strip(),
+          mqtt_heartbeat_topic=_optional_value(source.get("MQTT_HEARTBEAT_TOPIC", "").strip()),
           mqtt_username=_optional_value(source.get("MQTT_USERNAME")),
           mqtt_password=_optional_value(source.get("MQTT_PASSWORD")),
           mqtt_client_id=source.get(
@@ -266,6 +268,9 @@ class Settings:
           raise ValueError("MQTT_PORT deve estar entre 1 e 65535")
       from .topics import validate_topic
       validate_topic(self.mqtt_topic, subscription=True)
+      if self.mqtt_heartbeat_topic:
+          from .reader_status import validate_heartbeat_topic
+          validate_heartbeat_topic(self.mqtt_heartbeat_topic, subscription=True)
       if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", self.mqtt_client_id):
           raise ValueError("MQTT_CLIENT_ID é inválido")
       if self.mqtt_qos != 1:

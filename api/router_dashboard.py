@@ -44,21 +44,25 @@ class Atividades(BaseModel):
 
 @router.get("/resumo", response_model=Resumo)
 def consultar_resumo(
+    somente_ativos: bool = Query(False),
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> Resumo:
     """Consulta resumo.
 
     Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
-    return Resumo(**resumo(db, now=recency_context[0], threshold=recency_context[1]))
+    return Resumo(**resumo(db, now=recency_context[0], threshold=recency_context[1],
+                          somente_ativos=somente_ativos))
 
 
 @router.get("/atividade", response_model=Atividades)
 def consultar_atividade(
     limit: int = Query(8, ge=1, le=20),
+    somente_ativos: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> Atividades:
     """Consulta atividade.
 
     Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
-    return Atividades(items=[Atividade(**item) for item in atividade_recente(db, limit=limit)])
+    return Atividades(items=[Atividade(**item) for item in atividade_recente(
+        db, limit=limit, somente_ativos=somente_ativos)])

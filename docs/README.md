@@ -26,6 +26,8 @@ use o guia de operação acima; relatórios antigos registram o contexto do ensa
 
 | Problema/tema | Detalhamento |
 |---|---|
+| Cadastros de sessões anteriores acumulados no painel | [Inventário operacional e consulta dos inativos](implementations/inventario-cadastros-inativos.md) |
+| Silêncio ou falha de comunicação dos leitores | [Status por contato, heartbeat e agregação dos portais](implementations/iss-024-status-leitores.md) |
 | Tabelas trocando posição a cada leitura | [Prioridade por grupos e ordenação estável](implementations/ordenacao-estavel-tabelas.md) |
 | Documentação antiga e arquivos dispersos | [Organização e documentação técnica do repositório](implementations/organizacao-documentacao.md) |
 | Recepção MQTT local e externa | [Ingestão e perfis de transporte](implementations/iss-001-mqtt-ingestion.md) |

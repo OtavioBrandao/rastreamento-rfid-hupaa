@@ -398,6 +398,9 @@ class Leitor(Base):
     parametros_ingestao = Column(JSONB(none_as_null=True), nullable=True)
     status = Column(String, nullable=False, server_default="offline")
     ultimo_heartbeat_em = Column(TIMESTAMP(timezone=True), nullable=True)
+    ultimo_contato_em = Column(TIMESTAMP(timezone=True), nullable=True)
+    origem_ultimo_contato = Column(String(16), nullable=True)
+    saude_reportada = Column(String(16), nullable=True)
     ativo = Column(Boolean, nullable=False, server_default="true")
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(

@@ -30,9 +30,11 @@ from api.router_hardware import router as router_hardware
 from api.router_leituras import router as router_leituras
 from api.router_leituras_laboratorio import router as router_leituras_laboratorio
 from api.router_localizacao import router as router_localizacao
+from api.router_status_hardware import router as router_status_hardware
 from api.router_tipos_equipamento import router as router_tipos_equipamento
 from api.router_topologia_portal import router as router_topologia_portal
 from api.router_usuarios import router as router_usuarios
+from rfid_ingestion.reader_status import StatusPolicy
 
 # Sem isto o uvicorn descarta todo INFO de `api.*` (ver api/logging_config.py).
 configurar_logging_api()
@@ -44,6 +46,7 @@ async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
     # aparecer como 500 no primeiro login.
     """Valida a configuração de autenticação antes de liberar a aplicação ASGI."""
     configuracao_auth_do_ambiente()
+    StatusPolicy.from_env()
     yield
 
 
@@ -69,6 +72,7 @@ app.include_router(router_leituras)
 app.include_router(router_associacao)
 app.include_router(router_localizacao)
 # hardware depois de localizacao: antena/portal dependem de zonas ativas.
+app.include_router(router_status_hardware)
 app.include_router(router_hardware)
 # topologia logica de portais (ISS-013) apos hardware e localizacao
 app.include_router(router_topologia_portal)

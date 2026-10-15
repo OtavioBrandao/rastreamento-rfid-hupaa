@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, func, select, text
+from sqlalchemy import and_, func, select, text, true
 from sqlalchemy.orm import Session
 
 from api.timestamps import em_utc
@@ -66,7 +66,7 @@ def ultimas_leituras(db: Session, epcs: Iterable[str]) -> dict[str, dict]:
 
 
 def resumo(db: Session, *, now: datetime, janela: timedelta,
-           somente_cadastradas: bool = False) -> dict:
+           somente_cadastradas: bool = False, somente_ativos: bool = False) -> dict:
     """Agrega leituras da janela por tag e antena e associa apenas o vínculo ativo do equipamento."""
     corte = now - janela
     cadastradas = {
@@ -85,6 +85,7 @@ def resumo(db: Session, *, now: datetime, janela: timedelta,
                 AssociacaoTagEquipamento.fim.is_(None)))
             .join(Equipamento, Equipamento.id == AssociacaoTagEquipamento.equipamento_id)
             .outerjoin(Zona, Zona.id == Equipamento.ultima_zona_id)
+            .where(Equipamento.status == "ativo" if somente_ativos else true())
         ).all()
     }
 
@@ -96,6 +97,12 @@ def resumo(db: Session, *, now: datetime, janela: timedelta,
     )
     if somente_cadastradas:
         agregado = agregado.where(LeituraBruta.epc.in_(list(cadastradas) or [""]))
+    if somente_ativos:
+        inativos = (select(Tag.epc).join(AssociacaoTagEquipamento,
+                    AssociacaoTagEquipamento.tag_id == Tag.id)
+                    .join(Equipamento, Equipamento.id == AssociacaoTagEquipamento.equipamento_id)
+                    .where(AssociacaoTagEquipamento.fim.is_(None), Equipamento.status == "inativo"))
+        agregado = agregado.where(LeituraBruta.epc.not_in(inativos))
     por_epc: dict[str, list] = {}
     for linha in db.execute(agregado).all():
         por_epc.setdefault(linha.epc, []).append(linha)

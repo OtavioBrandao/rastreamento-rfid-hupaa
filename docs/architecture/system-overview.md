@@ -187,3 +187,12 @@ As tabelas usam [grupos e ordem estável](../implementations/ordenacao-estavel-t
 - [Guia de módulos e contratos transacionais](../reference/code-guide.md)
 - [Modelo de dados](data-model.md) e [diagrama ER](er-diagrama.mermaid)
 - [Decisões arquiteturais](../decisions/README.md)
+
+## Disponibilidade dos leitores e portais
+
+O monitor observa leituras válidas e, quando habilitado, heartbeat independente
+no tópico `heartbeat`. Persiste contato sem gerar passagem e reavalia silêncio
+periodicamente. A API usa o relógio da consulta para classificar online,
+degradado, offline e nunca conectado; portais agregam leitores ativos e lados
+A/B vigentes. A disponibilidade observada não mede alcance RF.
+[Contrato, limites, segurança e agregação](../implementations/iss-024-status-leitores.md).
