@@ -19,6 +19,9 @@ from api.config_auth import configuracao_auth_do_ambiente
 from api.logging_config import configurar_logging_api, registrar_evento
 from api.main import app
 
+# ISS-027: login e cookie reais; sem o administrador de teste do conftest.
+pytestmark = pytest.mark.autenticacao_real
+
 RAIZ = Path(__file__).resolve().parent.parent
 
 # --- configuração ---------------------------------------------------------------

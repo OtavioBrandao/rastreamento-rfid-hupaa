@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from api import service_topologia_portal as service
 from api.database import get_db
+from api.permissoes import Permissao, exigir_por_metodo
 from api.schemas_topologia_portal import (
     ItemTopologiaAntenaResposta,
     MapeamentoAtualizar,
@@ -22,7 +23,10 @@ from api.schemas_topologia_portal import (
     ZonaResumo,
 )
 
-router = APIRouter()
+_PERMISSAO = exigir_por_metodo(
+    consultar=Permissao.HARDWARE_CONSULTAR, alterar=Permissao.HARDWARE_ALTERAR
+)
+router = APIRouter(dependencies=[Depends(_PERMISSAO)])
 
 _NAO_ENCONTRADO = (
     service.MapeamentoNaoEncontrado,

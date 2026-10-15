@@ -45,7 +45,8 @@ O projeto prioriza a confiabilidade da ingestão e da persistência antes da ló
 - **Última zona (ISS-017):** Integra histórico e projeção de equipamento na mesma transação, com event time, lock e reconciliação de passagens confirmadas.
 - **Busca operacional (ISS-019):** API paginada por nome/patrimônio, tipo, EPC, estado derivado e última zona, consumida pelo dashboard e pelos mapas. Veja [contrato e validação](implementations/iss-019-busca-ativos.md).
 - **Ativos por zona (ISS-020):** a consulta existente retorna equipamentos por última zona materializada, com recência e paginação. Veja [semântica e cenário de teste](implementations/iss-020-ativos-por-zona.md).
-- **Usuários e autenticação (ISS-026):** login por e-mail com sessão opaca em cookie `HttpOnly`/`SameSite=Strict`, senhas Argon2id, bloqueio por conta, senha temporária com troca obrigatória, administração de usuários e primeiro administrador por terminal. As demais rotas seguem públicas até a ISS-027. Veja [contrato e validação](implementations/iss-026-usuarios-autenticacao.md) e o [ADR 0009](decisions/0009-autenticacao-sessao-opaca-cookie.md).
+- **Usuários e autenticação (ISS-026):** login por e-mail com sessão opaca em cookie `HttpOnly`/`SameSite=Strict`, senhas Argon2id, bloqueio por conta, senha temporária com troca obrigatória, administração de usuários e primeiro administrador por terminal. Veja [contrato e validação](implementations/iss-026-usuarios-autenticacao.md) e o [ADR 0009](decisions/0009-autenticacao-sessao-opaca-cookie.md).
+- **Perfis e permissões (ISS-027):** toda rota de negócio exige sessão e permissão de uma matriz única (`api/permissoes.py`): operacional consulta tudo exceto usuários, administrador faz tudo; negação única 403 `acesso_negado` com log. O dashboard ganhou login, troca de senha obrigatória e Sair. Veja [matriz, rotas e testes](implementations/iss-027-perfis-rbac.md).
 
 ### ⏳ O que está PLANEJADO (Próximos passos):
 - **Validação física:** Ajuste dos parâmetros e verificação da sequência de leituras com hardware real no HUPAA.
@@ -138,6 +139,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Última Localização (ISS-017)](implementations/iss-017-ultima-localizacao.md)
    - [Recência da Localização (ISS-022)](implementations/iss-022-recencia-localizacao.md)
    - [Usuários e Autenticação (ISS-026)](implementations/iss-026-usuarios-autenticacao.md)
+   - [Perfis e Permissões / RBAC (ISS-027)](implementations/iss-027-perfis-rbac.md)
    - [Frontend e Dashboard Operacional (ISS-032, Etapa A)](implementations/iss-032-frontend-dashboard.md)
    - [Redesenho do Dashboard e Mapas (ISS-032)](implementations/iss-032-redesign-mapas.md)
    - [Mapa por zonas e portais (ISS-023)](implementations/iss-023-mapa-portais.md)
@@ -190,6 +192,7 @@ docs/
 │   ├── iss-016-inferencia-direcao.md <- Direção e zonas da passagem
 │   ├── iss-018-historico-movimentacoes.md <- Ledger auditável de movimentações
 │   ├── iss-026-usuarios-autenticacao.md <- Login, sessões, bloqueio e administração de usuários
+│   ├── iss-027-perfis-rbac.md <- Matriz de permissões, rotas protegidas e login no dashboard
 │   └── iss-051-reorganizacao-documentacao.md <- Registro desta reestruturação (AGENTS.md)
 ├── experiments/                   <- Relatórios e evidências de testes práticos
 │   ├── README.md                  <- Síntese de experimentos e matriz de aceitação

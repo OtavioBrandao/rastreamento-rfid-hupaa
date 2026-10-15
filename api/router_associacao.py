@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from api import service_associacao as service
 from api.database import get_db
+from api.permissoes import Permissao, exigir_por_metodo
 from api.schemas_associacao import (
     AssociacaoOut,
     AssociarPayload,
@@ -30,7 +31,10 @@ from api.schemas_associacao import (
 )
 from db.models import AssociacaoTagEquipamento
 
-router = APIRouter(tags=["associacoes"])
+_PERMISSAO = exigir_por_metodo(
+    consultar=Permissao.EQUIPAMENTOS_CONSULTAR, alterar=Permissao.EQUIPAMENTOS_ALTERAR
+)
+router = APIRouter(tags=["associacoes"], dependencies=[Depends(_PERMISSAO)])
 
 
 def _para_saida(associacao: AssociacaoTagEquipamento) -> AssociacaoOut:

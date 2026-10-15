@@ -101,7 +101,9 @@ class UsuarioResposta(BaseModel):
     id: int
     nome: str
     email: str
-    perfil: NomePerfil
+    # `str`, não `NomePerfil`: um perfil fora da matriz (sem permissões) não
+    # pode derrubar o login com 500 na validação da resposta (ISS-027).
+    perfil: str
     ativo: bool
     deve_trocar_senha: bool
     bloqueado_ate: datetime | None
@@ -121,3 +123,5 @@ class UsuarioPagina(BaseModel):
 class SessaoResposta(BaseModel):
     usuario: UsuarioResposta
     sessao_expira_em: datetime
+    # Resolvidas pela matriz de `api/permissoes.py`, ordenadas (ISS-027).
+    permissoes: list[str]
