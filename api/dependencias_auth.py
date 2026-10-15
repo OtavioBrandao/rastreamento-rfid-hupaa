@@ -17,6 +17,7 @@ from datetime import datetime
 from fastapi import Cookie, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from api.auditoria import definir_autor
 from api.config_auth import obter_agora
 from api.database import get_db
 from api.service_auth import SessaoAutenticada, resolver_sessao
@@ -34,6 +35,8 @@ def sessao_autenticada(
     sessao = resolver_sessao(db, rfid_sessao, agora)
     if sessao is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=DETALHE_NAO_AUTENTICADO)
+    # ISS-028: toda mudança feita nesta request entra na trilha com este autor.
+    definir_autor(db, sessao.usuario.id)
     return sessao
 
 

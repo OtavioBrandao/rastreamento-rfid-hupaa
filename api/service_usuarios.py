@@ -12,6 +12,10 @@ atualizado e é recusado — o sistema nunca fica sem administrador ativo.
 
 Os hashes Argon2 são calculados ANTES dos locks: são caros e não dependem
 de estado do banco.
+
+Trilha (ISS-028): nada aqui grava `auditorias`. O registro central de
+`api/auditoria.py` audita cada flush (criar, atualizar, inativar, reativar,
+alterar_senha), com o autor posto na sessão por `sessao_autenticada`.
 """
 
 import math
@@ -24,7 +28,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from api import senhas
 from api.service_auth import PERFIL_ADMINISTRADOR, normalizar_email, revogar_sessoes
-from db.models import Auditoria, Perfil, Usuario
+from db.models import Perfil, Usuario
 
 
 class ErroUsuario(Exception):
@@ -68,31 +72,6 @@ class PaginaUsuarios:
     @property
     def pages(self) -> int:
         return math.ceil(self.total / self.size) if self.size else 0
-
-
-def _snapshot(usuario: Usuario) -> dict:
-    """Estado auditável, sem segredo nenhum (nada de hash nem token)."""
-    return {
-        "nome": usuario.nome,
-        "email": usuario.email,
-        "perfil": usuario.perfil.nome,
-        "ativo": usuario.ativo,
-        "deve_trocar_senha": usuario.deve_trocar_senha,
-    }
-
-
-def _auditar(
-    db: Session, autor_id: int | None, alvo_id: int, acao: str, operacao: str,
-    antes: dict | None, depois: dict,
-) -> None:
-    db.add(Auditoria(
-        usuario_id=autor_id,
-        entidade="usuarios",
-        entidade_id=alvo_id,
-        acao=acao,
-        dados_antes=antes,
-        dados_depois={**depois, "operacao": operacao},
-    ))
 
 
 def _perfil_por_nome(db: Session, nome: str) -> Perfil:
@@ -184,7 +163,6 @@ def criar(
     except IntegrityError as erro:
         db.rollback()
         raise EmailDuplicado() from erro
-    _auditar(db, autor_id, usuario.id, "create", "criar", None, _snapshot(usuario))
     db.commit()
     return obter(db, usuario.id)
 
@@ -193,7 +171,6 @@ def atualizar(
     db: Session, autor_id: int, alvo_id: int, nome: str | None = None, perfil: str | None = None,
 ) -> Usuario:
     admins, alvo = _travar(db, autor_id, alvo_id)
-    antes = _snapshot(alvo)
     if perfil is not None and perfil != alvo.perfil.nome:
         if perfil != PERFIL_ADMINISTRADOR:
             try:
@@ -204,9 +181,6 @@ def atualizar(
         alvo.perfil = _perfil_por_nome(db, perfil)
     if nome is not None:
         alvo.nome = nome.strip()
-    depois = _snapshot(alvo)
-    if depois != antes:
-        _auditar(db, autor_id, alvo.id, "update", "editar", antes, depois)
     db.commit()
     return obter(db, alvo_id)
 
@@ -220,10 +194,8 @@ def desativar(db: Session, autor_id: int, alvo_id: int, agora: datetime) -> Usua
     except UltimoAdministrador:
         db.rollback()
         raise
-    antes = _snapshot(alvo)
     alvo.ativo = False
     revogar_sessoes(db, alvo.id, agora, "desativacao")
-    _auditar(db, autor_id, alvo.id, "update", "desativar", antes, _snapshot(alvo))
     db.commit()
     return obter(db, alvo_id)
 
@@ -235,13 +207,11 @@ def reativar(db: Session, autor_id: int, alvo_id: int, agora: datetime) -> Usuar
     passariam a valer de novo — por isso são revogadas aqui.
     """
     _admins, alvo = _travar(db, autor_id, alvo_id)
-    antes = _snapshot(alvo)
     if not alvo.ativo:
         revogar_sessoes(db, alvo.id, agora, "desativacao")
     alvo.ativo = True
     alvo.tentativas_falhas = 0
     alvo.bloqueado_ate = None
-    _auditar(db, autor_id, alvo.id, "update", "reativar", antes, _snapshot(alvo))
     db.commit()
     return obter(db, alvo_id)
 
@@ -254,12 +224,10 @@ def redefinir_senha(
     senhas.validar_politica(senha_temporaria)
     senha_hash = senhas.gerar_hash(senha_temporaria)
     _admins, alvo = _travar(db, autor_id, alvo_id)
-    antes = _snapshot(alvo)
     alvo.senha_hash = senha_hash
     alvo.deve_trocar_senha = True
     alvo.tentativas_falhas = 0
     alvo.bloqueado_ate = None
     revogar_sessoes(db, alvo.id, agora, "redefinicao_senha")
-    _auditar(db, autor_id, alvo.id, "update", "redefinir_senha", antes, _snapshot(alvo))
     db.commit()
     return obter(db, alvo_id)
