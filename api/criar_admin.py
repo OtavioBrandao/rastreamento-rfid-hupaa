@@ -10,8 +10,8 @@ ficaria no histórico do shell e visível em `ps`. Para automação,
 Recusa rodar se já existir administrador ativo, a menos que se passe
 `--recuperacao` (conta nova de emergência quando ninguém mais consegue
 entrar). Este admin NÃO nasce com troca obrigatória: quem digitou a senha
-é o próprio titular. A criação é auditada como ação do sistema
-(`usuario_id` NULL).
+é o próprio titular. A criação é auditada pelo registro central como ação do
+sistema (`usuario_id` NULL, origem `sistema`, motivo "comando criar_admin").
 
 Usa a mesma `DATABASE_URL` da API (`api/database.py`).
 """
@@ -27,10 +27,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from api import senhas
+from api.auditoria import definir_motivo
 from api.schemas_auth import UsuarioCriar
 from api.service_auth import PERFIL_ADMINISTRADOR
-from api.service_usuarios import _snapshot, travar_admins_ativos
-from db.models import Auditoria, Perfil, Usuario
+from api.service_usuarios import travar_admins_ativos
+from db.models import Perfil, Usuario
 
 # Chave arbitrária e fixa: serializa duas execuções simultâneas do comando
 # quando ainda não há nenhum admin para travar.
@@ -104,18 +105,15 @@ def criar_administrador(
     usuario = Usuario(
         nome=nome, email=email, senha_hash=senha_hash, perfil=perfil, deve_trocar_senha=False,
     )
+    # Sem autor (origem sistema): a trilha `criar` sai do registro central com este motivo.
+    definir_motivo(db, "comando criar_admin (recuperação de acesso)" if recuperacao
+                   else "comando criar_admin")
     db.add(usuario)
     try:
         db.flush()
     except IntegrityError:
         db.rollback()
         raise ErroCriarAdmin("Já existe um usuário com este e-mail.") from None
-    db.add(Auditoria(
-        usuario_id=None, entidade="usuarios", entidade_id=usuario.id, acao="create",
-        dados_antes=None,
-        dados_depois={**_snapshot(usuario), "operacao": "criar_admin_terminal",
-                      "recuperacao": recuperacao},
-    ))
     db.commit()
     return usuario
 

@@ -27,7 +27,7 @@ from datetime import datetime
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
 
-from api import senhas
+from api import auditoria, senhas
 from api.config_auth import ConfiguracaoAuth
 from api.logging_config import registrar_evento
 from db.models import Sessao, Usuario
@@ -113,7 +113,11 @@ def autenticar(
     if usuario is None:
         senhas.verificar_senha(senhas.hash_ficticio(), senha)
         db.rollback()
-        # O e-mail digitado NÃO vai para o log: é comum digitarem a senha nele.
+        # O e-mail digitado NÃO vai para o log nem para a trilha: é comum
+        # digitarem a senha nele. Sem alvo identificável: entidade_id NULL.
+        auditoria.registrar(db, "login_recusado", entidade="usuarios", origem="anonimo",
+                            motivo="conta_inexistente")
+        db.commit()
         registrar_evento(logger, "login_recusado", motivo="conta_inexistente")
         raise LoginRecusado()
 
@@ -121,6 +125,7 @@ def autenticar(
     senha_confere = senhas.verificar_senha(usuario.senha_hash, senha)
 
     motivo = None
+    bloqueou = False
     if not usuario.ativo:
         motivo = "conta_inativa"
     elif _bloqueado(usuario, agora):
@@ -130,9 +135,17 @@ def autenticar(
             "senha_incorreta" if senhas.hash_reconhecido(usuario.senha_hash)
             else "hash_invalido"
         )
-        _registrar_falha(usuario, agora, config)
+        bloqueou = _registrar_falha(usuario, agora, config)
 
     if motivo is not None:
+        # Quem tentou não está autenticado: origem anonimo, mesmo com alvo conhecido.
+        auditoria.registrar(db, "login_recusado", entidade="usuarios", entidade_id=usuario_id,
+                            origem="anonimo", motivo=motivo)
+        if bloqueou:
+            auditoria.registrar(db, "conta_bloqueada", entidade="usuarios",
+                                entidade_id=usuario_id, origem="anonimo",
+                                motivo="tentativas_de_login",
+                                dados={"bloqueado_ate": usuario.bloqueado_ate.isoformat()})
         db.commit()
         registrar_evento(logger, "login_recusado", usuario_id=usuario_id, motivo=motivo)
         raise LoginRecusado()
@@ -148,6 +161,8 @@ def autenticar(
         expira_em=agora + config.sessao_duracao,
     )
     db.add(sessao)
+    auditoria.registrar(db, "login_aceito", entidade="usuarios", entidade_id=usuario_id,
+                        usuario_id=usuario_id)
     db.commit()
     registrar_evento(logger, "login_aceito", usuario_id=usuario_id, sessao_id=sessao.id)
     return token, SessaoAutenticada(sessao.id, sessao.expira_em, usuario)
@@ -206,6 +221,8 @@ def encerrar_sessao(db: Session, token: str | None, agora: datetime) -> None:
     sessao.revogada_em = agora
     sessao.motivo_revogacao = "logout"
     usuario_id, sessao_id = sessao.usuario_id, sessao.id
+    auditoria.registrar(db, "logout", entidade="usuarios", entidade_id=usuario_id,
+                        usuario_id=usuario_id)
     db.commit()
     registrar_evento(logger, "logout", usuario_id=usuario_id, sessao_id=sessao_id)
 
@@ -237,7 +254,11 @@ def trocar_senha(
         )
         raise SenhaAtualIncorreta()
     if not senha_confere:
-        _registrar_falha(usuario, agora, config)
+        if _registrar_falha(usuario, agora, config):
+            auditoria.registrar(db, "conta_bloqueada", entidade="usuarios",
+                                entidade_id=usuario_id, usuario_id=usuario_id,
+                                motivo="tentativas_de_troca_de_senha",
+                                dados={"bloqueado_ate": usuario.bloqueado_ate.isoformat()})
         db.commit()
         registrar_evento(
             logger, "troca_senha_recusada", usuario_id=usuario_id,

@@ -27,7 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from api.epc import EpcInvalido, normalizar_epc
-from db.models import AssociacaoTagEquipamento, Auditoria, Equipamento, Tag
+from db.models import AssociacaoTagEquipamento, Equipamento, Tag
 
 
 class EquipamentoInvalido(Exception):
@@ -117,25 +117,6 @@ def _vinculo_ativo_do_equipamento(
     )
 
 
-def _registrar_auditoria(
-    db: Session,
-    acao: str,
-    associacao_id: int,
-    dados_antes: dict | None,
-    dados_depois: dict | None,
-) -> None:
-    db.add(
-        Auditoria(
-            usuario_id=None,
-            entidade="associacoes_tag_equipamento",
-            entidade_id=associacao_id,
-            acao=acao,
-            dados_antes=dados_antes,
-            dados_depois=dados_depois,
-        )
-    )
-
-
 def _inserir_associacao(
     db: Session, tag_id: int, equipamento_id: int, epc_para_erro: str
 ) -> AssociacaoTagEquipamento:
@@ -171,14 +152,8 @@ def associar(db: Session, equipamento_id: int, epc: str) -> AssociacaoTagEquipam
     ):
         raise TagJaAssociada(epc_normalizado)
 
+    # A trilha (vincular_epc) é gravada pelo registro central de api/auditoria.py.
     associacao = _inserir_associacao(db, tag.id, equipamento_id, epc_normalizado)
-    _registrar_auditoria(
-        db,
-        "create",
-        associacao.id,
-        dados_antes=None,
-        dados_depois={"tag_id": tag.id, "epc": epc_normalizado, "equipamento_id": equipamento_id},
-    )
     db.commit()
     db.refresh(associacao)
     return associacao
@@ -203,24 +178,12 @@ def substituir(db: Session, equipamento_id: int, epc_novo: str) -> AssociacaoTag
     ):
         raise TagJaAssociada(epc_normalizado)
 
-    agora = _agora()
-    vinculo_anterior_id = vinculo_atual.id
-    epc_anterior = vinculo_atual.tag.epc
-    vinculo_atual.fim = agora
+    vinculo_atual.fim = _agora()
     db.flush()
 
+    # desvincular_epc (flush acima) e vincular_epc saem do registro central,
+    # na mesma transação e com a mesma correlação.
     nova_associacao = _inserir_associacao(db, tag_nova.id, equipamento_id, epc_normalizado)
-    _registrar_auditoria(
-        db,
-        "update",
-        nova_associacao.id,
-        dados_antes={"associacao_anterior_id": vinculo_anterior_id, "epc_anterior": epc_anterior},
-        dados_depois={
-            "tag_id": tag_nova.id,
-            "epc": epc_normalizado,
-            "equipamento_id": equipamento_id,
-        },
-    )
     db.commit()
     db.refresh(nova_associacao)
     return nova_associacao
@@ -231,16 +194,7 @@ def encerrar(db: Session, equipamento_id: int) -> AssociacaoTagEquipamento:
     if vinculo is None:
         raise NenhumVinculoAtivo(equipamento_id)
 
-    epc_atual = vinculo.tag.epc
-    vinculo.fim = _agora()
-    db.flush()
-    _registrar_auditoria(
-        db,
-        "delete",
-        vinculo.id,
-        dados_antes={"fim": None, "epc": epc_atual},
-        dados_depois={"fim": vinculo.fim.isoformat(), "epc": epc_atual},
-    )
+    vinculo.fim = _agora()  # registro central grava desvincular_epc
     db.commit()
     db.refresh(vinculo)
     return vinculo

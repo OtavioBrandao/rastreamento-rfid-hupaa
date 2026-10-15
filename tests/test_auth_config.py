@@ -136,7 +136,10 @@ def test_hash_nao_reconhecido_recusa_sem_excecao(hash_armazenado):
 
 @pytest.mark.parametrize("hash_armazenado", [
     PasswordHasher().hash("x").rsplit("$", 2)[0] + "$!!!!$!!!!",
-    PasswordHasher().hash("x")[:-5],
+    # Cortar só o final às vezes deixa um base64 ainda decodificável (~6–9% das
+    # execuções): o verify dá mismatch, sem cair no hash fictício, e o teste
+    # oscila. "*" não é base64, então o corpo nunca decodifica.
+    PasswordHasher().hash("x")[:-5] + "*",
 ])
 def test_hash_com_corpo_corrompido_recusa_com_verificacao_completa(hash_armazenado, monkeypatch):
     """Passa pelo filtro de formato, mas o verify levanta: recusa e ainda verifica o fictício."""

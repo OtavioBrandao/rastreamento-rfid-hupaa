@@ -47,6 +47,7 @@ O projeto prioriza a confiabilidade da ingestão e da persistência antes da ló
 - **Ativos por zona (ISS-020):** a consulta existente retorna equipamentos por última zona materializada, com recência e paginação. Veja [semântica e cenário de teste](implementations/iss-020-ativos-por-zona.md).
 - **Usuários e autenticação (ISS-026):** login por e-mail com sessão opaca em cookie `HttpOnly`/`SameSite=Strict`, senhas Argon2id, bloqueio por conta, senha temporária com troca obrigatória, administração de usuários e primeiro administrador por terminal. Veja [contrato e validação](implementations/iss-026-usuarios-autenticacao.md) e o [ADR 0009](decisions/0009-autenticacao-sessao-opaca-cookie.md).
 - **Perfis e permissões (ISS-027):** toda rota de negócio exige sessão e permissão de uma matriz única (`api/permissoes.py`): operacional consulta tudo exceto usuários, administrador faz tudo; negação única 403 `acesso_negado` com log. O dashboard ganhou login, troca de senha obrigatória e Sair. Veja [matriz, rotas e testes](implementations/iss-027-perfis-rbac.md).
+- **Trilha de auditoria imutável (ISS-028):** registro central automático (listener do ORM) de toda mudança de cadastro e dos eventos de segurança (login, logout, bloqueio, acesso negado), com autor, origem, motivo e `correlation_id` por requisição; append-only garantido por trigger no banco; consulta só pela API (`/auditorias`, administrador). Veja [catálogo, garantias e limites](implementations/iss-028-auditoria.md).
 
 ### ⏳ O que está PLANEJADO (Próximos passos):
 - **Validação física:** Ajuste dos parâmetros e verificação da sequência de leituras com hardware real no HUPAA.
@@ -140,6 +141,7 @@ Dependendo do seu perfil, siga os caminhos abaixo:
    - [Recência da Localização (ISS-022)](implementations/iss-022-recencia-localizacao.md)
    - [Usuários e Autenticação (ISS-026)](implementations/iss-026-usuarios-autenticacao.md)
    - [Perfis e Permissões / RBAC (ISS-027)](implementations/iss-027-perfis-rbac.md)
+   - [Trilha de Auditoria Imutável (ISS-028)](implementations/iss-028-auditoria.md)
    - [Frontend e Dashboard Operacional (ISS-032, Etapa A)](implementations/iss-032-frontend-dashboard.md)
    - [Redesenho do Dashboard e Mapas (ISS-032)](implementations/iss-032-redesign-mapas.md)
    - [Mapa por zonas e portais (ISS-023)](implementations/iss-023-mapa-portais.md)
@@ -193,6 +195,7 @@ docs/
 │   ├── iss-018-historico-movimentacoes.md <- Ledger auditável de movimentações
 │   ├── iss-026-usuarios-autenticacao.md <- Login, sessões, bloqueio e administração de usuários
 │   ├── iss-027-perfis-rbac.md <- Matriz de permissões, rotas protegidas e login no dashboard
+│   ├── iss-028-auditoria.md <- Trilha append-only, registro central e consulta /auditorias
 │   └── iss-051-reorganizacao-documentacao.md <- Registro desta reestruturação (AGENTS.md)
 ├── experiments/                   <- Relatórios e evidências de testes práticos
 │   ├── README.md                  <- Síntese de experimentos e matriz de aceitação

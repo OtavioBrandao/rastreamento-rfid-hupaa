@@ -100,7 +100,7 @@ def test_associar_com_epc_minusculo_e_maiusculo_colide(db):
         associar(db, equipamento_b.id, "ABCDEF01")
 
 
-def test_associar_grava_auditoria_de_create(db):
+def test_associar_grava_auditoria_de_vincular_epc(db):
     equipamento = _criar_equipamento(db)
 
     associacao = associar(db, equipamento.id, "abcdef01")
@@ -112,7 +112,7 @@ def test_associar_grava_auditoria_de_create(db):
         )
     )
     assert auditoria is not None
-    assert auditoria.acao == "create"
+    assert auditoria.acao == "vincular_epc"
     assert auditoria.dados_antes is None
     assert auditoria.dados_depois["epc"] == "ABCDEF01"
     assert auditoria.dados_depois["equipamento_id"] == equipamento.id
@@ -175,22 +175,26 @@ def test_substituir_encerra_vinculo_anterior_e_cria_novo(db):
     assert antiga.tag.epc == "ABCDEF01"
 
 
-def test_substituir_grava_auditoria_de_update(db):
+def test_substituir_grava_desvincular_e_vincular_correlacionados(db):
     equipamento = _criar_equipamento(db)
-    associar(db, equipamento.id, "abcdef01")
+    anterior = associar(db, equipamento.id, "abcdef01")
 
     nova = substituir(db, equipamento.id, "11223344")
 
-    auditoria = db.scalar(
-        select(Auditoria).where(
+    def trilha(acao, entidade_id):
+        return db.scalar(select(Auditoria).where(
             Auditoria.entidade == "associacoes_tag_equipamento",
-            Auditoria.entidade_id == nova.id,
-        )
-    )
-    assert auditoria is not None
-    assert auditoria.acao == "update"
-    assert auditoria.dados_depois["epc"] == "11223344"
-    assert auditoria.dados_antes["epc_anterior"] == "ABCDEF01"
+            Auditoria.entidade_id == entidade_id, Auditoria.acao == acao,
+        ))
+
+    desvinculo = trilha("desvincular_epc", anterior.id)
+    vinculo = trilha("vincular_epc", nova.id)
+    assert desvinculo is not None and vinculo is not None
+    assert (desvinculo.dados_antes["epc"], desvinculo.dados_depois["epc"]) == (
+        "ABCDEF01", "ABCDEF01")
+    assert desvinculo.dados_antes["fim"] is None and desvinculo.dados_depois["fim"] is not None
+    assert vinculo.dados_depois["epc"] == "11223344"
+    assert desvinculo.correlation_id == vinculo.correlation_id
 
 
 def test_substituir_sem_vinculo_ativo_falha(db):
@@ -253,7 +257,7 @@ def test_encerrar_preserva_a_linha_e_marca_fim(db):
     assert vinculo_ativo_por_equipamento(db, equipamento.id) is None
 
 
-def test_encerrar_grava_auditoria_de_delete(db):
+def test_encerrar_grava_auditoria_de_desvincular_epc(db):
     equipamento = _criar_equipamento(db)
     associacao = associar(db, equipamento.id, "abcdef01")
 
@@ -263,10 +267,11 @@ def test_encerrar_grava_auditoria_de_delete(db):
         select(Auditoria).where(
             Auditoria.entidade == "associacoes_tag_equipamento",
             Auditoria.entidade_id == associacao.id,
-            Auditoria.acao == "delete",
+            Auditoria.acao == "desvincular_epc",
         )
     )
     assert auditoria is not None
+    assert auditoria.dados_antes == {"fim": None, "epc": "ABCDEF01"}
     assert auditoria.dados_depois["epc"] == "ABCDEF01"
     assert auditoria.dados_depois["fim"] is not None
 
