@@ -1,7 +1,7 @@
 """
 Cria o primeiro administrador (ISS-026), pelo terminal:
 
-    python -m api.criar_admin --nome "Fulana" --email fulana@hupaa.example
+    python -m api.criar_admin --env-file .env.cloud --nome "Fulana" --email fulana@hupaa.example
 
 A senha é pedida por `getpass` duas vezes — nunca por argumento, que
 ficaria no histórico do shell e visível em `ps`. Para automação,
@@ -18,10 +18,13 @@ Usa a mesma `DATABASE_URL` da API (`api/database.py`).
 
 import argparse
 import getpass
+import os
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import TextIO
 
+from dotenv import load_dotenv
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -49,6 +52,9 @@ def _analisar_argumentos(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--nome", required=True)
     parser.add_argument("--email", required=True)
     parser.add_argument(
+        "--env-file", help="arquivo de ambiente (ex.: .env.cloud ou .env.local)",
+    )
+    parser.add_argument(
         "--senha-stdin", action="store_true",
         help="lê a senha da primeira linha da entrada padrão (automação)",
     )
@@ -57,6 +63,20 @@ def _analisar_argumentos(argv: list[str] | None) -> argparse.Namespace:
         help="permite criar mesmo já havendo administrador ativo",
     )
     return parser.parse_args(argv)
+
+
+def _carregar_ambiente(arquivo: str | None) -> None:
+    if arquivo is not None:
+        caminho = Path(arquivo)
+        if not caminho.is_file():
+            raise ErroCriarAdmin("Arquivo de ambiente não encontrado. Verifique --env-file.")
+        load_dotenv(caminho, override=True)
+    else:
+        load_dotenv()
+    if not os.environ.get("DATABASE_URL"):
+        raise ErroCriarAdmin(
+            "DATABASE_URL não definida. Use --env-file .env.cloud ou --env-file .env.local."
+        )
 
 
 def _ler_senha(
@@ -130,11 +150,12 @@ def main(
     saida = saida or sys.stdout
     try:
         nome, email = _validar_dados(args.nome, args.email)
-        senha = _ler_senha(args.senha_stdin, entrada or sys.stdin, pedir_senha)
         if session_factory is None:
+            _carregar_ambiente(args.env_file)
             from api.database import SessionLocal
 
             session_factory = SessionLocal
+        senha = _ler_senha(args.senha_stdin, entrada or sys.stdin, pedir_senha)
         db = session_factory()
         try:
             usuario = criar_administrador(db, nome, email, senha, args.recuperacao)
