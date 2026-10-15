@@ -126,11 +126,18 @@ def test_nao_existe_opcao_de_senha_na_linha_de_comando(rodar):
     assert saida.value.code == 2
 
 
-def test_entrypoint_real_por_subprocesso(engine, truncate_all):
+@pytest.mark.parametrize("usar_arquivo", [False, True])
+def test_entrypoint_real_por_subprocesso(engine, truncate_all, tmp_path, usar_arquivo):
     ambiente = {**os.environ, "DATABASE_URL": engine.url.render_as_string(hide_password=False)}
+    argumentos = []
+    if usar_arquivo:
+        arquivo = tmp_path / "banco.env"
+        arquivo.write_text('DATABASE_URL="' + ambiente["DATABASE_URL"] + '"\n', encoding="utf-8")
+        ambiente["DATABASE_URL"] = "postgresql://ambiente-invalido/nao-usar"
+        argumentos = ["--env-file", str(arquivo)]
 
     processo = subprocess.run(
-        [sys.executable, "-m", "api.criar_admin", *BASE, "--senha-stdin"],
+        [sys.executable, "-m", "api.criar_admin", *BASE, *argumentos, "--senha-stdin"],
         input=SENHA_ADMIN + "\n", cwd=RAIZ, env=ambiente, capture_output=True, text=True,
         timeout=120,
     )
@@ -139,3 +146,35 @@ def test_entrypoint_real_por_subprocesso(engine, truncate_all):
     assert "Administrador criado" in processo.stdout
     assert SENHA_ADMIN not in processo.stdout + processo.stderr
     assert consultar(engine, "SELECT email FROM usuarios") == [("admin@hupaa.example",)]
+
+
+def test_arquivo_explicito_prevalece_sobre_ambiente(tmp_path, monkeypatch):
+    arquivo = tmp_path / "banco.env"
+    arquivo.write_text("DATABASE_URL=postgresql://localhost/arquivo\n", encoding="utf-8")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/ambiente")
+
+    criar_admin._carregar_ambiente(str(arquivo))
+
+    assert os.environ["DATABASE_URL"] == "postgresql://localhost/arquivo"
+
+
+@pytest.mark.parametrize("arquivo_inexistente", [False, True])
+def test_configuracao_invalida_avisa_antes_de_pedir_senha(
+    tmp_path, monkeypatch, capsys, arquivo_inexistente,
+):
+    arquivo = tmp_path / "banco.env"
+    if not arquivo_inexistente:
+        arquivo.write_text("OUTRA_VARIAVEL=valor\n", encoding="utf-8")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    def nao_pedir_senha(_prompt):
+        pytest.fail("Configuração inválida deve falhar antes de pedir senha")
+
+    codigo = criar_admin.main(
+        [*BASE, "--env-file", str(arquivo)], pedir_senha=nao_pedir_senha,
+    )
+
+    assert codigo == 1
+    erro = capsys.readouterr().err
+    assert "--env-file" in erro
+    assert "Traceback" not in erro

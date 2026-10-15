@@ -67,6 +67,18 @@ python -m api.criar_admin --nome "Fulana de Tal" --email fulana@hupaa.example
 printf '%s\n' "$SENHA_ADMIN" | python -m api.criar_admin --nome ... --email ... --senha-stdin
 ```
 
+No PowerShell, ou sem exportar variáveis no shell, use o arquivo explicitamente:
+
+```powershell
+.\.venv\Scripts\python.exe -m api.criar_admin --env-file .env.cloud --nome "Seu Nome" --email "seu@email.com"
+```
+
+`--env-file` aceita também `.env.local` e caminhos absolutos. As variáveis do
+arquivo explícito prevalecem sobre o ambiente do terminal. Sem a opção, continuam
+valendo as variáveis exportadas e o `.env` padrão; não há seleção automática de
+banco remoto. Arquivo inexistente ou `DATABASE_URL` ausente gera uma mensagem
+orientativa antes de pedir a senha. Veja o [hotfix](hotfix-criar-admin-env-file.md).
+
 - A senha nunca vai em argumento de linha de comando: ficaria no histórico do shell e visível em `ps`. Não existe opção `--senha`.
 - O comando recusa rodar se já houver administrador ativo; `--recuperacao` libera a criação de uma conta nova de emergência.
 - Esse admin **não** nasce com troca obrigatória (quem digitou a senha é o próprio titular). A auditoria registra a criação como ação do sistema (`usuario_id` NULL, `operacao = criar_admin_terminal`).
