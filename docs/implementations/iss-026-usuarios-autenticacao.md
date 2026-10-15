@@ -140,3 +140,7 @@ python -m alembic upgrade head && python -m alembic check
 - As rotas existentes seguiram públicas até a [ISS-027](iss-027-perfis-rbac.md), que passou a exigir sessão e permissão nelas.
 - Sessões revogadas ou expiradas não são expurgadas (retenção, RNF-015).
 - `updated_at` de `usuarios` segue a ressalva de `equipamentos`: `onupdate` só dispara em UPDATE feito pelo SQLAlchemy.
+
+## Complemento de interface
+
+A administração de contas está disponível em `#/usuarios`, conforme o [frontend de usuários e auditoria](iss-026-028-frontend-administracao.md). Login e troca obrigatória de senha permanecem na ISS-027.

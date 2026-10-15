@@ -15,8 +15,10 @@ export default defineConfig({
     '/localizacoes': api,
     '/portais': api,
     '/equipamentos': api,
-    // ISS-027: sessão. /usuarios fica de fora: não há tela de usuários.
+    // Sessão e administração usam a mesma origem e o cookie HttpOnly.
     '/auth': api,
+    '/usuarios': api,
+    '/auditorias': api,
   } },
   test: {
     environment: 'jsdom',
