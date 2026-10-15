@@ -19,10 +19,12 @@ _EPC_HEX_RE = re.compile(r"^[0-9A-Fa-f]+$")
 
 
 class EpcInvalido(ValueError):
+    """Falha de domínio: epc invalido; traduzida pelo chamador para resposta ou diagnóstico."""
     pass
 
 
 def normalizar_epc(epc: str) -> str:
+    """Normaliza EPC para hexadecimal em maiúsculas e valida tamanho e caracteres."""
     limpo = epc.strip().upper()
     if not limpo:
         raise EpcInvalido("EPC não pode ficar vazio")

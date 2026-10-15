@@ -93,14 +93,14 @@ Alembic, sem imprimir seu conteúdo.
 |---|---|---|---|
 | `postgres` | `local` | PostgreSQL de desenvolvimento | contínuo |
 | `mosquitto` | `local` | broker MQTT anônimo em rede controlada | contínuo |
-| `migrate-local` | `local` | executa `alembic upgrade head` no banco local | one-shot |
+| `migrate-local` | `local` | executa `alembic -c config/alembic.ini upgrade head` no banco local | one-shot |
 | `ingestor-local` | `local` | recebe MQTT local e grava JSONL | contínuo |
 | `migrate-managed` | `managed` | aplica Alembic na `DATABASE_URL` externa | one-shot |
 | `ingestor-managed` | `managed` | recebe MQTT gerenciado e grava JSONL | contínuo |
 
 O `Dockerfile` existe somente para empacotar o ingestor e o Alembic atuais. Ele
 fixa a base pequena `python:3.12.14-slim-bookworm`, usa os arquivos de dependências
-do repositório e não inclui documentação, testes, `.env`, Git ou `data/` no
+do repositório e não inclui documentação, testes, `config/environments/.env`, Git ou `data/` no
 contexto final. PostgreSQL também fica fixado em `16.15-alpine`.
 
 ## 10. Volumes
@@ -139,8 +139,8 @@ Não há `sleep` como mecanismo primário de prontidão.
 O modo é sempre escolhido no comando:
 
 ```bash
-docker compose --env-file .env.local --profile local config --services
-docker compose --env-file .env.cloud --profile managed config --services
+docker compose -f deploy/compose.yaml --env-file config/environments/.env.local --profile local config --services
+docker compose -f deploy/compose.yaml --env-file config/environments/.env.cloud --profile managed config --services
 ```
 
 Os exemplos usam projetos distintos (`rfid-hospital-local` e
@@ -180,16 +180,16 @@ Os exemplos usam UID/GID `1000:1000`. Em hosts com valores diferentes, ajuste
 `HOST_UID=$(id -u)` e `HOST_GID=$(id -g)` no arquivo privado antes de iniciar.
 
 ```bash
-cp .env.local.example .env.local
-make local-up
-make status-local
+cp config/environments/.env.local.example config/environments/.env.local
+make -f scripts/Makefile local-up
+make -f scripts/Makefile status-local
 ```
 
 Sem Make:
 
 ```bash
-docker compose --env-file .env.local --profile local up -d --build --wait
-docker compose --env-file .env.local --profile local ps -a
+docker compose -f deploy/compose.yaml --env-file config/environments/.env.local --profile local up -d --build --wait
+docker compose -f deploy/compose.yaml --env-file config/environments/.env.local --profile local ps -a
 ```
 
 O estado esperado é Postgres e Mosquitto saudáveis, `migrate-local` com saída 0 e
@@ -198,8 +198,8 @@ O estado esperado é Postgres e Mosquitto saudáveis, `migrate-local` com saída
 ## 16. Parar
 
 ```bash
-make stop-local
-make stop-managed
+make -f scripts/Makefile stop-local
+make -f scripts/Makefile stop-managed
 ```
 
 `down` sem `--volumes` preserva o banco local. Use o comando correspondente ao
@@ -208,11 +208,11 @@ perfil ativo.
 ## 17. Visualizar logs e estado
 
 ```bash
-make status-local
-make logs-local
+make -f scripts/Makefile status-local
+make -f scripts/Makefile logs-local
 # ou, no modo externo:
-make status-managed
-make logs-managed
+make -f scripts/Makefile status-managed
+make -f scripts/Makefile logs-managed
 ```
 
 Não use `set -x` com o perfil gerenciado, pois o ambiente contém credenciais.
@@ -220,15 +220,15 @@ Não use `set -x` com o perfil gerenciado, pois o ambiente contém credenciais.
 ## 18. Executar e verificar migrations
 
 ```bash
-make migrate-local
-make migration-current-local
+make -f scripts/Makefile migrate-local
+make -f scripts/Makefile migration-current-local
 ```
 
 No perfil gerenciado, somente com um banco de desenvolvimento autorizado:
 
 ```bash
-make migrate-managed
-make migration-current-managed
+make -f scripts/Makefile migrate-managed
+make -f scripts/Makefile migration-current-managed
 ```
 
 Esses comandos consomem diretamente o Alembic e o `db/url.py` finalizados pela
@@ -240,7 +240,7 @@ de migrations no Compose. Nunca execute downgrade no Neon compartilhado.
 Com o perfil local ativo:
 
 ```bash
-make simulator-local
+make -f scripts/Makefile simulator-local
 ```
 
 O target usa um Client ID próprio e publica três mensagens no tópico
@@ -250,8 +250,8 @@ simulador no host conforme [iss-001-mqtt-ingestion.md](iss-001-mqtt-ingestion.md
 ## 20. Validar o pipeline atual
 
 ```bash
-make tests
-make smoke
+make -f scripts/Makefile tests
+make -f scripts/Makefile smoke
 tail -n 3 data/raw_events.jsonl
 ```
 
@@ -266,7 +266,7 @@ PostgreSQL vazio -> Alembic -> schema atual
 Mosquitto -> simulador -> ingestor -> JSONL
 ```
 
-Ele prova MQTT -> JSONL/PostgreSQL. `make smoke-resilience` interrompe e restaura
+Ele prova MQTT -> JSONL/PostgreSQL. `make -f scripts/Makefile smoke-resilience` interrompe e restaura
 broker e banco descartáveis para validar reconexão, redelivery e idempotência.
 
 ## 21. Reset local seguro
@@ -274,7 +274,7 @@ broker e banco descartáveis para validar reconexão, redelivery e idempotência
 Este comando é destrutivo para PostgreSQL e estado de sessão Mosquitto **locais**:
 
 ```bash
-CONFIRM_RESET_LOCAL=APAGAR make reset-local
+CONFIRM_RESET_LOCAL=APAGAR make -f scripts/Makefile reset-local
 ```
 
 O script aceita somente o projeto `rfid-hospital-local` (e nomes efêmeros do
@@ -298,12 +298,12 @@ Validação executada em 13/09/2026 com Docker Desktop/engine Linux:
 | Comando/checagem | Resultado observado |
 |---|---|
 | `docker build --tag rfid-hospital-mvp:iss003-build-check .` | imagem construída com sucesso |
-| `docker compose ... --profile local config --quiet` | sucesso |
-| `docker compose ... --profile managed config --quiet` | sucesso estrutural; sem conexão externa |
+| `docker compose -f deploy/compose.yaml ... --profile local config --quiet` | sucesso |
+| `docker compose -f deploy/compose.yaml ... --profile managed config --quiet` | sucesso estrutural; sem conexão externa |
 | `python -m unittest discover -s tests -v` | 32 testes, OK; 4 pulados por serem opt-in/dependerem de executáveis externos |
 | suíte final com `RUN_MQTT_INTEGRATION=1` e OpenSSL no `PATH` | 32/32 testes, OK, sem skips |
 | perfil local com `up -d --build --wait` | Postgres e Mosquitto saudáveis; migration saiu 0; ingestor ativo |
-| `alembic current` no contêiner | `44ef89b10f17 (head)` |
+| `alembic -c config/alembic.ini current` no contêiner | `44ef89b10f17 (head)` |
 | inspeção do banco | 17 tabelas públicas: 16 do modelo e `alembic_version` |
 | simulador -> ingestor -> JSONL | 1/1 evento válido no tópico esperado; teste de integração adicional 42/42 |
 | `tests/infrastructure/compose-smoke-test.sh` | passou os dois ciclos, incluindo reset e recriação do schema |
@@ -317,15 +317,15 @@ Revalidação executada em 14/09/2026 no Ubuntu 24.04 após ISS-002b e ISS-002c:
 
 | Comando/checagem | Resultado observado |
 |---|---|
-| `docker compose ... config --quiet` nos perfis local e managed | sucesso estrutural nos dois perfis |
-| `docker compose ... --profile local build` | imagem construída com sucesso |
-| `make tests` com a `.venv` no `PATH` | 32 testes, OK; 1 integração MQTT opt-in pulada |
+| `docker compose -f deploy/compose.yaml ... config --quiet` nos perfis local e managed | sucesso estrutural nos dois perfis |
+| `docker compose -f deploy/compose.yaml ... --profile local build` | imagem construída com sucesso |
+| `make -f scripts/Makefile tests` com a `.venv` no `PATH` | 32 testes, OK; 1 integração MQTT opt-in pulada |
 | `python -m pytest -q` | 35 aprovados, 1 pulado e 18 subtestes aprovados |
 | migration managed com `DATABASE_URL` vazia | recusada com status 2 sem imprimir URL |
-| perfil local com `make local-up` | Postgres e Mosquitto saudáveis; migration saiu 0; ingestor ativo |
-| `make simulator-local` | 3/3 eventos válidos persistidos no JSONL esperado |
+| perfil local com `make -f scripts/Makefile local-up` | Postgres e Mosquitto saudáveis; migration saiu 0; ingestor ativo |
+| `make -f scripts/Makefile simulator-local` | 3/3 eventos válidos persistidos no JSONL esperado |
 | primeira execução do smoke | revelou falta de permissão no bind mount Linux; corrigida com `HOST_UID`/`HOST_GID` |
-| `make smoke` após a correção | passou os dois ciclos, incluindo reset e recriação do schema |
+| `make -f scripts/Makefile smoke` após a correção | passou os dois ciclos, incluindo reset e recriação do schema |
 | reset protegido | contêineres, rede e volume PostgreSQL locais removidos |
 
 ## 24. Pendências para revalidação
@@ -335,7 +335,7 @@ Revalidação executada em 14/09/2026 no Ubuntu 24.04 após ISS-002b e ISS-002c:
 - [ ] Confirmar migrations no Neon sem tocar dados principais ou de produção.
 - [x] Reexecutar o perfil local após os merges das dependências.
 - [x] Reexecutar estruturalmente o perfil gerenciado após os merges das dependências.
-- [x] Repetir `make smoke` em Ubuntu 24.04 com OpenSSL disponível.
+- [x] Repetir `make -f scripts/Makefile smoke` em Ubuntu 24.04 com OpenSSL disponível.
 
 Somente os critérios que exigem credenciais e conectividade externa com o Neon
 permanecem pendentes; o ambiente local não depende deles.
@@ -351,10 +351,10 @@ em 5432/1883 internamente.
 **Ingestor local rejeita o host:** dentro do Compose use o DNS `mosquitto`; fora
 dele use `localhost` ou IP privado. Hosts públicos no modo local são recusados.
 
-**Migration managed para imediatamente:** preencha `DATABASE_URL` em `.env.cloud`.
+**Migration managed para imediatamente:** preencha `DATABASE_URL` em `config/environments/.env.cloud`.
 A mensagem de ausência é deliberada e não mostra o valor da URL.
 
-**Postgres não fica saudável:** veja `make logs-local`, confira espaço em disco e
+**Postgres não fica saudável:** veja `make -f scripts/Makefile logs-local`, confira espaço em disco e
 se as variáveis `POSTGRES_*` permanecem coerentes. Mudá-las não altera um volume
 já inicializado; faça backup e use o reset local somente se puder perder os dados.
 

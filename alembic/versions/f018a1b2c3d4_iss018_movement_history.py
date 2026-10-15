@@ -10,6 +10,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Aplica a revisão: ISS-018: evidências, tempo do evento e idempotência do histórico."""
     for column in (
         sa.Column("epc", sa.String(), nullable=True),
         sa.Column("portal_id", sa.BigInteger(), nullable=True),
@@ -54,6 +55,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Reverte a revisão: ISS-018: evidências, tempo do evento e idempotência do histórico."""
     op.drop_index("ix_historico_equipamento_movimentada_id", table_name="historico_movimentacoes")
     op.drop_index("uq_historico_passagem_automatica", table_name="historico_movimentacoes")
     op.drop_constraint("ck_historico_registro_completo", "historico_movimentacoes", type_="check")

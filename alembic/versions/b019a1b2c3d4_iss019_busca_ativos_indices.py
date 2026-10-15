@@ -9,6 +9,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Aplica a revisão: ISS-019: índices para tipo e recência na busca operacional."""
     op.create_index("ix_equipamentos_tipo_id", "equipamentos", ["tipo_id"])
     op.create_index(
         "ix_equipamentos_ultima_deteccao_em", "equipamentos", ["ultima_deteccao_em"]
@@ -16,5 +17,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Reverte a revisão: ISS-019: índices para tipo e recência na busca operacional."""
     op.drop_index("ix_equipamentos_ultima_deteccao_em", table_name="equipamentos")
     op.drop_index("ix_equipamentos_tipo_id", table_name="equipamentos")

@@ -23,10 +23,12 @@ from .types import MovementEvent, MovementPage, MovementRecord
 
 
 def load_passage(connection: Connection, passage_id: int):
+    """Carrega a passagem persistida por ID para validar a movimentação."""
     return connection.execute(select(Passagem.__table__).where(Passagem.id == passage_id)).mappings().one_or_none()
 
 
 def resolve_equipment(connection: Connection, epc: str, at: datetime) -> tuple[int, ...]:
+    """Consulta equipamentos associados ao EPC no instante usando intervalos [inicio, fim)."""
     return tuple(connection.scalars(
         select(AssociacaoTagEquipamento.equipamento_id)
         .join(Tag, Tag.id == AssociacaoTagEquipamento.tag_id)
@@ -40,6 +42,7 @@ def resolve_equipment(connection: Connection, epc: str, at: datetime) -> tuple[i
 
 
 def append(connection: Connection, event: MovementEvent) -> tuple[int, bool]:
+    """Insere movimento append-only e devolve ID/indicador de inserção, deduplicando por passagem."""
     values = vars(event)
     statement = insert(HistoricoMovimentacao).values(**values).returning(HistoricoMovimentacao.id)
     if event.origem_registro == "passagem_automatica":
@@ -62,12 +65,14 @@ def append(connection: Connection, event: MovementEvent) -> tuple[int, bool]:
 
 
 def get_movement(connection: Connection, movement_id: int):
+    """Obtém o registro do histórico pelo ID na conexão fornecida."""
     return connection.execute(
         select(HistoricoMovimentacao.__table__).where(HistoricoMovimentacao.id == movement_id)
     ).mappings().one_or_none()
 
 
 def get_automatic_for_passage(connection: Connection, passage_id: int):
+    """Busca a movimentação automática já vinculada à passagem para deduplicação."""
     return connection.execute(
         select(HistoricoMovimentacao.id, HistoricoMovimentacao.equipamento_id)
         .where(HistoricoMovimentacao.passagem_id == passage_id,
@@ -76,6 +81,7 @@ def get_automatic_for_passage(connection: Connection, passage_id: int):
 
 
 def equipment_exists(connection: Connection, equipment_id: int) -> bool:
+    """Verifica a existência do equipamento na conexão recebida."""
     return connection.scalar(select(Equipamento.id).where(Equipamento.id == equipment_id)) is not None
 
 
@@ -83,6 +89,7 @@ def list_for_equipment(
     connection: Connection, equipment_id: int, *, page: int, size: int,
     inicio: datetime | None = None, fim: datetime | None = None,
 ) -> MovementPage:
+    """Consulta o histórico paginado do equipamento com ordenação temporal determinística."""
     if page < 1 or not 1 <= size <= 100:
         raise ValueError("page e size inválidos")
     if inicio is not None and fim is not None and inicio >= fim:

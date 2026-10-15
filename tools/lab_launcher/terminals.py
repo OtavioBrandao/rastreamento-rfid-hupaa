@@ -17,10 +17,12 @@ _TMUX_SESSION: str | None = None
 
 
 def _sistema() -> str:
+    """Identifica o sistema operacional para escolher o terminal e o modo de abertura."""
     return os.name
 
 
 def _aguardar_prontos(marker: Path, kinds: tuple[str, ...], timeout: float = 10) -> tuple[str, ...]:
+    """Aguarda os arquivos de prontidão dos observadores até o prazo configurado."""
     prazo = time.monotonic() + timeout
     while True:
         ausentes = tuple(kind for kind in kinds if not marker.with_name(
@@ -31,6 +33,7 @@ def _aguardar_prontos(marker: Path, kinds: tuple[str, ...], timeout: float = 10)
 
 
 def _exigir_prontos(marker: Path) -> None:
+    """Confere quais observadores iniciaram e identifica ausências no diagnóstico."""
     ausentes = _aguardar_prontos(marker, ("mqtt", "logs", "db"))
     if ausentes:
         raise RuntimeError("observadores não iniciaram: " + ", ".join(ausentes)
@@ -51,6 +54,7 @@ def _configuracao_windows(marker: Path, env: dict[str, str]) -> Path:
 
 def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
           marker: Path) -> list[subprocess.Popen]:
+    """Abre observadores MQTT, ingestor e banco em terminais com a configuração temporária da sessão."""
     env = dict(env, LAB_SESSION_MARKER=str(marker), LAB_COMPOSE_ENV_FILE=str(arquivo),
                LAB_COMPOSE_PROFILE=perfil, LAB_INGESTOR_SERVICE=servico)
     comandos = [
@@ -141,6 +145,7 @@ def abrir(arquivo: Path, perfil: str, servico: str, env: dict[str, str],
 
 
 def encerrar(processos: list[subprocess.Popen]) -> None:
+    """Fecha a vigência da associação ativa no instante informado."""
     if _sistema() == "nt":
         # O marcador encerra cada observador Python. Manter cmd aberto preserva
         # o histórico e evita deixar o filho órfão ao matar só o shell.

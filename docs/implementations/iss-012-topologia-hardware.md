@@ -1,6 +1,6 @@
 # ISS-012 — Topologia de Hardware (Leitores, Antenas e Portais)
 
-Este documento descreve a implementação do módulo de topologia de hardware do **RFID Hospital MVP**, referente à **ISS-012 (PR #50)** e às migrations `019782a38ff7` e `6b3e5f7a91c4`.
+Este documento descreve a implementação do módulo de topologia de hardware do **Rastreamento RFID HUPAA**, referente à **ISS-012 (PR #50)** e às migrations `019782a38ff7` e `6b3e5f7a91c4`.
 
 ---
 

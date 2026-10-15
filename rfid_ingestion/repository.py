@@ -16,6 +16,9 @@ from rfid_ingestion.resilience import FailureCategory
 
 @dataclass(frozen=True, slots=True)
 class PersistenceResult:
+    """Estrutura Persistence Result usada por rfid_ingestion.repository.
+
+    Campos: status, reading_id, reason, antenna_id."""
     status: Literal["inserted", "duplicate", "rejected"]
     reading_id: int | None = None
     reason: str | None = None
@@ -30,11 +33,13 @@ class PersistenceError(RuntimeError):
         message: str,
         category: FailureCategory = FailureCategory.TEMPORARY_DATABASE,
     ) -> None:
+        """Inicializa PersistenceError com as dependências e valores recebidos."""
         super().__init__(message)
         self.category = category
 
 
 def _database_failure_category(error: SQLAlchemyError) -> FailureCategory:
+    """Classifica SQLSTATE e falhas DBAPI como indisponibilidade temporária ou erro permanente."""
     original = getattr(error, "orig", None)
     sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
     if isinstance(sqlstate, str):
@@ -68,9 +73,11 @@ def _database_failure_category(error: SQLAlchemyError) -> FailureCategory:
 
 
 def _safe_persistence_error(error: SQLAlchemyError) -> PersistenceError:
+    """Converte erro SQLAlchemy em PersistenceError sem divulgar parâmetros de conexão."""
     return PersistenceError("falha PostgreSQL", _database_failure_category(error))
 
 def _utc(value: str) -> datetime:
+    """Converte texto ISO em datetime UTC e recusa instante sem fuso."""
     instant = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if instant.tzinfo is None:
         raise ValueError("timestamp de persistência exige fuso horário")
@@ -78,6 +85,7 @@ def _utc(value: str) -> datetime:
 
 
 def _linha(canonical: dict, envelope: dict, antena_id: int) -> dict:
+    """Monta a linha PostgreSQL a partir do evento canônico e do envelope de recepção."""
     return {
         "event_id": canonical["event_id"], "antena_id": antena_id,
         "epc": canonical["epc"], "rssi": canonical["rssi"],
@@ -92,9 +100,15 @@ def _linha(canonical: dict, envelope: dict, antena_id: int) -> dict:
 class RawReadingRepository:
     # Topologia ativa muda raramente; o cache evita uma ida ao banco por leitura
     # em bancos remotos. Só resultados encontrados são guardados.
+    """Persiste eventos canônicos idempotentes e resolve antenas ativas.
+
+    O caminho em lote utiliza conexão dedicada em autocommit e cache topológico
+    com TTL de 30 s. A instância pertence à thread de persistência; não é um
+    repositório compartilhável livremente entre threads."""
     TOPOLOGY_TTL_SECONDS = 30.0
 
     def __init__(self, engine: Engine, *, clock: Callable[[], float] = time.monotonic):
+        """Inicializa RawReadingRepository com as dependências e valores recebidos."""
         self.engine = engine
         self._clock = clock
         self._topology: dict[tuple[str, int], tuple[int, float]] = {}
@@ -113,6 +127,7 @@ class RawReadingRepository:
         return conexao
 
     def _descartar_conexao(self) -> None:
+        """Invalida e fecha a conexão dedicada de lotes após uma falha PostgreSQL."""
         conexao, self._conexao_lote = self._conexao_lote, None
         if conexao is not None:
             try:
@@ -211,6 +226,10 @@ class RawReadingRepository:
             raise _safe_persistence_error(error) from None
 
     def persist(self, envelope: dict) -> PersistenceResult:
+        """Grava uma leitura em transação, deduplicada por event_id.
+
+        Resolve leitor/porta em antena ativa. Devolve inserted, duplicate ou rejected
+        somente depois de finalizar a transação; erros de banco viram PersistenceError."""
         canonical = envelope["canonical_event"]
         if canonical is None:
             return PersistenceResult("rejected", reason="invalid_input")

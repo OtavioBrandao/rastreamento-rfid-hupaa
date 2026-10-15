@@ -8,7 +8,7 @@ Este documento detalha a implementação do módulo de **Topologia Lógica de Po
 
 ### Problema
 A rastreabilidade hospitalar por RFID passivo depende de interpretar passagens físicas entre ambientes delimitados. Na ISS-012, foi estabelecida a topologia física de inventário de hardware:
-> *"Quais equipamentos físicos existem e como estão conectados?"*  
+> *"Quais equipamentos físicos existem e como estão conectados?"*
 > (ex.: Leitor 1 possui a Porta 1 conectada à Antena X, que está instalada no vão do Portal P1).
 
 No entanto, essa informação física por si só **não é suficiente** para determinar a direção de movimento de um equipamento:
@@ -131,7 +131,7 @@ classDiagram
 1. **Lado Lógico:** `CheckConstraint("lado IN ('a', 'b')", name="ck_mapeamento_lado_valido")`.
 2. **Função Operacional:** `CheckConstraint("funcao IN ('entrada', 'saida', 'auxiliar')", name="ck_mapeamento_funcao_valida")`.
 3. **Período Válido:** `CheckConstraint("fim IS NULL OR fim >= inicio", name="ck_mapeamento_periodo_valido")`.
-4. **Unicidade de Mapeamento Ativo:**  
+4. **Unicidade de Mapeamento Ativo:**
    Índice único parcial no PostgreSQL:
    ```sql
    CREATE UNIQUE INDEX uq_mapeamento_antena_ativo

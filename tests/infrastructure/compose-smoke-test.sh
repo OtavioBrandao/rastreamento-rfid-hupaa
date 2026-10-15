@@ -20,8 +20,8 @@ export EVENTS_FILE="data/$OUTPUT_BASENAME"
 export EZ700_TIMESTAMP_FORMAT=epoch_ms
 
 compose() {
-    docker compose --project-name "$COMPOSE_PROJECT" \
-        --env-file "$ROOT_DIR/.env.local.example" --profile local "$@"
+    docker compose -f deploy/compose.yaml --project-name "$COMPOSE_PROJECT" \
+        --env-file "$ROOT_DIR/config/environments/.env.local.example" --profile local "$@"
 }
 
 cleanup() {
@@ -38,7 +38,7 @@ compose config --quiet
 compose up -d --build --wait
 compose exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 
-migration_output=$(compose run --rm migrate-local alembic current 2>&1)
+migration_output=$(compose run --rm migrate-local alembic -c config/alembic.ini current 2>&1)
 grep -q 'da436f7c75b3 (head)' <<<"$migration_output"
 compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
     -tAc "SELECT to_regclass('public.leituras_brutas') IS NOT NULL" | grep -qx t
@@ -84,7 +84,7 @@ if docker volume inspect "${COMPOSE_PROJECT}_postgres_data" >/dev/null 2>&1; the
 fi
 
 compose up -d --build --wait
-migration_output=$(compose run --rm migrate-local alembic current 2>&1)
+migration_output=$(compose run --rm migrate-local alembic -c config/alembic.ini current 2>&1)
 grep -q 'da436f7c75b3 (head)' <<<"$migration_output"
 
 printf '[PASSOU] Postgres/Mosquitto saudáveis, migration no head, ingestor e MQTT→JSONL/PostgreSQL.\n'

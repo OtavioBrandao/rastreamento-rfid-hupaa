@@ -45,6 +45,7 @@ class _CamposAtualizaveis(BaseModel):
 
 
 class _RespostaBase(BaseModel):
+    """Contrato de dados _Resposta Base; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -59,19 +60,23 @@ class _RespostaBase(BaseModel):
 
 
 class AndarCriar(_CamposEditaveis):
+    """Contrato de dados Andar Criar; valida campos e serializa a resposta da API."""
     pass
 
 
 class AndarAtualizar(_CamposAtualizaveis):
+    """Contrato de dados Andar Atualizar; valida campos e serializa a resposta da API."""
     pass
 
 
 class AndarResposta(_RespostaBase):
+    """Contrato de dados Andar Resposta; valida campos e serializa a resposta da API."""
     created_at: datetime
     updated_at: datetime
 
 
 class AndarPagina(BaseModel):
+    """Contrato de dados Andar Pagina; valida campos e serializa a resposta da API."""
     items: list[AndarResposta]
     page: int
     size: int
@@ -83,20 +88,24 @@ class AndarPagina(BaseModel):
 
 
 class SetorCriar(_CamposEditaveis):
+    """Contrato de dados Setor Criar; valida campos e serializa a resposta da API."""
     andar_id: int = Field(..., gt=0)
 
 
 class SetorAtualizar(_CamposAtualizaveis):
+    """Contrato de dados Setor Atualizar; valida campos e serializa a resposta da API."""
     pass
 
 
 class SetorResposta(_RespostaBase):
+    """Contrato de dados Setor Resposta; valida campos e serializa a resposta da API."""
     andar_id: int
     created_at: datetime
     updated_at: datetime
 
 
 class SetorPagina(BaseModel):
+    """Contrato de dados Setor Pagina; valida campos e serializa a resposta da API."""
     items: list[SetorResposta]
     page: int
     size: int
@@ -108,6 +117,7 @@ class SetorPagina(BaseModel):
 
 
 class ZonaCriar(_CamposEditaveis):
+    """Contrato de dados Zona Criar; valida campos e serializa a resposta da API."""
     setor_id: int = Field(..., gt=0)
     # Anotação de "zona morta" (só a zona tem). Opcional, como `descricao`.
     observacoes: str | None = None
@@ -116,10 +126,12 @@ class ZonaCriar(_CamposEditaveis):
 class ZonaAtualizar(_CamposAtualizaveis):
     # O router consulta `model_fields_set` para separar "não mandei" de
     # "mandei null para limpar", igual a `descricao`/`referencia_planta`.
+    """Contrato de dados Zona Atualizar; valida campos e serializa a resposta da API."""
     observacoes: str | None = None
 
 
 class ZonaResposta(_RespostaBase):
+    """Contrato de dados Zona Resposta; valida campos e serializa a resposta da API."""
     setor_id: int
     observacoes: str | None
     created_at: datetime
@@ -127,6 +139,7 @@ class ZonaResposta(_RespostaBase):
 
 
 class ZonaPagina(BaseModel):
+    """Contrato de dados Zona Pagina; valida campos e serializa a resposta da API."""
     items: list[ZonaResposta]
     page: int
     size: int
@@ -138,14 +151,17 @@ class ZonaPagina(BaseModel):
 
 
 class ZonaArvore(_RespostaBase):
+    """Contrato de dados Zona Arvore; valida campos e serializa a resposta da API."""
     setor_id: int
     observacoes: str | None
 
 
 class SetorArvore(_RespostaBase):
+    """Contrato de dados Setor Arvore; valida campos e serializa a resposta da API."""
     andar_id: int
     zonas: list[ZonaArvore]
 
 
 class AndarArvore(_RespostaBase):
+    """Contrato de dados Andar Arvore; valida campos e serializa a resposta da API."""
     setores: list[SetorArvore]

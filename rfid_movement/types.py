@@ -7,6 +7,9 @@ from typing import Literal
 
 @dataclass(frozen=True)
 class MovementEvent:
+    """Estrutura Movement Event usada por rfid_movement.types.
+
+    Campos: equipamento_id, zona_origem_id, zona_destino_id, movimentada_em, origem_registro, epc, portal_id, passagem_id, leitura_origem_id, leitura_destino_id, justificativa, registro_anterior_id, referencia."""
     equipamento_id: int
     zona_origem_id: int | None
     zona_destino_id: int
@@ -24,6 +27,9 @@ class MovementEvent:
 
 @dataclass(frozen=True)
 class MovementWriteResult:
+    """Estrutura Movement Write Result usada por rfid_movement.types.
+
+    Campos: status, movement_id, equipamento_id, passagem_id."""
     status: Literal[
         "recorded", "duplicate", "invalid_passage", "unresolved_epc",
         "ambiguous_association", "passage_missing",
@@ -35,6 +41,9 @@ class MovementWriteResult:
 
 @dataclass(frozen=True)
 class MovementRecord:
+    """Estrutura Movement Record usada por rfid_movement.types.
+
+    Campos: id, equipamento_id, epc, origem_registro, zona_origem_id, zona_origem, zona_destino_id, zona_destino, portal_id, portal, passagem_id, leitura_origem_id, leitura_destino_id, movimentada_em, registrado_em, justificativa, registro_anterior_id, referencia."""
     id: int
     equipamento_id: int
     epc: str | None
@@ -57,6 +66,9 @@ class MovementRecord:
 
 @dataclass(frozen=True)
 class MovementPage:
+    """Estrutura Movement Page usada por rfid_movement.types.
+
+    Campos: items, page, size, total, pages."""
     items: tuple[MovementRecord, ...]
     page: int
     size: int

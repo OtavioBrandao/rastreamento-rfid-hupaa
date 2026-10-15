@@ -23,8 +23,8 @@ O modelo completo (colunas, constraints, índices, cenários de validação) est
 
 ## Validação realizada
 Antes deste PR, o schema foi criado e testado contra um PostgreSQL 16 real (ambiente local descartável, não o Neon de produção):
-- `alembic upgrade head` cria as 16 tabelas + constraints sem erro.
-- `alembic downgrade base` reverte de forma limpa.
+- `alembic -c config/alembic.ini upgrade head` cria as 16 tabelas + constraints sem erro.
+- `alembic -c config/alembic.ini downgrade base` reverte de forma limpa.
 - Regra de associação ativa única por EPC testada manualmente: bloqueia segunda associação ativa; permite nova associação após encerrar a anterior (`fim = now()`).
 - CHECK constraint de portal (`zona_a_id <> zona_b_id`) testado manualmente: bloqueia portal com a mesma zona nos dois lados.
 
@@ -41,15 +41,15 @@ Antes deste PR, o schema foi criado e testado contra um PostgreSQL 16 real (ambi
 
 Validação do Otávio nesta rodada: suíte do PR com 25 testes aprovados e 4 ignorados (dependências de Mosquitto/OpenSSL); configuração dos 16 models validada via `configure_mappers`; geração offline de upgrade/downgrade bem-sucedida com URL simples; reproduziu `ValueError` com URL sintética contendo `%40`. Migrations não foram executadas contra Postgres real nesta rodada (isso foi feito à parte, neste commit, antes de responder).
 
-1. **[P2] Bug de escaping de `%` em `alembic/env.py`:** `config.set_main_option("sqlalchemy.url", database_url)` passa a URL pelo `ConfigParser` interno do Alembic, que trata `%` como início de interpolação. Uma `DATABASE_URL` com senha percent-encoded (ex.: `%40`) fazia essa chamada lançar `ValueError` **antes mesmo de tentar conectar**, e a mensagem de erro incluía a URL completa — vazando a credencial em log. Corrigido extraindo a resolução da URL para `db/url.py` (`get_database_url`), usada diretamente na criação do Engine/contexto — a URL nunca mais passa pelo `ConfigParser`. Coberto por teste (`tests/test_database_url.py`), incluindo o caso exato do review (`example%40value`); testado também via `alembic upgrade head --sql` com a mesma URL sintética, sem erro.
+1. **[P2] Bug de escaping de `%` em `alembic/env.py`:** `config.set_main_option("sqlalchemy.url", database_url)` passa a URL pelo `ConfigParser` interno do Alembic, que trata `%` como início de interpolação. Uma `DATABASE_URL` com senha percent-encoded (ex.: `%40`) fazia essa chamada lançar `ValueError` **antes mesmo de tentar conectar**, e a mensagem de erro incluía a URL completa — vazando a credencial em log. Corrigido extraindo a resolução da URL para `db/url.py` (`get_database_url`), usada diretamente na criação do Engine/contexto — a URL nunca mais passa pelo `ConfigParser`. Coberto por teste (`tests/test_database_url.py`), incluindo o caso exato do review (`example%40value`); testado também via `alembic -c config/alembic.ini upgrade head --sql` com a mesma URL sintética, sem erro.
 2. **[P2] Seção "Rastreabilidade" desatualizada:** ainda instruía usar `associacoes_tag_equipamento (fim IS NULL)` para relacionar uma leitura ao ativo — contradizendo o intervalo `[inicio, fim)` já documentado no model/ADR. Corrigido em `docs/architecture/data-model.md`: a seção agora distingue explicitamente "vínculo ativo agora" (`fim IS NULL`) de "vínculo no momento da leitura" (`inicio <= lido_em AND (fim IS NULL OR fim > lido_em)`), com o exemplo da troca de tag (cadeira → maca) explicando por que usar só `fim IS NULL` atribuiria uma leitura antiga ao equipamento errado.
 3. **Ajustes menores de documentação:** referência ao nome antigo do diagrama corrigida para o caminho real (`docs/architecture/er-diagrama.mermaid`); `IDENTITY` trocado por `BIGSERIAL` nos pontos que ainda restavam.
 4. **Alinhamento com ISS-005 e ISS-006 (Resolvido):** a proposta da ISS-005 de `event_id` canônico SHA-256 determinístico e `rssi` nullable foi plenamente integrada à persistência na ISS-006 através da migration linear `da436f7c75b3`. A regra de RSSI bruto em metadata permanece sem conversão física presumida.
 
 ## Consequências
 - Toda mudança de schema a partir de agora passa por `alembic revision --autogenerate` + revisão manual do arquivo gerado — nunca alterar tabela direto no banco.
-- Dependências novas em `requirements.txt`: `SQLAlchemy`, `alembic`, `psycopg2-binary`.
-- Nova variável de ambiente: `DATABASE_URL` (adicionada aos `.env.*.example`).
+- Dependências novas em `requirements/base.txt`: `SQLAlchemy`, `alembic`, `psycopg2-binary`.
+- Nova variável de ambiente: `DATABASE_URL` (adicionada aos `config/environments/.env.*.example`).
 
 ## Pendências (dependem do HUPAA — não bloqueiam este PR)
 - Nomenclatura oficial de andares/setores do hospital (para alinhar `zonas.nome`).

@@ -38,6 +38,7 @@ app = typer.Typer(help="Prepara e observa um teste de laboratório RFID.")
 
 
 def _escolher(valor: str | None, pergunta: str, opcoes: tuple[str, ...]) -> str:
+    """Solicita uma escolha apenas quando ausente e valida contra as opções do menu."""
     if valor is None:
         if not sys.stdin.isatty():
             raise ValueError(f"informe {pergunta} por flag em modo não interativo")
@@ -48,6 +49,7 @@ def _escolher(valor: str | None, pergunta: str, opcoes: tuple[str, ...]) -> str:
 
 
 def _cenario(env: str | None, source: str | None) -> tuple[str, str]:
+    """Resolve ambiente local/externo e origem física/sintética do menu ou dos argumentos."""
     if env is None and source is None and sys.stdin.isatty():
         click.clear()
         typer.echo("1. Local com simulador visual (dados sintéticos)")
@@ -71,6 +73,7 @@ def _cenario(env: str | None, source: str | None) -> tuple[str, str]:
 
 
 def _transporte_escolhido(valor: str | None, modo: str, interativo: bool) -> str:
+    """Resolve a escolha explícita entre MQTT com TLS e transporte de laboratório sem TLS."""
     if modo != "managed":
         if valor not in (None, "tls"):
             raise ValueError("--mqtt-transport só se aplica ao broker externo")
@@ -88,6 +91,7 @@ def _transporte_escolhido(valor: str | None, modo: str, interativo: bool) -> str
 
 
 def _avisar_transporte_plain(valores: dict[str, str], interativo: bool) -> None:
+    """Apresenta as condições do transporte sem TLS selecionado para o laboratório."""
     host = valores["MQTT_HOST"]
     print(f"ATENÇÃO: MQTT sem TLS em {host}:{valores['MQTT_PORT']}. Leituras trafegam "
           "em texto aberto; use apenas EPCs de laboratório.")
@@ -101,6 +105,7 @@ def _avisar_transporte_plain(valores: dict[str, str], interativo: bool) -> None:
 
 def _tags_fisicas(tags: list[str] | None, database_url: str,
                   interativo: bool) -> list[tuple[str, str]]:
+    """Obtém tags e nomes por argumentos ou consulta interativa dos EPCs recentes."""
     if tags:
         escolhidas = dict(parse_tag(item) for item in tags)
         return list(escolhidas.items())
@@ -116,8 +121,9 @@ def _tags_fisicas(tags: list[str] | None, database_url: str,
 
 def _perfil_publicador(modo: str, valores: dict[str, str], arquivo: Path | None,
                       interativo: bool) -> dict[str, str]:
+    """Carrega credencial com permissão de publicação separada da assinatura do ingestor."""
     if modo == "managed" and arquivo is None and valores.get("MQTT_INSECURE_LAB") != "true":
-        padrao = ROOT / ".env.cloud.reader-01"
+        padrao = ROOT / "config" / "environments" / ".env.cloud.reader-01"
         if padrao.exists():
             arquivo = padrao
         elif interativo:
@@ -146,6 +152,7 @@ def _perfil_publicador(modo: str, valores: dict[str, str], arquivo: Path | None,
 
 
 def _descricao_bloqueios(bloqueios) -> str:
+    """Formata nomes, PIDs e portas dos processos que impedem o início do ensaio."""
     return ", ".join(
         f"{item.name} (PID {item.pid or '?'}, porta(s) {','.join(map(str, item.ports))})"
         for item in bloqueios
@@ -154,6 +161,7 @@ def _descricao_bloqueios(bloqueios) -> str:
 
 def _preparar_portas(binds: dict[int, str], projeto: str, force: bool,
                     interativo: bool) -> None:
+    """Detecta conflitos de serviços/processos e solicita resolução antes de iniciar o ensaio."""
     portas = tuple(binds)
     achados = conflitos(portas, projeto)
     if achados:
@@ -190,6 +198,7 @@ def _preparar_portas(binds: dict[int, str], projeto: str, force: bool,
 
 def _fechar_simulador(simulador: subprocess.Popen | None) -> None:
     # Separado de ``encerrar``: no Windows ele preserva as janelas dos observadores.
+    """Encerra o subprocesso do simulador se ainda estiver em execução."""
     if simulador is not None and simulador.poll() is None:
         simulador.terminate()
 
@@ -213,6 +222,10 @@ def start(
     mqtt_transport: Annotated[str | None, typer.Option(
         "--mqtt-transport", help="Broker externo: tls (8883) ou plain (1883, laboratório)")] = None,
 ) -> None:
+    """Prepara perfil e portas, sobe infraestrutura/migrations, semeia o domínio e inicia o ensaio.
+
+    Pode abrir observadores e simulador. Limpeza de volumes pertence apenas ao
+    modo local e depende da escolha explícita; falhas encerram serviços iniciados."""
     processos = []
     arquivo = None
     modo = None
@@ -232,7 +245,7 @@ def start(
                              "definidos na janela")
         if origem == "synthetic" and importlib.util.find_spec("flet") is None:
             raise ValueError("simulador visual exige Flet: pip install -r "
-                             "requirements-lab.txt")
+                             "requirements/lab.txt")
         if fresh and reuse:
             raise ValueError("escolha --fresh ou --reuse")
         if modo == "local" and not fresh and not reuse and interativo:
@@ -374,12 +387,13 @@ def stop(
     clear_ports: Annotated[bool, typer.Option("--clear-ports",
                                                 help="Encerra também processos nas portas locais")] = False,
 ) -> None:
+    """Sinaliza observadores e encerra o Compose do perfil escolhido; volumes exigem opção explícita."""
     if env not in ("local", "managed") or (env == "managed" and (volumes or clear_ports)):
         raise typer.BadParameter("--volumes e --clear-ports só são permitidos no modo local")
     if volumes and not force and not typer.confirm("Apagar volumes locais definitivamente?",
                                                    default=False):
         raise typer.Exit()
-    arquivo = env_file or ROOT / (".env.local" if env == "local" else ".env.cloud")
+    arquivo = env_file or ROOT / "config" / "environments" / (".env.local" if env == "local" else ".env.cloud")
     if not arquivo.exists():
         raise typer.BadParameter(f"arquivo de ambiente ausente: {arquivo}")
     valores = {k: v for k, v in dotenv_values(arquivo).items() if v is not None}

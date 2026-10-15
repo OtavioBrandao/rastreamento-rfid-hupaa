@@ -20,9 +20,11 @@ class PassageRepository:
     # Cada observação consultava o mapeamento da antena; com banco remoto isso
     # deixava a inferência dezenas de segundos atrás. Os mapeamentos mudam
     # raramente: todos os da antena (inclusive históricos) ficam em cache.
+    """Resolve observação na topologia histórica e armazena passagem com evidências únicas."""
     MAPPING_TTL_SECONDS = 30.0
 
     def __init__(self, engine: Engine, *, clock: Callable[[], float] = time.monotonic):
+        """Inicializa PassageRepository com as dependências e valores recebidos."""
         self.engine = engine
         self._clock = clock
         self._mapeamentos: dict[int, tuple[list[Any], float]] = {}
@@ -51,6 +53,7 @@ class PassageRepository:
         nenhum mapeamento em cache para a observação, o banco é consultado de novo.
         """
         def cobrindo(rows: list[Any]) -> list[Any]:
+            """Seleciona mapeamentos cujo intervalo de vigência cobre a observação inteira."""
             return [row for row in rows
                     if row.inicio <= observation.last_seen_at
                     and (row.fim is None or row.fim > observation.first_seen_at)]

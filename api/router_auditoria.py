@@ -31,6 +31,7 @@ OrigemAuditoria = Literal[ORIGENS_AUDITORIA]  # type: ignore[valid-type]
 
 
 class AuditoriaResposta(BaseModel):
+    """Contrato de dados Auditoria Resposta; valida campos e serializa a resposta da API."""
     id: int
     registrado_em: datetime
     acao: str
@@ -46,6 +47,7 @@ class AuditoriaResposta(BaseModel):
 
 
 class AuditoriaPagina(BaseModel):
+    """Contrato de dados Auditoria Pagina; valida campos e serializa a resposta da API."""
     items: list[AuditoriaResposta]
     page: int
     size: int
@@ -54,6 +56,7 @@ class AuditoriaPagina(BaseModel):
 
 
 def _consulta_base():
+    """Cria consulta de auditoria com os filtros e vínculos usados pela listagem."""
     return (
         select(Auditoria, Usuario.nome)
         .outerjoin(Usuario, Usuario.id == Auditoria.usuario_id)
@@ -61,6 +64,7 @@ def _consulta_base():
 
 
 def _resposta(linha: Auditoria, usuario_nome: str | None) -> AuditoriaResposta:
+    """Converte registro persistido de auditoria em resposta pública."""
     return AuditoriaResposta(
         id=linha.id, registrado_em=em_utc(linha.registrado_em), acao=linha.acao,
         origem=linha.origem, entidade=linha.entidade, entidade_id=linha.entidade_id,
@@ -84,6 +88,9 @@ def listar_auditorias(
     size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ) -> AuditoriaPagina:
+    """Lista auditorias.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     if any(valor is not None and (valor.tzinfo is None or valor.utcoffset() is None)
            for valor in (desde, ate)):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -114,6 +121,9 @@ def listar_auditorias(
 
 @router.get("/{auditoria_id}", response_model=AuditoriaResposta, summary="Consultar um registro")
 def consultar_auditoria(auditoria_id: int, db: Session = Depends(get_db)) -> AuditoriaResposta:
+    """Consulta auditoria.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     linha = db.execute(_consulta_base().where(Auditoria.id == auditoria_id)).first()
     if linha is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="registro de auditoria inexistente")

@@ -48,17 +48,20 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
+            requirements/base.txt
+            requirements/dev.txt
 
       - name: Instalar dependências
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements/dev.txt
 
       - name: Verificar lint
-        run: python -m ruff check --select E4,E7,E9,F .
+        run: python -m ruff check --config config/ruff.toml --select E4,E7,E9,F .
+
+      - name: Verificar docstrings
+        run: python scripts/documentation.py --check
 
       - name: Verificar formatação dos imports
-        run: python -m ruff check --select I .
+        run: python -m ruff check --config config/ruff.toml --select I .
 
   tests:
     name: Testes
@@ -94,27 +97,27 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: |
-            requirements.txt
-            requirements-dev.txt
+            requirements/base.txt
+            requirements/dev.txt
 
       - name: Instalar dependências
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements/dev.txt
 
       - name: Iniciar Mosquitto local
         run: |
-          docker compose up -d mosquitto
+          docker compose -f deploy/compose.yaml --profile local up -d mosquitto
           for _attempt in {1..20}; do
-            if docker compose exec -T mosquitto \
+            if docker compose -f deploy/compose.yaml --profile local exec -T mosquitto \
               mosquitto_sub -h 127.0.0.1 -t '$SYS/broker/version' -C 1 -W 1 >/dev/null; then
               exit 0
             fi
             sleep 1
           done
-          docker compose logs mosquitto
+          docker compose -f deploy/compose.yaml --profile local logs mosquitto
           exit 1
 
       - name: Aplicar migrations no banco de testes
-        run: python -m alembic upgrade head
+        run: python -m alembic -c config/alembic.ini upgrade head
 
       - name: Executar testes unitários e de integração
         env:
@@ -124,7 +127,7 @@ jobs:
 
       - name: Encerrar Mosquitto local
         if: always()
-        run: docker compose --profile local down --volumes --remove-orphans
+        run: docker compose -f deploy/compose.yaml --profile local down --volumes --remove-orphans
 
   migrations:
     name: Migrations

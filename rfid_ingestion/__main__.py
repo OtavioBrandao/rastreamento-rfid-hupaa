@@ -22,6 +22,7 @@ from .repository import RawReadingRepository
 
 
 def main() -> int:
+    """Executa a entrada de linha de comando de rfid_ingestion.__main__; devolve o código de saída quando aplicável."""
     try:
         settings = Settings.from_env()
     except ValueError as error:
@@ -63,6 +64,7 @@ def main() -> int:
             passage_persisted=direction_service.process_pending,
         )
         def inference_tick(now_monotonic: float) -> None:
+            """Avança recuperação de passagem, direção e projeção com o mesmo relógio de inferência."""
             passage_service.tick(now_monotonic)
             direction_service.tick(now_monotonic)
             location_service.tick(now_monotonic)

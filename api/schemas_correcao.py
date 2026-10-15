@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class _CorrecaoBase(BaseModel):
+    """Contrato de dados _Correcao Base; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(extra="forbid")
 
     justificativa: str = Field(..., max_length=1000)
@@ -19,6 +20,7 @@ class _CorrecaoBase(BaseModel):
     @field_validator("justificativa")
     @classmethod
     def _justificativa_preenchida(cls, valor: str) -> str:
+        """Remove espaços e exige justificativa não vazia para a correção."""
         valor = valor.strip()
         if not valor:
             raise ValueError("justificativa é obrigatória")
@@ -27,12 +29,14 @@ class _CorrecaoBase(BaseModel):
     @field_validator("referencia")
     @classmethod
     def _referencia_opcional(cls, valor: str | None) -> str | None:
+        """Normaliza referência opcional e converte texto vazio em None."""
         if valor is None:
             return None
         return valor.strip() or None
 
 
 class CorrecaoLocalizacaoEntrada(_CorrecaoBase):
+    """Contrato de dados Correcao Localizacao Entrada; valida campos e serializa a resposta da API."""
     zona_id: int = Field(..., gt=0)
 
 
@@ -47,6 +51,7 @@ class CorrecaoCadastroEntrada(_CorrecaoBase):
     @field_validator("nome", "identificador_interno")
     @classmethod
     def _texto_preenchido(cls, valor: str | None) -> str | None:
+        """Recusa texto vazio após remover espaços externos."""
         if valor is None:
             raise ValueError("não pode ser nulo")
         valor = valor.strip()
@@ -56,6 +61,7 @@ class CorrecaoCadastroEntrada(_CorrecaoBase):
 
 
 class CorrecaoLocalizacaoResposta(BaseModel):
+    """Contrato de dados Correcao Localizacao Resposta; valida campos e serializa a resposta da API."""
     equipamento_id: int
     zona_anterior_id: int | None
     zona_id: int

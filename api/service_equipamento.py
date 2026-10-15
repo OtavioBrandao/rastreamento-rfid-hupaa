@@ -32,13 +32,17 @@ class ErroEquipamento(Exception):
 
 
 class EquipamentoNaoEncontrado(ErroEquipamento):
+    """Falha de domínio: equipamento nao encontrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, equipamento_id: int) -> None:
+        """Inicializa EquipamentoNaoEncontrado com as dependências e valores recebidos."""
         self.equipamento_id = equipamento_id
         super().__init__(f"Equipamento {equipamento_id} não encontrado.")
 
 
 class EquipamentoNaoEncontradoPorIdentificador(EquipamentoNaoEncontrado):
+    """Falha de domínio: equipamento nao encontrado por identificador; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, identificador_interno: str) -> None:
+        """Inicializa EquipamentoNaoEncontradoPorIdentificador com as dependências e valores recebidos."""
         self.identificador_interno = identificador_interno
         self.identificador_normalizado = normalizar_nome(identificador_interno)
         self.equipamento_id = None
@@ -49,7 +53,9 @@ class EquipamentoNaoEncontradoPorIdentificador(EquipamentoNaoEncontrado):
 
 
 class IdentificadorDuplicado(ErroEquipamento):
+    """Falha de domínio: identificador duplicado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, identificador_interno: str) -> None:
+        """Inicializa IdentificadorDuplicado com as dependências e valores recebidos."""
         self.identificador_interno = identificador_interno
         self.identificador_normalizado = normalizar_nome(identificador_interno)
         super().__init__(
@@ -66,6 +72,7 @@ class TipoEquipamentoInvalido(ErroEquipamento):
     """
 
     def __init__(self, tipo_id: int, motivo: str) -> None:
+        """Inicializa TipoEquipamentoInvalido com as dependências e valores recebidos."""
         self.tipo_id = tipo_id
         self.motivo = motivo
         super().__init__(f"tipo_id {tipo_id} inválido: {motivo}.")
@@ -81,6 +88,7 @@ class PaginaEquipamentos:
         size: int,
         total: int,
     ) -> None:
+        """Inicializa PaginaEquipamentos com as dependências e valores recebidos."""
         self.items = list(items)
         self.page = page
         self.size = size

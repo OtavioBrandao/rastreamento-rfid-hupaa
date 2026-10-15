@@ -1,7 +1,7 @@
 """
 Cria o primeiro administrador (ISS-026), pelo terminal:
 
-    python -m api.criar_admin --env-file .env.cloud --nome "Fulana" --email fulana@hupaa.example
+    python -m api.criar_admin --env-file config/environments/.env.cloud --nome "Fulana" --email fulana@hupaa.example
 
 A senha é pedida por `getpass` duas vezes — nunca por argumento, que
 ficaria no histórico do shell e visível em `ps`. Para automação,
@@ -46,13 +46,14 @@ class ErroCriarAdmin(Exception):
 
 
 def _analisar_argumentos(argv: list[str] | None) -> argparse.Namespace:
+    """Valida argumentos do comando de criação do administrador inicial."""
     parser = argparse.ArgumentParser(
         prog="python -m api.criar_admin", description="Cria o primeiro administrador."
     )
     parser.add_argument("--nome", required=True)
     parser.add_argument("--email", required=True)
     parser.add_argument(
-        "--env-file", help="arquivo de ambiente (ex.: .env.cloud ou .env.local)",
+        "--env-file", help="arquivo de ambiente (ex.: config/environments/.env.local)",
     )
     parser.add_argument(
         "--senha-stdin", action="store_true",
@@ -66,22 +67,24 @@ def _analisar_argumentos(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _carregar_ambiente(arquivo: str | None) -> None:
+    """Carrega o arquivo explícito sem registrar valores e exige DATABASE_URL para administração."""
     if arquivo is not None:
         caminho = Path(arquivo)
         if not caminho.is_file():
             raise ErroCriarAdmin("Arquivo de ambiente não encontrado. Verifique --env-file.")
         load_dotenv(caminho, override=True)
     else:
-        load_dotenv()
+        load_dotenv(Path(__file__).resolve().parents[1] / "config/environments/.env")
     if not os.environ.get("DATABASE_URL"):
         raise ErroCriarAdmin(
-            "DATABASE_URL não definida. Use --env-file .env.cloud ou --env-file .env.local."
+            "DATABASE_URL não definida. Use --env-file config/environments/.env.cloud ou --env-file config/environments/.env.local."
         )
 
 
 def _ler_senha(
     senha_stdin: bool, entrada: TextIO, pedir_senha: Callable[[str], str],
 ) -> str:
+    """Lê senha por terminal ou stdin, confere repetição quando necessária e valida a política."""
     if senha_stdin:
         senha = entrada.readline().rstrip("\r\n")
     else:
@@ -111,6 +114,7 @@ def _validar_dados(nome: str, email: str) -> tuple[str, str]:
 def criar_administrador(
     db: Session, nome: str, email: str, senha: str, recuperacao: bool,
 ) -> Usuario:
+    """Cria administrador com lock de bootstrap e recusa duplicação fora da recuperação explícita."""
     senha_hash = senhas.gerar_hash(senha)
     db.execute(text("SELECT pg_advisory_xact_lock(:chave)"), {"chave": _CHAVE_LOCK_BOOTSTRAP})
     if travar_admins_ativos(db) and not recuperacao:
@@ -146,6 +150,7 @@ def main(
     pedir_senha: Callable[[str], str] = getpass.getpass,
     saida: TextIO | None = None,
 ) -> int:
+    """Executa a entrada de linha de comando de api.criar_admin; devolve o código de saída quando aplicável."""
     args = _analisar_argumentos(argv)
     saida = saida or sys.stdout
     try:

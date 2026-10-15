@@ -31,7 +31,9 @@ from db.models import AssociacaoTagEquipamento, Equipamento, Tag
 
 
 class EquipamentoInvalido(Exception):
+    """Falha de domínio: equipamento invalido; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, equipamento_id: int):
+        """Inicializa EquipamentoInvalido com as dependências e valores recebidos."""
         self.equipamento_id = equipamento_id
         super().__init__(
             f"equipamento {equipamento_id} não existe ou está inativo — "
@@ -40,13 +42,17 @@ class EquipamentoInvalido(Exception):
 
 
 class TagJaAssociada(Exception):
+    """Falha de domínio: tag ja associada; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, epc: str):
+        """Inicializa TagJaAssociada com as dependências e valores recebidos."""
         self.epc = epc
         super().__init__(f"EPC '{epc}' já está associado a outro equipamento ativo")
 
 
 class EquipamentoJaPossuiVinculoAtivo(Exception):
+    """Falha de domínio: equipamento ja possui vinculo ativo; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, equipamento_id: int):
+        """Inicializa EquipamentoJaPossuiVinculoAtivo com as dependências e valores recebidos."""
         self.equipamento_id = equipamento_id
         super().__init__(
             f"equipamento {equipamento_id} já possui um vínculo de tag ativo — "
@@ -55,23 +61,29 @@ class EquipamentoJaPossuiVinculoAtivo(Exception):
 
 
 class NenhumVinculoAtivo(Exception):
+    """Falha de domínio: nenhum vinculo ativo; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, equipamento_id: int):
+        """Inicializa NenhumVinculoAtivo com as dependências e valores recebidos."""
         self.equipamento_id = equipamento_id
         super().__init__(f"equipamento {equipamento_id} não possui vínculo de tag ativo")
 
 
 class TagJaEhAAtiva(Exception):
+    """Falha de domínio: tag ja eh aativa; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, epc: str, equipamento_id: int):
+        """Inicializa TagJaEhAAtiva com as dependências e valores recebidos."""
         self.epc = epc
         self.equipamento_id = equipamento_id
         super().__init__(f"EPC '{epc}' já é a tag ativa do equipamento {equipamento_id}")
 
 
 def _agora() -> datetime:
+    """Obtém o instante atual em UTC para delimitar vigências temporais."""
     return datetime.now(timezone.utc)
 
 
 def _carregar_equipamento_ativo(db: Session, equipamento_id: int) -> Equipamento:
+    """Carrega equipamento e recusa associação se ele não existir ou estiver inativo."""
     equipamento = db.get(Equipamento, equipamento_id)
     if equipamento is None or equipamento.status != "ativo":
         raise EquipamentoInvalido(equipamento_id)
@@ -79,6 +91,7 @@ def _carregar_equipamento_ativo(db: Session, equipamento_id: int) -> Equipamento
 
 
 def _obter_ou_criar_tag(db: Session, epc_normalizado: str) -> Tag:
+    """Obtém tag por EPC ou cria seu cadastro tratando concorrência de inserção."""
     tag = db.scalar(select(Tag).where(Tag.epc == epc_normalizado))
     if tag is not None:
         return tag
@@ -107,6 +120,7 @@ def _obter_ou_criar_tag(db: Session, epc_normalizado: str) -> Tag:
 def _vinculo_ativo_do_equipamento(
     db: Session, equipamento_id: int
 ) -> AssociacaoTagEquipamento | None:
+    """Consulta a associação cuja vigência ainda não foi encerrada."""
     return db.scalar(
         select(AssociacaoTagEquipamento)
         .options(joinedload(AssociacaoTagEquipamento.tag))
@@ -120,6 +134,7 @@ def _vinculo_ativo_do_equipamento(
 def _inserir_associacao(
     db: Session, tag_id: int, equipamento_id: int, epc_para_erro: str
 ) -> AssociacaoTagEquipamento:
+    """Insere vínculo temporal e traduz conflitos de unicidade do banco."""
     associacao = AssociacaoTagEquipamento(
         tag_id=tag_id, equipamento_id=equipamento_id, inicio=_agora()
     )
@@ -138,6 +153,7 @@ def _inserir_associacao(
 
 
 def associar(db: Session, equipamento_id: int, epc: str) -> AssociacaoTagEquipamento:
+    """Cria vínculo ativo único entre tag e equipamento, preservando o histórico anterior."""
     epc_normalizado = normalizar_epc(epc)
     _carregar_equipamento_ativo(db, equipamento_id)
 
@@ -160,6 +176,7 @@ def associar(db: Session, equipamento_id: int, epc: str) -> AssociacaoTagEquipam
 
 
 def substituir(db: Session, equipamento_id: int, epc_novo: str) -> AssociacaoTagEquipamento:
+    """Encerra o vínculo atual e cria o novo vínculo no mesmo instante temporal."""
     epc_normalizado = normalizar_epc(epc_novo)
     _carregar_equipamento_ativo(db, equipamento_id)
 
@@ -190,6 +207,7 @@ def substituir(db: Session, equipamento_id: int, epc_novo: str) -> AssociacaoTag
 
 
 def encerrar(db: Session, equipamento_id: int) -> AssociacaoTagEquipamento:
+    """Fecha a vigência da associação ativa no instante informado."""
     vinculo = _vinculo_ativo_do_equipamento(db, equipamento_id)
     if vinculo is None:
         raise NenhumVinculoAtivo(equipamento_id)
@@ -203,10 +221,12 @@ def encerrar(db: Session, equipamento_id: int) -> AssociacaoTagEquipamento:
 def vinculo_ativo_por_equipamento(
     db: Session, equipamento_id: int
 ) -> AssociacaoTagEquipamento | None:
+    """Consulta a associação de tag ainda vigente para o equipamento."""
     return _vinculo_ativo_do_equipamento(db, equipamento_id)
 
 
 def historico_por_equipamento(db: Session, equipamento_id: int) -> list[AssociacaoTagEquipamento]:
+    """Lista associações históricas do equipamento em ordem temporal."""
     return list(
         db.scalars(
             select(AssociacaoTagEquipamento)

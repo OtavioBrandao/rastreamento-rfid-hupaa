@@ -19,6 +19,9 @@ from .config import ROOT
 
 @dataclass(frozen=True)
 class HostBlocker:
+    """Estrutura Host Blocker usada por tools.lab_launcher.docker_env.
+
+    Campos: pid, name, ports, created."""
     pid: int | None
     name: str
     ports: tuple[int, ...]
@@ -43,6 +46,7 @@ def _limpar_saida(saida: str, env: dict[str, str] | None) -> str:
 
 def executar(args: list[str], *, env: dict[str, str] | None = None,
             mostrar: bool = False) -> str:
+    """Executa comando Docker na raiz, captura progresso e oculta credenciais dos diagnósticos."""
     if mostrar:
         progresso = dict(os.environ if env is None else env)
         progresso.update(BUILDKIT_PROGRESS="plain", COMPOSE_PROGRESS="plain")
@@ -70,12 +74,14 @@ def executar(args: list[str], *, env: dict[str, str] | None = None,
 
 def compose(arquivo: Path, perfil: str, *args: str, env: dict[str, str] | None = None,
             mostrar: bool = False) -> str:
-    return executar(["docker", "compose", "--env-file", str(arquivo), "--profile", perfil,
+    """Invoca deploy/compose.yaml com perfil e arquivo explícitos, preservando a raiz do projeto."""
+    return executar(["docker", "compose", "-f", str(ROOT / "deploy" / "compose.yaml"), "--env-file", str(arquivo), "--profile", perfil,
                      *args], env=env, mostrar=mostrar)
 
 
 def _diagnostico(arquivo: Path, perfil: str, servico: str,
                  env: dict[str, str] | None) -> str:
+    """Obtém últimas linhas sanitizadas do serviço Compose que falhou."""
     try:
         logs = compose(arquivo, perfil, "logs", "--no-color", "--tail", "20", servico,
                        env=env)
@@ -85,6 +91,7 @@ def _diagnostico(arquivo: Path, perfil: str, servico: str,
 
 
 def conflitos(portas: tuple[int, ...], projeto: str) -> list[tuple[str, str]]:
+    """Lista contêineres de outros projetos que publicam as portas necessárias ao ensaio."""
     saida = executar(["docker", "ps", "--format", "{{json .}}"])
     achados = []
     for linha in saida.splitlines():
@@ -158,6 +165,7 @@ def encerrar_processos(bloqueios: list[HostBlocker]) -> None:
 
 
 def porta_disponivel(endereco: str, porta: int) -> bool:
+    """Testa bind TCP no endereço e porta sem iniciar listener permanente."""
     familia = socket.AF_INET6 if ":" in endereco else socket.AF_INET
     with socket.socket(familia, socket.SOCK_STREAM) as probe:
         try:
@@ -169,6 +177,7 @@ def porta_disponivel(endereco: str, porta: int) -> bool:
 
 def aguardar(arquivo: Path, perfil: str, servico: str, *, completo: bool = False,
             timeout: int = 120, env: dict[str, str] | None = None) -> None:
+    """Aguarda healthcheck ou conclusão do serviço com timeout e diagnóstico sanitizado."""
     fim = time.monotonic() + timeout
     while time.monotonic() < fim:
         ids = compose(arquivo, perfil, "ps", "-a", "-q", servico, env=env).splitlines()

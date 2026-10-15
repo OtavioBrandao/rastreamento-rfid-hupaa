@@ -218,9 +218,9 @@ O role de aplicação precisa dos privilégios DML e de sequences documentados n
 Com Python 3.12, Docker Compose e OpenSSL disponíveis:
 
 ```bash
-python -m pip install -r requirements-dev.txt
-python -m ruff check --select E4,E7,E9,F .
-python -m ruff check --select I .
+python -m pip install -r requirements/dev.txt
+python -m ruff check --config config/ruff.toml --select E4,E7,E9,F .
+python -m ruff check --config config/ruff.toml --select I .
 python -m pytest -q
 bash tests/reader-connectivity/mqtt/smoke-test.sh
 bash tests/infrastructure/compose-smoke-test.sh
@@ -250,10 +250,10 @@ revertendo até base, reaplicando e conferindo 17 tabelas. Para repetir manualme
 com DATABASE_URL apontando exclusivamente ao banco descartável:
 
 ```bash
-python -m alembic upgrade head
-python -m alembic upgrade head
-python -m alembic downgrade base
-python -m alembic upgrade head
+python -m alembic -c config/alembic.ini upgrade head
+python -m alembic -c config/alembic.ini upgrade head
+python -m alembic -c config/alembic.ini downgrade base
+python -m alembic -c config/alembic.ini upgrade head
 python -m alembic check
 ```
 

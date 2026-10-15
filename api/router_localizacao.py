@@ -82,6 +82,7 @@ def _http(erro: service.ErroLocalizacao) -> HTTPException:
 def arvore_completa(
     incluir_inativos: bool = Query(False), db: Session = Depends(get_db)
 ) -> list[service.AndarNo]:
+    """Consulta a hierarquia completa de andares, setores e zonas para a resposta HTTP."""
     return service.arvore_completa(db, incluir_inativos=incluir_inativos)
 
 
@@ -94,6 +95,7 @@ def arvore_completa(
 def arvore_do_andar(
     andar_id: int, incluir_inativos: bool = Query(False), db: Session = Depends(get_db)
 ) -> service.AndarNo:
+    """Consulta a árvore de um andar específico ou devolve erro de recurso ausente."""
     try:
         return service.arvore_do_andar(db, andar_id, incluir_inativos=incluir_inativos)
     except service.AndarNaoEncontrado as erro:
@@ -111,6 +113,9 @@ def arvore_do_andar(
     summary="Cadastrar andar",
 )
 def criar_andar(payload: AndarCriar, db: Session = Depends(get_db)) -> service.Andar:
+    """Cria andar.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.criar_andar(
             db,
@@ -134,6 +139,9 @@ def listar_andares(
     incluir_inativos: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> service.Pagina:
+    """Lista andares.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return service.listar_andares(db, page=page, size=size, incluir_inativos=incluir_inativos)
 
 
@@ -144,6 +152,9 @@ def listar_andares(
     summary="Detalhar andar",
 )
 def detalhar_andar(andar_id: int, db: Session = Depends(get_db)) -> service.Andar:
+    """Obtém os detalhes de andar.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.buscar_andar_por_id(db, andar_id)
     except service.ErroLocalizacao as erro:
@@ -159,6 +170,9 @@ def detalhar_andar(andar_id: int, db: Session = Depends(get_db)) -> service.Anda
 def atualizar_andar(
     andar_id: int, payload: AndarAtualizar, db: Session = Depends(get_db)
 ) -> service.Andar:
+    """Atualiza andar.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.atualizar_andar(
             db,
@@ -180,6 +194,9 @@ def atualizar_andar(
     summary="Inativar andar (baixa lógica; bloqueia se houver setor ativo)",
 )
 def inativar_andar(andar_id: int, db: Session = Depends(get_db)) -> service.Andar:
+    """Inativa andar.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.inativar_andar(db, andar_id)
     except service.ErroLocalizacao as erro:
@@ -193,6 +210,9 @@ def inativar_andar(andar_id: int, db: Session = Depends(get_db)) -> service.Anda
     summary="Reativar andar",
 )
 def reativar_andar(andar_id: int, db: Session = Depends(get_db)) -> service.Andar:
+    """Reativa andar.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.reativar_andar(db, andar_id)
     except service.ErroLocalizacao as erro:
@@ -210,6 +230,9 @@ def reativar_andar(andar_id: int, db: Session = Depends(get_db)) -> service.Anda
     summary="Cadastrar setor (o andar precisa existir e estar ativo)",
 )
 def criar_setor(payload: SetorCriar, db: Session = Depends(get_db)) -> service.Setor:
+    """Cria setor.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.criar_setor(
             db,
@@ -235,6 +258,9 @@ def listar_setores(
     andar_id: int | None = Query(None, gt=0),
     db: Session = Depends(get_db),
 ) -> service.Pagina:
+    """Lista setores.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return service.listar_setores(
         db, page=page, size=size, incluir_inativos=incluir_inativos, andar_id=andar_id
     )
@@ -247,6 +273,9 @@ def listar_setores(
     summary="Detalhar setor",
 )
 def detalhar_setor(setor_id: int, db: Session = Depends(get_db)) -> service.Setor:
+    """Obtém os detalhes de setor.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.buscar_setor_por_id(db, setor_id)
     except service.ErroLocalizacao as erro:
@@ -262,6 +291,9 @@ def detalhar_setor(setor_id: int, db: Session = Depends(get_db)) -> service.Seto
 def atualizar_setor(
     setor_id: int, payload: SetorAtualizar, db: Session = Depends(get_db)
 ) -> service.Setor:
+    """Atualiza setor.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.atualizar_setor(
             db,
@@ -283,6 +315,9 @@ def atualizar_setor(
     summary="Inativar setor (baixa lógica; bloqueia se houver zona ativa)",
 )
 def inativar_setor(setor_id: int, db: Session = Depends(get_db)) -> service.Setor:
+    """Inativa setor.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.inativar_setor(db, setor_id)
     except service.ErroLocalizacao as erro:
@@ -296,6 +331,9 @@ def inativar_setor(setor_id: int, db: Session = Depends(get_db)) -> service.Seto
     summary="Reativar setor (bloqueia se o andar pai estiver inativo)",
 )
 def reativar_setor(setor_id: int, db: Session = Depends(get_db)) -> service.Setor:
+    """Reativa setor.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.reativar_setor(db, setor_id)
     except service.ErroLocalizacao as erro:
@@ -313,6 +351,9 @@ def reativar_setor(setor_id: int, db: Session = Depends(get_db)) -> service.Seto
     summary="Cadastrar zona (o setor precisa existir e estar ativo)",
 )
 def criar_zona(payload: ZonaCriar, db: Session = Depends(get_db)) -> service.Zona:
+    """Cria zona.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.criar_zona(
             db,
@@ -339,6 +380,9 @@ def listar_zonas(
     setor_id: int | None = Query(None, gt=0),
     db: Session = Depends(get_db),
 ) -> service.Pagina:
+    """Lista zonas.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return service.listar_zonas(
         db, page=page, size=size, incluir_inativos=incluir_inativos, setor_id=setor_id
     )
@@ -351,6 +395,9 @@ def listar_zonas(
     summary="Detalhar zona",
 )
 def detalhar_zona(zona_id: int, db: Session = Depends(get_db)) -> service.Zona:
+    """Obtém os detalhes de zona.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.buscar_zona_por_id(db, zona_id)
     except service.ErroLocalizacao as erro:
@@ -366,6 +413,9 @@ def detalhar_zona(zona_id: int, db: Session = Depends(get_db)) -> service.Zona:
 def atualizar_zona(
     zona_id: int, payload: ZonaAtualizar, db: Session = Depends(get_db)
 ) -> service.Zona:
+    """Atualiza zona.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.atualizar_zona(
             db,
@@ -389,6 +439,9 @@ def atualizar_zona(
     summary="Inativar zona (baixa lógica; bloqueia se referenciada)",
 )
 def inativar_zona(zona_id: int, db: Session = Depends(get_db)) -> service.Zona:
+    """Inativa zona.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.inativar_zona(db, zona_id)
     except service.ErroLocalizacao as erro:
@@ -402,6 +455,9 @@ def inativar_zona(zona_id: int, db: Session = Depends(get_db)) -> service.Zona:
     summary="Reativar zona (bloqueia se o setor pai estiver inativo)",
 )
 def reativar_zona(zona_id: int, db: Session = Depends(get_db)) -> service.Zona:
+    """Reativa zona.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.reativar_zona(db, zona_id)
     except service.ErroLocalizacao as erro:

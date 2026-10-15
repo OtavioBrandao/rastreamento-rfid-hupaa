@@ -44,6 +44,7 @@ def _validar_nome_preenchido(valor: str | None) -> str | None:
 
 
 class TipoEquipamentoCriar(BaseModel):
+    """Contrato de dados Tipo Equipamento Criar; valida campos e serializa a resposta da API."""
     nome: str = Field(..., max_length=255)
     descricao: str | None = None
 
@@ -65,6 +66,7 @@ class TipoEquipamentoAtualizar(BaseModel):
 
 
 class TipoEquipamentoResposta(BaseModel):
+    """Contrato de dados Tipo Equipamento Resposta; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -77,6 +79,7 @@ class TipoEquipamentoResposta(BaseModel):
 
 
 class PaginaTiposEquipamento(BaseModel):
+    """Contrato de dados Pagina Tipos Equipamento; valida campos e serializa a resposta da API."""
     items: list[TipoEquipamentoResposta]
     page: int
     size: int
@@ -94,6 +97,9 @@ def criar_tipo(
     payload: TipoEquipamentoCriar,
     db: Session = Depends(get_db),
 ) -> service.TipoEquipamento:
+    """Cria tipo.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.criar(db, nome=payload.nome, descricao=payload.descricao)
     except service.NomeDuplicado as erro:
@@ -111,6 +117,9 @@ def listar_tipos(
     incluir_inativos: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> service.PaginaTipos:
+    """Lista tipos.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return service.listar(db, page=page, size=size, incluir_inativos=incluir_inativos)
 
 
@@ -123,6 +132,9 @@ def detalhar_tipo(
     tipo_id: int,
     db: Session = Depends(get_db),
 ) -> service.TipoEquipamento:
+    """Obtém os detalhes de tipo.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.buscar_por_id(db, tipo_id)
     except service.TipoEquipamentoNaoEncontrado as erro:
@@ -139,6 +151,9 @@ def atualizar_tipo(
     payload: TipoEquipamentoAtualizar,
     db: Session = Depends(get_db),
 ) -> service.TipoEquipamento:
+    """Atualiza tipo.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.atualizar(
             db,
@@ -162,6 +177,9 @@ def inativar_tipo(
     tipo_id: int,
     db: Session = Depends(get_db),
 ) -> service.TipoEquipamento:
+    """Inativa tipo.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.inativar(db, tipo_id)
     except service.TipoEquipamentoNaoEncontrado as erro:
@@ -179,6 +197,9 @@ def reativar_tipo(
     tipo_id: int,
     db: Session = Depends(get_db),
 ) -> service.TipoEquipamento:
+    """Reativa tipo.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.reativar(db, tipo_id)
     except service.TipoEquipamentoNaoEncontrado as erro:

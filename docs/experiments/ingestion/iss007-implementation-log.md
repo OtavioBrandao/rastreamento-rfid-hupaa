@@ -36,13 +36,13 @@ O PR #44 foi inicialmente desenvolvido sobre o branch antigo da ISS-006 (`feat/i
 
 ### Conflitos resolvidos na sincronização:
 Foram resolvidos 18 arquivos conflitantes entre a antiga branch e a `main` atual:
-- **Workflows e Migrations:** `.github/workflows/ci.yml`, `.github/workflows/migrations.yml`, `alembic/versions/da436f7c75b3_alinha_leituras_ao_contrato_canonico_.py` mantiveram a autoridade da `main` (linearidade de migrations e aplicação de `alembic upgrade head` no CI).
+- **Workflows e Migrations:** `.github/workflows/ci.yml`, `.github/workflows/migrations.yml`, `alembic/versions/da436f7c75b3_alinha_leituras_ao_contrato_canonico_.py` mantiveram a autoridade da `main` (linearidade de migrations e aplicação de `alembic -c config/alembic.ini upgrade head` no CI).
 - **Modelagem e Diagramas:** `docs/database/er-diagrama.mermaid`, `docs/database/migrations.md`, `docs/database/modelagem-dados.md` mantiveram a autoridade da ISS-012/ISS-006 sobre hardware (`Leitor.reader_id`, `Antena.ativo`).
 - **Runtime do Banco:** Em `db/runtime.py`, preservou-se `pool_pre_ping=True` da ISS-007 integrado ao `create_app_engine`.
 - **Repositório de Persistência:** Em `rfid_ingestion/repository.py`, preservou-se a cláusula de resolução topológica `Antena.ativo.is_(True)` da ISS-012/ISS-006 e integraram-se os métodos `_database_failure_category`, `check_available()` e o tipo `PersistenceError` com suporte a `FailureCategory`.
 - **Cliente MQTT:** Em `rfid_ingestion/mqtt_client.py`, preservaram-se o logging estruturado de normalização/persistência da ISS-006 e todo o fluxo de supervisão, reconexão com backoff e recuperação de banco da ISS-007.
 - **Fixtures e Testes:** `tests/conftest.py` e `tests/fixtures/topology.sql` foram alinhados com a `main`; `tests/test_repository.py` manteve testes de antenas ativas e testes de classificação de erros/`pool_pre_ping`.
-- **Scripts de Teste:** `tests/reader-connectivity/mqtt/smoke-test.sh` preservou a execução de `alembic upgrade head` no banco efêmero.
+- **Scripts de Teste:** `tests/reader-connectivity/mqtt/smoke-test.sh` preservou a execução de `alembic -c config/alembic.ini upgrade head` no banco efêmero.
 - **Retargeting do PR #44:** O base branch foi alterado de `feat/iss-006-persistencia-idempotente` para `main` via `gh pr edit 44 --base main`.
 
 ---
@@ -109,7 +109,7 @@ A resiliência do ingestor classifica falhas em duas categorias primárias (`Fai
 
 ### Validação Estática e Linter:
 ```bash
-python -m ruff check --select E4,E7,E9,F,I .
+python -m ruff check --config config/ruff.toml --select E4,E7,E9,F,I .
 # All checks passed!
 git diff --check
 # Clean, no whitespace or conflict marker errors

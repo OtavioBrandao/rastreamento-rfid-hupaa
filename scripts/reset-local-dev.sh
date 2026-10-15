@@ -13,12 +13,12 @@ if [[ "$PROJECT_NAME" != "rfid-hospital-local" \
 fi
 
 if [[ "${CONFIRM_RESET_LOCAL:-}" != "APAGAR" ]]; then
-    printf 'Operação destrutiva recusada. Use CONFIRM_RESET_LOCAL=APAGAR make reset-local.\n' >&2
+    printf 'Operação destrutiva recusada. Use CONFIRM_RESET_LOCAL=APAGAR make -f scripts/Makefile reset-local.\n' >&2
     exit 2
 fi
 
 cd -- "$ROOT_DIR"
-docker compose --project-name "$PROJECT_NAME" --profile local \
+docker compose -f deploy/compose.yaml --project-name "$PROJECT_NAME" --profile local \
     down --volumes --remove-orphans
 printf 'Estado Docker local removido: projeto=%s, incluindo volumes PostgreSQL/Mosquitto.\n' \
     "$PROJECT_NAME"

@@ -22,11 +22,13 @@ from .docker_env import _limpar_saida
 
 
 def _ativo() -> bool:
+    """Verifica se o marcador de sessão ainda permite a execução do observador."""
     marker = os.environ.get("LAB_SESSION_MARKER")
     return marker is None or Path(marker).exists()
 
 
 def _pronto(kind: str) -> None:
+    """Grava o marcador de prontidão do observador para confirmação pelo launcher."""
     marker = os.environ.get("LAB_SESSION_MARKER")
     if marker:
         path = Path(marker)
@@ -34,12 +36,14 @@ def _pronto(kind: str) -> None:
 
 
 def mqtt_watch() -> None:
+    """Assina o broker e exibe mensagens enquanto a sessão do laboratório estiver ativa."""
     source = dict(os.environ, MQTT_CLIENT_ID=f"lab-watch-{uuid4().hex[:12]}")
     settings = Settings.from_env(source)
     client = create_client(settings)
     falha = Event()
 
     def on_connect(c, _userdata, _flags, reason_code, _properties):
+        """Trata a resposta de conexão MQTT e sinaliza prontidão ou falha ao chamador."""
         if reason_code.is_failure:
             falha.set()
             return
@@ -48,6 +52,7 @@ def mqtt_watch() -> None:
         _pronto("mqtt")
 
     def on_message(_client, _userdata, msg):
+        """Registra a mensagem recebida pelo observador MQTT sem alterar dados do domínio."""
         print(f"{msg.topic} {msg.payload.decode('utf-8', errors='replace')}", flush=True)
 
     client.on_connect = on_connect
@@ -65,6 +70,7 @@ def mqtt_watch() -> None:
 
 
 def db_watch() -> None:
+    """Consulta periodicamente leituras, passagens, movimentos e última zona no banco do ensaio."""
     url = os.environ.get("APP_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not url:
         raise ValueError("APP_DATABASE_URL ou DATABASE_URL ausente")
@@ -138,11 +144,12 @@ def db_watch() -> None:
 
 
 def logs_watch() -> None:
+    """Acompanha logs do ingestor pelo Compose selecionado até o encerramento da sessão."""
     arquivo = os.environ["LAB_COMPOSE_ENV_FILE"]
     perfil = os.environ["LAB_COMPOSE_PROFILE"]
     servico = os.environ["LAB_INGESTOR_SERVICE"]
     processo = subprocess.Popen(
-        ["docker", "compose", "--env-file", arquivo, "--profile", perfil,
+        ["docker", "compose", "-f", str(ROOT / "deploy" / "compose.yaml"), "--env-file", arquivo, "--profile", perfil,
          "logs", "-f", servico], cwd=ROOT, env=os.environ.copy()
     )
     try:
@@ -162,6 +169,7 @@ def logs_watch() -> None:
 
 
 def main() -> None:
+    """Executa a entrada de linha de comando de tools.lab_launcher.watch; devolve o código de saída quando aplicável."""
     parser = argparse.ArgumentParser()
     parser.add_argument("kind", choices=("mqtt", "db", "logs"))
     parser.add_argument("--session-file", type=Path)

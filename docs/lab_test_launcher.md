@@ -20,7 +20,7 @@ python -m tools.lab_launcher start --env local --source synthetic
 python -m tools.lab_launcher start --env local --source physical --reader-id reader-01
 python -m tools.lab_launcher start --env local --source physical --tag "3034000000000C40000000E8=Bomba de infusão 01"
 python -m tools.lab_launcher start --env managed --source physical --mqtt-transport plain --tag "3034000000000C40000000E8=Bomba de infusão 01"
-python -m tools.lab_launcher start --env managed --source synthetic --env-file .env.cloud
+python -m tools.lab_launcher start --env managed --source synthetic --env-file config/environments/.env.cloud
 python -m tools.lab_launcher stop --env local
 python -m tools.lab_launcher stop --env local --clear-ports
 ```
@@ -81,7 +81,7 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
 
 ## Pré-requisitos
 
-- Python 3.12 e `pip install -r requirements-lab.txt` no host (inclui o Flet do
+- Python 3.12 e `pip install -r requirements/lab.txt` no host (inclui o Flet do
   simulador visual; na primeira execução o Flet baixa o cliente desktop).
 - Windows 11: Docker Desktop com backend WSL2. O launcher abre três abas
   nomeadas **MQTT**, **Ingestor** e **Banco** no Windows Terminal. Se `wt.exe`
@@ -97,7 +97,7 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
   `gnome-terminal`, `konsole`, `xterm`, `x-terminal-emulator` ou `tmux` para os
   três painéis. Sem `DISPLAY`/`WAYLAND_DISPLAY` (inclusive WSL2 sem servidor
   gráfico), o launcher escolhe `tmux`; instale-o para esse ambiente.
-- O observador MQTT usa `paho-mqtt` já presente em `requirements.txt`; não
+- O observador MQTT usa `paho-mqtt` já presente em `requirements/base.txt`; não
   precisa instalar `mosquitto_sub` no host. No modo interativo o launcher
   acompanha o teste até `Ctrl+C`. Os três observadores usam um sinal de sessão:
   `Ctrl+C` ou `stop` encerra os observadores e os serviços Compose. As abas de
@@ -107,15 +107,15 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
   Em execução sem terminal (`--no-terminals`), use `stop` para encerrar o Compose.
   Com o simulador e `--no-terminals`, o launcher espera a janela ser fechada.
 
-No modo `managed`, configure `.env.cloud` fora do Git com broker e banco de
+No modo `managed`, configure `config/environments/.env.cloud` fora do Git com broker e banco de
 testes. O launcher pede campos ausentes e oferece salvá-los no arquivo ignorado
 pelo Git. `DATABASE_URL` deve apontar para o banco de migrations/seed e
 `APP_DATABASE_URL` para o banco de ingestão. O modo `managed` nunca executa
 `down -v`. A operação não configura hotspot no notebook.
 No cenário externo sintético, use uma credencial MQTT de publicação diferente
 da credencial de assinatura do ingestor. O launcher usa automaticamente
-`.env.cloud.reader-01` se existir; senão, o menu pede o caminho. Em execução
-sem menu, passe `--publisher-env-file .env.cloud.reader-01`. O arquivo é local
+`config/environments/.env.cloud.reader-01` se existir; senão, o menu pede o caminho. Em execução
+sem menu, passe `--publisher-env-file config/environments/.env.cloud.reader-01`. O arquivo é local
 e ignorado pelo Git. Configure nele `MQTT_USERNAME`, `MQTT_PASSWORD` e o
 `MQTT_TOPIC` exato autorizado para Publish. Conectar ao broker não comprova
 essa permissão: se não houver PUBACK QoS 1, o launcher informa se houve

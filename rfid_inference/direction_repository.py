@@ -16,10 +16,13 @@ from .direction import (
 
 
 class DirectionRepository:
+    """Consulta evidências/topologia histórica e persiste a direção de forma idempotente."""
     def __init__(self, engine: Engine):
+        """Inicializa DirectionRepository com as dependências e valores recebidos."""
         self.engine = engine
 
     def pending_ids(self, limit: int = 100) -> tuple[int, ...]:
+        """Lista IDs de passagens ainda sem direção em ordem crescente e com limite."""
         if limit < 1:
             raise ValueError("limit deve ser positivo")
         with self.engine.connect() as connection:
@@ -29,6 +32,7 @@ class DirectionRepository:
             ))
 
     def load(self, passage_id: int) -> DirectionContext | None:
+        """Carrega contexto, leituras e topologia histórica de uma passagem ainda sem direção."""
         with self.engine.connect() as connection:
             row = connection.execute(
                 select(
@@ -44,6 +48,7 @@ class DirectionRepository:
                 return None
 
             def historical_zones(at) -> tuple[int, int] | None:
+                """Resolve uma única zona por lado na topologia vigente no instante; ambiguidades devolvem None."""
                 if at is None or row.existing_portal_id is None:
                     return None
                 mappings = connection.execute(
@@ -68,6 +73,7 @@ class DirectionRepository:
                 return zone_a, zone_b
 
             def evidence(antenna_id: int | None, reading_id: int | None) -> DirectionEvidence:
+                """Carrega a leitura e seus mapeamentos temporais para compor a evidência de direção."""
                 reading = connection.execute(
                     select(LeituraBruta.antena_id, LeituraBruta.epc, LeituraBruta.lido_em)
                     .where(LeituraBruta.id == reading_id)

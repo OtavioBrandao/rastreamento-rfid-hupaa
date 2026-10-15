@@ -49,6 +49,7 @@ TESTES = {
 
 
 def python_do_projeto() -> str:
+    """Seleciona o Python da .venv local ou usa o executável que iniciou o comando."""
     for candidato in (ROOT / ".venv" / "Scripts" / "python.exe", ROOT / ".venv" / "bin" / "python"):
         if candidato.exists():
             return str(candidato)
@@ -69,6 +70,7 @@ def servir_api(modo: str, env_file: str | None, host: str, porta: int) -> None:
 
 def escolher_teste(valor: str | None) -> str:
     # Mesmo menu do tools.lab_launcher; aqui só para saber qual banco a API deve usar.
+    """Resolve uma das quatro opções do menu de demonstração."""
     if valor is None:
         for chave, (_, _, descricao) in TESTES.items():
             print(f"{chave}. {descricao}")
@@ -79,16 +81,19 @@ def escolher_teste(valor: str | None) -> str:
 
 
 def flet_disponivel(python: str) -> bool:
+    """Verifica em subprocesso se o Python escolhido consegue importar o Flet."""
     return subprocess.run([python, "-c", "import flet"], capture_output=True).returncode == 0
 
 
 def porta_ocupada(host: str, porta: int) -> bool:
+    """Testa conexão TCP para detectar um listener existente antes de iniciar API/interface."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.settimeout(0.5)
         return sock.connect_ex((host, porta)) == 0
 
 
 def aguardar_http(url: str, processo: subprocess.Popen, timeout: float = 30) -> bool:
+    """Aguarda resposta HTTP enquanto o subprocesso está vivo, respeitando timeout."""
     prazo = time.monotonic() + timeout
     while time.monotonic() < prazo and processo.poll() is None:
         try:
@@ -101,6 +106,7 @@ def aguardar_http(url: str, processo: subprocess.Popen, timeout: float = 30) -> 
 
 def iniciar(comando: list[str], pasta: Path, env: dict[str, str], log: Path | None) -> subprocess.Popen:
     # Grupo próprio: o Ctrl+C do terminal vai só para o launcher; estes são encerrados depois.
+    """Inicia subprocesso em grupo próprio, com entrada fechada e log opcional."""
     extras = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if WINDOWS
               else {"start_new_session": True})
     saida = open(log, "w", encoding="utf-8") if log else None  # noqa: SIM115 - vive junto do processo
@@ -109,6 +115,7 @@ def iniciar(comando: list[str], pasta: Path, env: dict[str, str], log: Path | No
 
 
 def encerrar(processo: subprocess.Popen) -> None:
+    """Fecha a vigência da associação ativa no instante informado."""
     if processo.poll() is not None:
         return
     if WINDOWS:
@@ -126,17 +133,19 @@ def encerrar(processo: subprocess.Popen) -> None:
 
 
 def ultimas_linhas(log: Path | None, quantidade: int = 15) -> str:
+    """Lê o fim do log de um subprocesso para diagnóstico de inicialização."""
     if log is None or not log.exists():
         return ""
     return "\n".join(log.read_text(encoding="utf-8", errors="replace").splitlines()[-quantidade:])
 
 
 def main() -> int:
+    """Executa a entrada de linha de comando de scripts.dev; devolve o código de saída quando aplicável."""
     parser = argparse.ArgumentParser(description="Sobe API + frontend e abre o launcher de laboratório.")
     parser.add_argument("--teste", choices=sorted(TESTES), help="pula o menu e escolhe o teste")
     parser.add_argument("--sem-teste", action="store_true",
                         help="sobe só API e frontend no banco externo, sem o launcher")
-    parser.add_argument("--env-file", help="arquivo de ambiente (padrão: .env.local ou .env.cloud)")
+    parser.add_argument("--env-file", help="arquivo de ambiente (padrão: config/environments/.env.local ou .env.cloud)")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--api-port", type=int, default=8010)
     parser.add_argument("--front-port", type=int, default=5173)
@@ -158,7 +167,7 @@ def main() -> int:
         print(f"\n> {descricao}")
         if origem == "synthetic" and not flet_disponivel(python):
             sys.exit("O simulador visual precisa do Flet. Instale com:\n"
-                     f"  {python} -m pip install -r requirements-lab.txt")
+                     f"  {python} -m pip install -r requirements/lab.txt")
 
     if porta_ocupada(args.host, args.api_port):
         sys.exit(f"A porta {args.api_port} já está em uso. Use --api-port <outra porta>.")

@@ -104,20 +104,21 @@ def test_prioridade_global_antes_de_paginar_e_sem_alterar_zona(db, catalog):
         ))
     db.flush()
 
-    expected = [ids[1], ids[2], ids[5], ids[4], ids[0], ids[3]]
+    expected = [ids[4], ids[5], ids[0], ids[2], ids[1], ids[3]]
     pages = [search(db, sort="prioridade", page=page, page_size=2) for page in (1, 2, 3)]
     assert [item.id for page in pages for item in page.items] == expected
     assert all(page.total == 6 for page in pages)
-    assert pages[0].items[0].status == "atencao"
-    assert pages[0].items[0].ultima_zona.id == catalog["b"]
-    assert pages[0].items[1].status == "nunca_detectado"
-    assert pages[0].items[1].ultima_zona is None
+    by_id = {item.id: item for page in pages for item in page.items}
+    assert by_id[ids[1]].status == "atencao"
+    assert by_id[ids[1]].ultima_zona.id == catalog["b"]
+    assert by_id[ids[2]].status == "nunca_detectado"
+    assert by_id[ids[2]].ultima_zona is None
 
     # Passados 30 s, sem nova leitura, em trânsito volta a preceder atenção.
     expired = buscar(db, now=NOW + timedelta(seconds=31), threshold=THRESHOLD,
                      sort="prioridade")
     assert [item.id for item in expired.items] == [
-        ids[5], ids[4], ids[0], ids[1], ids[2], ids[3],
+        ids[4], ids[5], ids[0], ids[1], ids[2], ids[3],
     ]
     # O contrato padrão por nome é preservado para os outros consumidores.
     assert [item.nome for item in search(db).items] == sorted(item.nome for item in expired.items)
@@ -311,3 +312,40 @@ def test_paginacao_e_mudanca_da_ultima_zona_no_http(db, catalog):
                 "ultima_zona"]["id"] == catalog["b"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_prioridade_nome_natural_estavel_com_novas_leituras(db, catalog):
+    ids = catalog["ids"]
+    # Dois ativos em trânsito; a data mais recente não pode desempatar.
+    for index, name in ((0, "Bomba 10"), (4, "Bomba 2"), (5, "Bomba 1")):
+        db.get(Equipamento, ids[index]).nome = name
+    db.flush()
+    assert [i.nome for i in search(db, sort="prioridade").items[:3]] == [
+        "Bomba 1", "Bomba 2", "Bomba 10"]
+    reader = Leitor(reader_id="ordem", identificador_serial="ordem", fabricante="Teste", modelo="Teste")
+    db.add(reader)
+    db.flush()
+    antenna = Antena(leitor_id=reader.id, porta_numero=1, zona_associada_id=catalog["a"], funcao="indefinido")
+    db.add(antenna)
+    db.flush()
+    for index, seconds in ((0, 0), (4, 20), (1, 1)):
+        epc = f"E300{index:020X}"
+        tag = Tag(epc=epc)
+        db.add(tag)
+        db.flush()
+        if index != 0:
+            db.add(AssociacaoTagEquipamento(equipamento_id=ids[index], tag_id=tag.id))
+        else:
+            # Reutiliza a associação ativa já criada pelo catálogo.
+            epc = search(db, equipamento_id=ids[0]).items[0].epc
+        db.add(LeituraBruta(event_id=f"sha256:{index+20:064x}", epc=epc,
+                           antena_id=antenna.id, lido_em=NOW-timedelta(seconds=seconds)))
+    db.flush()
+    first = [i.id for i in search(db, sort="prioridade").items]
+    assert first[:4] == [ids[4], ids[0], ids[5], ids[1]]
+    # Uma leitura posterior troca o horário relativo, mas mantém grupo e posição.
+    db.add(LeituraBruta(event_id=f"sha256:{99:064x}",
+        epc=search(db, equipamento_id=ids[4]).items[0].epc,
+        antena_id=antenna.id, lido_em=NOW))
+    db.flush()
+    assert [i.id for i in search(db, sort="prioridade").items] == first

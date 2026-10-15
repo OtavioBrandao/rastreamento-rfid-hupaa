@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 
 class MovimentacaoResposta(BaseModel):
+    """Contrato de dados Movimentacao Resposta; valida campos e serializa a resposta da API."""
     id: int
     equipamento_id: int
     epc: str | None
@@ -27,6 +28,7 @@ class MovimentacaoResposta(BaseModel):
 
 
 class MovimentacaoPagina(BaseModel):
+    """Contrato de dados Movimentacao Pagina; valida campos e serializa a resposta da API."""
     items: list[MovimentacaoResposta]
     page: int
     size: int

@@ -1,9 +1,9 @@
-LOCAL_ENV ?= .env.local
-MANAGED_ENV ?= .env.cloud
+LOCAL_ENV ?= config/environments/.env.local
+MANAGED_ENV ?= config/environments/.env.cloud
 LOCAL_PROJECT ?= rfid-hospital-local
 
-COMPOSE_LOCAL = docker compose --env-file $(LOCAL_ENV) --profile local
-COMPOSE_MANAGED = docker compose --env-file $(MANAGED_ENV) --profile managed
+COMPOSE_LOCAL = docker compose -f deploy/compose.yaml --env-file $(LOCAL_ENV) --profile local
+COMPOSE_MANAGED = docker compose -f deploy/compose.yaml --env-file $(MANAGED_ENV) --profile managed
 
 .PHONY: local-up managed-up stop-local stop-managed status-local status-managed \
 	logs-local logs-managed migrate-local migrate-managed migration-current-local \
@@ -34,16 +34,16 @@ logs-managed:
 	$(COMPOSE_MANAGED) logs --follow --tail=100
 
 migrate-local:
-	$(COMPOSE_LOCAL) run --rm migrate-local alembic upgrade head
+	$(COMPOSE_LOCAL) run --rm migrate-local alembic -c config/alembic.ini upgrade head
 
 migrate-managed:
-	$(COMPOSE_MANAGED) run --rm migrate-managed alembic upgrade head
+	$(COMPOSE_MANAGED) run --rm migrate-managed alembic -c config/alembic.ini upgrade head
 
 migration-current-local:
-	$(COMPOSE_LOCAL) run --rm migrate-local alembic current
+	$(COMPOSE_LOCAL) run --rm migrate-local alembic -c config/alembic.ini current
 
 migration-current-managed:
-	$(COMPOSE_MANAGED) run --rm migrate-managed alembic current
+	$(COMPOSE_MANAGED) run --rm migrate-managed alembic -c config/alembic.ini current
 
 simulator-local:
 	$(COMPOSE_LOCAL) run --rm --no-deps \

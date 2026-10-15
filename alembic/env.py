@@ -1,6 +1,14 @@
+"""Ambiente Alembic: resolve URL, metadata e execução online/offline das revisões.
+
+Carrega o perfil genérico em config/environments sem sobrescrever o ambiente.
+O comando Alembic controla a execução; importar o ambiente fora desse contexto
+não é uma interface pública de inicialização do produto.
+"""
+
 import os
 import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, pool
@@ -11,10 +19,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from db.models import Base  # noqa: E402
 from db.url import get_database_url  # noqa: E402
 
-# Carrega o .env da raiz do projeto (nunca commitado — está no .gitignore).
+# Carrega config/environments/.env (nunca commitado — está no .gitignore).
 # Isso permite trocar de ambiente (local/cloud, Neon dev/prod) só trocando
 # de .env, sem NUNCA precisar editar alembic.ini.
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[1] / "config/environments/.env")
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

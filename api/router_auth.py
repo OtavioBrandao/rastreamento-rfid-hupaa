@@ -29,6 +29,7 @@ DETALHE_LOGIN_RECUSADO = "credenciais_invalidas"
 
 
 def usuario_para_resposta(usuario: Usuario) -> UsuarioResposta:
+    """Converte usuário em resposta pública sem hash de senha ou token."""
     return UsuarioResposta(
         id=usuario.id,
         nome=usuario.nome,
@@ -44,6 +45,7 @@ def usuario_para_resposta(usuario: Usuario) -> UsuarioResposta:
 
 
 def _sessao_para_resposta(sessao: service_auth.SessaoAutenticada) -> SessaoResposta:
+    """Monta resposta da sessão com usuário e exigência de troca de senha."""
     return SessaoResposta(
         usuario=usuario_para_resposta(sessao.usuario),
         sessao_expira_em=em_utc(sessao.expira_em),
@@ -52,6 +54,7 @@ def _sessao_para_resposta(sessao: service_auth.SessaoAutenticada) -> SessaoRespo
 
 
 def _apagar_cookie(response: Response, config: ConfiguracaoAuth) -> None:
+    """Remove o cookie de autenticação com os atributos de segurança configurados."""
     response.delete_cookie(
         NOME_COOKIE, path="/", secure=config.cookie_seguro, httponly=True, samesite="strict"
     )
@@ -65,6 +68,7 @@ def login(
     agora: datetime = Depends(obter_agora),
     config: ConfiguracaoAuth = Depends(obter_configuracao_auth),
 ) -> SessaoResposta:
+    """Autentica credenciais, emite cookie de sessão opaco e devolve o usuário autenticado."""
     try:
         token, sessao = service_auth.autenticar(db, payload.email, payload.senha, agora, config)
     except service_auth.LoginRecusado as erro:
@@ -92,6 +96,7 @@ def logout(
     agora: datetime = Depends(obter_agora),
     config: ConfiguracaoAuth = Depends(obter_configuracao_auth),
 ) -> Response:
+    """Revoga a sessão corrente e remove o cookie de autenticação."""
     service_auth.encerrar_sessao(db, rfid_sessao, agora)
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     _apagar_cookie(response, config)
@@ -103,6 +108,7 @@ def me(
     response: Response,
     sessao: service_auth.SessaoAutenticada = Depends(sessao_autenticada),
 ) -> SessaoResposta:
+    """Devolve usuário e estado da sessão autenticada corrente."""
     response.headers["Cache-Control"] = "no-store"
     return _sessao_para_resposta(sessao)
 
@@ -117,6 +123,7 @@ def trocar_senha(
     agora: datetime = Depends(obter_agora),
     config: ConfiguracaoAuth = Depends(obter_configuracao_auth),
 ) -> Response:
+    """Valida a senha atual, altera o hash e conclui a troca obrigatória de senha."""
     try:
         service_auth.trocar_senha(
             db, sessao, payload.senha_atual, payload.nova_senha, agora, config

@@ -51,6 +51,7 @@ _ENTIDADE_INVALIDA = (
 
 
 def _http(erro: service.ErroTopologiaPortal) -> HTTPException:
+    """Traduz erro do domínio de topologia em erro HTTP correspondente."""
     if isinstance(erro, _NAO_ENCONTRADO):
         codigo = status.HTTP_404_NOT_FOUND
     elif isinstance(erro, _CONFLITO):
@@ -72,6 +73,9 @@ def _http(erro: service.ErroTopologiaPortal) -> HTTPException:
 def criar_mapeamento(
     portal_id: int, payload: MapeamentoCriar, db: Session = Depends(get_db)
 ) -> service.MapeamentoAntenaPortal:
+    """Cria mapeamento.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.criar_mapeamento(
             db,
@@ -96,6 +100,9 @@ def listar_mapeamentos_portal(
     incluir_historico: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> list[service.MapeamentoAntenaPortal]:
+    """Lista mapeamentos portal.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.listar_mapeamentos_portal(
             db, portal_id=portal_id, incluir_historico=incluir_historico
@@ -113,6 +120,9 @@ def listar_mapeamentos_portal(
 def obter_topologia_portal(
     portal_id: int, db: Session = Depends(get_db)
 ) -> TopologiaPortalResposta:
+    """Obtém topologia portal.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         topologia = service.obter_topologia_portal(db, portal_id)
         return TopologiaPortalResposta(
@@ -148,6 +158,9 @@ def obter_topologia_portal(
 def detalhar_mapeamento(
     mapeamento_id: int, db: Session = Depends(get_db)
 ) -> service.MapeamentoAntenaPortal:
+    """Obtém os detalhes de mapeamento.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.buscar_mapeamento_por_id(db, mapeamento_id)
     except service.ErroTopologiaPortal as erro:
@@ -163,6 +176,9 @@ def detalhar_mapeamento(
 def atualizar_mapeamento(
     mapeamento_id: int, payload: MapeamentoAtualizar, db: Session = Depends(get_db)
 ) -> service.MapeamentoAntenaPortal:
+    """Atualiza mapeamento.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.atualizar_mapeamento(
             db,
@@ -184,6 +200,9 @@ def atualizar_mapeamento(
 def inativar_mapeamento(
     mapeamento_id: int, db: Session = Depends(get_db)
 ) -> service.MapeamentoAntenaPortal:
+    """Inativa mapeamento.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.inativar_mapeamento(db, mapeamento_id)
     except service.ErroTopologiaPortal as erro:
@@ -199,6 +218,9 @@ def inativar_mapeamento(
 def listar_historico_antena(
     antena_id: int, db: Session = Depends(get_db)
 ) -> list[service.MapeamentoAntenaPortal]:
+    """Lista historico antena.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.listar_historico_antena(db, antena_id)
     except service.ErroTopologiaPortal as erro:

@@ -39,7 +39,7 @@ No Windows, ambiente virtual `.venv`, com o Mosquitto já iniciado:
 ```powershell
 $env:RUN_MQTT_INTEGRATION='1'
 & .venv/Scripts/python.exe -m unittest discover -s tests -v
-& .venv/Scripts/python.exe -m rfid_ingestion.verification --env-file .env.local --publisher-env .env.local.reader-01 --publisher-env .env.local.reader-02 --seconds 10 --count 10 --network windows-docker-loopback --report data/iss001-local.json
+& .venv/Scripts/python.exe -m rfid_ingestion.verification --env-file config/environments/.env.local --publisher-env config/environments/.env.local.reader-01 --publisher-env config/environments/.env.local.reader-02 --seconds 10 --count 10 --network windows-docker-loopback --report data/iss001-local.json
 ```
 
 Os perfis dos publicadores são cópias locais com Client IDs e tópicos individuais
@@ -81,7 +81,7 @@ shell completo; não é dependência de laboratório.
 ## Pendências separadas
 
 Verificações finais: `git diff --check` e `git diff --cached --check` sem erros;
-`compileall`, links relativos e `docker compose config --quiet` aprovados.
+`compileall`, links relativos e `docker compose -f deploy/compose.yaml config --quiet` aprovados.
 Os 25 arquivos preparados foram inspecionados e verificados por padrões de
 segredos e exemplos de ambiente. A única ocorrência inicial foi a URL inválida
 deliberadamente sintética de um teste, revisada e excluída do alerta. Nenhum

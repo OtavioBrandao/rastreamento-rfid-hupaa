@@ -76,7 +76,7 @@ funcionaria com o banco na mesma máquina.
     leituras, X `a_para_b` e `b_para_a` com Zona B e Zona A, Y `a_para_b` com
     Zona B, nenhuma direção ambígua e nenhuma passagem da tag parada.
 - Ambiente real (HiveMQ Cloud + Neon `us-east-2`), ingestor no host com o
-  `.env.cloud` e o publicador com a credencial `reader-01`:
+  `config/environments/.env.cloud` e o publicador com a credencial `reader-01`:
   - mesmo cenário das três tags, duas rodadas: X `a_para_b` e `b_para_a` com Zona
     B e Zona A, Y `a_para_b` com Zona B, nenhuma ambiguidade nem queda;
   - 3 minutos com duas tags lendo sem parar (~10 leituras/s): 1798 de 1798

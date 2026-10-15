@@ -85,15 +85,15 @@ python scripts/dev.py --api-port 8020 --front-port 5180   # se as portas estiver
 1. O script mostra o mesmo menu do launcher de laboratório.
 2. Sobe a API (porta padrão **8010**) e o frontend Vite (porta 5173) em segundo
    plano, espera os dois responderem e abre o navegador. A API usa o mesmo
-   banco do cenário: o PostgreSQL local (montado a partir do `.env.local`,
-   como faz o launcher) nas opções 1 e 2, e o banco externo do `.env.cloud`
+   banco do cenário: o PostgreSQL local (montado a partir do `config/environments/.env.local`,
+   como faz o launcher) nas opções 1 e 2, e o banco externo do `config/environments/.env.cloud`
    nas opções 3 e 4 (e em `--sem-teste`).
 3. Entrega o terminal ao `tools.lab_launcher start --env ... --source ...`,
    que segue com as perguntas dele (transporte, tags físicas), sobe Docker,
    ingestor e migrations, abre os três terminais de observação (MQTT,
    Ingestor e Banco) e, nas opções 1 e 4, abre o
    [simulador visual](simulador-visual-laboratorio.md) para mover os itens
-   pela planta. Sem o Flet (`requirements-lab.txt`), o script avisa antes de
+   pela planta. Sem o Flet (`requirements/lab.txt`), o script avisa antes de
    subir qualquer coisa.
 4. `Ctrl+C` encerra o launcher (que derruba os contêineres) e depois a API e
    o frontend, inclusive os processos filhos do `npm` (Windows e Ubuntu).

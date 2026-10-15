@@ -29,6 +29,7 @@ def _validar_texto_preenchido(valor: str | None) -> str | None:
 
 
 class EquipamentoCriar(BaseModel):
+    """Contrato de dados Equipamento Criar; valida campos e serializa a resposta da API."""
     nome: str = Field(..., max_length=255)
     tipo_id: int = Field(..., gt=0)
     identificador_interno: str = Field(..., max_length=255)
@@ -59,6 +60,7 @@ class EquipamentoAtualizar(BaseModel):
 
 
 class EquipamentoResposta(BaseModel):
+    """Contrato de dados Equipamento Resposta; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -79,6 +81,7 @@ class EquipamentoResposta(BaseModel):
 
 
 class EquipamentoPagina(BaseModel):
+    """Contrato de dados Equipamento Pagina; valida campos e serializa a resposta da API."""
     items: list[EquipamentoResposta]
     page: int
     size: int

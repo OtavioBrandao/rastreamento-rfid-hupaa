@@ -1,0 +1,17 @@
+**
+!requirements/
+!requirements/base.txt
+!config/
+!config/alembic.ini
+!deploy/
+!deploy/Dockerfile
+!deploy/Dockerfile.dockerignore
+!alembic/**
+!db/**
+!docker/**
+!rfid_ingestion/**
+!rfid_inference/**
+!rfid_movement/**
+!rfid_location/**
+**/__pycache__
+**/*.py[cod]

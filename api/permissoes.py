@@ -35,6 +35,7 @@ METODOS_DE_CONSULTA = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 class Permissao(StrEnum):
+    """Catálogo de capacidades usadas para autorizar operações da API por perfil."""
     EQUIPAMENTOS_CONSULTAR = "equipamentos:consultar"
     EQUIPAMENTOS_ALTERAR = "equipamentos:alterar"
     # ISS-025: corrigir patrimônio/cadastro e localização com justificativa; só administrador.
@@ -61,6 +62,7 @@ MATRIZ: dict[str, frozenset[Permissao]] = {
 
 
 def permissoes_do_perfil(perfil: str) -> frozenset[Permissao]:
+    """Devolve o conjunto de permissões concedidas ao perfil conhecido."""
     return MATRIZ.get(perfil, frozenset())
 
 
@@ -72,6 +74,7 @@ def lista_de_permissoes(perfil: str) -> list[str]:
 def _autorizar(
     request: Request, db: Session, sessao: SessaoAutenticada, permissao: Permissao,
 ) -> None:
+    """Verifica permissão do usuário e rejeita operação não autorizada."""
     perfil = sessao.usuario.perfil.nome
     if permissao in permissoes_do_perfil(perfil):
         return
@@ -98,6 +101,7 @@ def exigir(permissao: Permissao) -> Callable[..., SessaoAutenticada]:
         sessao: SessaoAutenticada = Depends(sessao_liberada),
         db: Session = Depends(get_db),
     ) -> SessaoAutenticada:
+        """Executa a verificação de permissão capturada pelo factory da dependência FastAPI."""
         _autorizar(request, db, sessao, permissao)
         return sessao
 
@@ -116,6 +120,7 @@ def exigir_por_metodo(
         sessao: SessaoAutenticada = Depends(sessao_liberada),
         db: Session = Depends(get_db),
     ) -> SessaoAutenticada:
+        """Executa a verificação de permissão capturada pelo factory da dependência FastAPI."""
         exigida = consultar if request.method in METODOS_DE_CONSULTA else alterar
         _autorizar(request, db, sessao, exigida)
         return sessao

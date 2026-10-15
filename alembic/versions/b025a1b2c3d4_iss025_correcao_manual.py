@@ -15,6 +15,7 @@ CHECK_REFERENCIA = (
 
 
 def upgrade() -> None:
+    """Aplica a revisão: ISS-025: versão otimista do equipamento e referência da correção manual."""
     op.add_column("equipamentos", sa.Column(
         "versao", sa.BigInteger(), server_default=sa.text("1"), nullable=False))
     op.create_check_constraint("ck_equipamentos_versao_positiva", "equipamentos", "versao >= 1")
@@ -28,6 +29,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # A referência não cabe no schema antigo: vai para o fim da justificativa.
+    """Reverte a revisão: ISS-025: versão otimista do equipamento e referência da correção manual."""
     op.execute(
         "UPDATE historico_movimentacoes "
         "SET justificativa = justificativa || ' [referência: ' || referencia || ']' "

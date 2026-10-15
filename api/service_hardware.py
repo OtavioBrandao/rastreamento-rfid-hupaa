@@ -94,31 +94,41 @@ class ErroHardware(Exception):
 
 
 class LeitorNaoEncontrado(ErroHardware):
+    """Falha de domínio: leitor nao encontrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, leitor_id: int) -> None:
+        """Inicializa LeitorNaoEncontrado com as dependências e valores recebidos."""
         self.leitor_id = leitor_id
         super().__init__(f"Leitor {leitor_id} não encontrado.")
 
 
 class AntenaNaoEncontrada(ErroHardware):
+    """Falha de domínio: antena nao encontrada; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, antena_id: int) -> None:
+        """Inicializa AntenaNaoEncontrada com as dependências e valores recebidos."""
         self.antena_id = antena_id
         super().__init__(f"Antena {antena_id} não encontrada.")
 
 
 class PortalNaoEncontrado(ErroHardware):
+    """Falha de domínio: portal nao encontrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, portal_id: int) -> None:
+        """Inicializa PortalNaoEncontrado com as dependências e valores recebidos."""
         self.portal_id = portal_id
         super().__init__(f"Portal {portal_id} não encontrado.")
 
 
 class ReaderIdDuplicado(ErroHardware):
+    """Falha de domínio: reader id duplicado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, reader_id: str) -> None:
+        """Inicializa ReaderIdDuplicado com as dependências e valores recebidos."""
         self.reader_id = reader_id
         super().__init__(f"Já existe um leitor com reader_id {reader_id!r}.")
 
 
 class IdentificadorSerialDuplicado(ErroHardware):
+    """Falha de domínio: identificador serial duplicado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, identificador_serial: str) -> None:
+        """Inicializa IdentificadorSerialDuplicado com as dependências e valores recebidos."""
         self.identificador_serial = identificador_serial
         super().__init__(f"Já existe um leitor com identificador_serial {identificador_serial!r}.")
 
@@ -130,6 +140,7 @@ class PortaJaUtilizada(ErroHardware):
     """
 
     def __init__(self, leitor_id: int, porta_numero: int) -> None:
+        """Inicializa PortaJaUtilizada com as dependências e valores recebidos."""
         self.leitor_id = leitor_id
         self.porta_numero = porta_numero
         super().__init__(
@@ -142,6 +153,7 @@ class ZonasDoPortalIguais(ErroHardware):
     """Tradução de `ck_portal_zonas_distintas`: um portal liga DUAS zonas distintas."""
 
     def __init__(self, zona_id: int | None = None) -> None:
+        """Inicializa ZonasDoPortalIguais com as dependências e valores recebidos."""
         self.zona_id = zona_id
         super().__init__("zona_a_id e zona_b_id precisam ser zonas distintas.")
 
@@ -150,13 +162,16 @@ class LeitorInvalido(ErroHardware):
     """`leitor_id` de uma antena aponta para leitor inexistente ou inativo."""
 
     def __init__(self, leitor_id: int, motivo: str) -> None:
+        """Inicializa LeitorInvalido com as dependências e valores recebidos."""
         self.leitor_id = leitor_id
         self.motivo = motivo
         super().__init__(f"leitor_id {leitor_id} inválido: {motivo}.")
 
 
 class ZonaInvalidaParaAntena(ErroHardware):
+    """Falha de domínio: zona invalida para antena; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, zona_id: int, motivo: str) -> None:
+        """Inicializa ZonaInvalidaParaAntena com as dependências e valores recebidos."""
         self.zona_id = zona_id
         self.motivo = motivo
         super().__init__(f"zona_associada_id {zona_id} inválida: {motivo}.")
@@ -166,13 +181,16 @@ class PortalInvalido(ErroHardware):
     """`portal_id` de uma antena aponta para portal inexistente ou inativo."""
 
     def __init__(self, portal_id: int, motivo: str) -> None:
+        """Inicializa PortalInvalido com as dependências e valores recebidos."""
         self.portal_id = portal_id
         self.motivo = motivo
         super().__init__(f"portal_id {portal_id} inválido: {motivo}.")
 
 
 class ZonaInvalidaParaPortal(ErroHardware):
+    """Falha de domínio: zona invalida para portal; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, zona_id: int, lado: str, motivo: str) -> None:
+        """Inicializa ZonaInvalidaParaPortal com as dependências e valores recebidos."""
         self.zona_id = zona_id
         self.lado = lado
         self.motivo = motivo
@@ -186,6 +204,7 @@ class PortalComMapeamentosAtivos(ErroHardware):
     """
 
     def __init__(self, portal_id: int, total_mapeamentos: int) -> None:
+        """Inicializa PortalComMapeamentosAtivos com as dependências e valores recebidos."""
         self.portal_id = portal_id
         self.total_mapeamentos = total_mapeamentos
         super().__init__(
@@ -201,6 +220,7 @@ class AntenaComMapeamentoAtivo(ErroHardware):
     """
 
     def __init__(self, antena_id: int, portal_id: int, motivo: str) -> None:
+        """Inicializa AntenaComMapeamentoAtivo com as dependências e valores recebidos."""
         self.antena_id = antena_id
         self.portal_id = portal_id
         self.motivo = motivo
@@ -217,6 +237,7 @@ class LeitorComMapeamentosAtivos(ErroHardware):
     """
 
     def __init__(self, leitor_id: int, total_mapeamentos: int) -> None:
+        """Inicializa LeitorComMapeamentosAtivos com as dependências e valores recebidos."""
         self.leitor_id = leitor_id
         self.total_mapeamentos = total_mapeamentos
         super().__init__(
@@ -229,10 +250,12 @@ class LeitorComMapeamentosAtivos(ErroHardware):
 
 
 def _pgcode(erro: IntegrityError) -> str | None:
+    """Extrai SQLSTATE do erro de integridade PostgreSQL."""
     return getattr(erro.orig, "pgcode", None)
 
 
 def _nome_da_constraint(erro: IntegrityError) -> str:
+    """Extrai o nome da constraint PostgreSQL que rejeitou a operação."""
     return getattr(getattr(erro.orig, "diag", None), "constraint_name", None) or ""
 
 
@@ -254,6 +277,7 @@ def _commitar(session: Session, traduzir) -> None:
 
 
 def _paginar(session: Session, modelo, filtros: list, ordem: tuple, page: int, size: int) -> Pagina:
+    """Aplica contagem, limite e deslocamento à consulta e devolve a página solicitada."""
     page = max(1, page)
     size = max(1, min(size, TAMANHO_PAGINA_MAXIMO))
 
@@ -281,6 +305,7 @@ def _validar_campos(campos: Mapping[str, Any], permitidos: frozenset[str], nivel
 
 
 def _aplicar_campos(entidade, campos: Mapping[str, Any]) -> None:
+    """Aplica apenas os campos fornecidos à entidade ORM recebida."""
     for campo, valor in campos.items():
         if isinstance(valor, str) and campo in _TEXTOS_COM_STRIP:
             valor = valor.strip()
@@ -288,6 +313,7 @@ def _aplicar_campos(entidade, campos: Mapping[str, Any]) -> None:
 
 
 def _exigir_leitor_ativo(session: Session, leitor_id: int) -> Leitor:
+    """Busca o leitor e exige que esteja ativo antes de alterar vínculos de hardware."""
     leitor = session.get(Leitor, leitor_id)
     if leitor is None:
         raise LeitorInvalido(leitor_id, "não existe")
@@ -297,6 +323,7 @@ def _exigir_leitor_ativo(session: Session, leitor_id: int) -> Leitor:
 
 
 def _exigir_portal_ativo(session: Session, portal_id: int) -> Portal:
+    """Busca o portal e exige que esteja ativo para receber o vínculo."""
     portal = session.get(Portal, portal_id)
     if portal is None:
         raise PortalInvalido(portal_id, "não existe")
@@ -306,6 +333,7 @@ def _exigir_portal_ativo(session: Session, portal_id: int) -> Portal:
 
 
 def _exigir_zona_ativa_para_antena(session: Session, zona_id: int) -> Zona:
+    """Valida existência e atividade da zona referenciada pela antena."""
     zona = session.get(Zona, zona_id)
     if zona is None:
         raise ZonaInvalidaParaAntena(zona_id, "não existe")
@@ -315,6 +343,7 @@ def _exigir_zona_ativa_para_antena(session: Session, zona_id: int) -> Zona:
 
 
 def _exigir_zona_ativa_para_portal(session: Session, zona_id: int, lado: str) -> Zona:
+    """Valida existência e atividade da zona referenciada pelo portal."""
     zona = session.get(Zona, zona_id)
     if zona is None:
         raise ZonaInvalidaParaPortal(zona_id, lado, "não existe")
@@ -327,7 +356,9 @@ def _exigir_zona_ativa_para_portal(session: Session, zona_id: int, lado: str) ->
 
 
 def _traduzir_leitor(reader_id: str | None, serial: str | None):
+    """Traduz constraints do leitor em falhas de domínio de identidade ou serial duplicado."""
     def traduzir(erro: IntegrityError):
+        """Mapeia a constraint PostgreSQL para a exceção de domínio adequada à operação."""
         if _pgcode(erro) != _UNIQUE_VIOLATION:
             return None
         constraint = _nome_da_constraint(erro)
@@ -349,6 +380,7 @@ def criar_leitor(
     endereco_rede: str | None = None,
     parametros_ingestao: dict | None = None,
 ) -> Leitor:
+    """Cria leitor."""
     reader_id = reader_id.strip()
     identificador_serial = identificador_serial.strip()
     leitor = Leitor(
@@ -366,6 +398,7 @@ def criar_leitor(
 
 
 def buscar_leitor_por_id(session: Session, leitor_id: int) -> Leitor:
+    """Busca leitor por id."""
     leitor = session.get(Leitor, leitor_id)
     if leitor is None:
         raise LeitorNaoEncontrado(leitor_id)
@@ -378,11 +411,13 @@ def listar_leitores(
     size: int = TAMANHO_PAGINA_PADRAO,
     incluir_inativos: bool = False,
 ) -> Pagina:
+    """Lista leitores."""
     filtros = [] if incluir_inativos else [Leitor.ativo.is_(True)]
     return _paginar(session, Leitor, filtros, (Leitor.reader_id, Leitor.id), page, size)
 
 
 def atualizar_leitor(session: Session, leitor_id: int, campos: Mapping[str, Any]) -> Leitor:
+    """Atualiza leitor."""
     leitor = buscar_leitor_por_id(session, leitor_id)
     _validar_campos(campos, CAMPOS_EDITAVEIS_LEITOR, "leitor")
     _aplicar_campos(leitor, campos)
@@ -414,6 +449,7 @@ def inativar_leitor(session: Session, leitor_id: int) -> Leitor:
 
 
 def reativar_leitor(session: Session, leitor_id: int) -> Leitor:
+    """Reativa leitor."""
     leitor = buscar_leitor_por_id(session, leitor_id)
     if not leitor.ativo:
         leitor.ativo = True
@@ -426,6 +462,7 @@ def reativar_leitor(session: Session, leitor_id: int) -> Leitor:
 
 
 def _traduzir_portal(erro: IntegrityError):
+    """Traduz violações de constraints do portal para erros de domínio."""
     if _pgcode(erro) == _CHECK_VIOLATION and "ck_portal_zonas_distintas" in _nome_da_constraint(erro):
         return ZonasDoPortalIguais()
     return None
@@ -438,6 +475,7 @@ def criar_portal(
     zona_b_id: int,
     localizacao_fisica: str | None = None,
 ) -> Portal:
+    """Cria portal."""
     _exigir_zona_ativa_para_portal(session, zona_a_id, "zona_a_id")
     _exigir_zona_ativa_para_portal(session, zona_b_id, "zona_b_id")
 
@@ -456,6 +494,7 @@ def criar_portal(
 
 
 def buscar_portal_por_id(session: Session, portal_id: int) -> Portal:
+    """Busca portal por id."""
     portal = session.get(Portal, portal_id)
     if portal is None:
         raise PortalNaoEncontrado(portal_id)
@@ -468,11 +507,13 @@ def listar_portais(
     size: int = TAMANHO_PAGINA_PADRAO,
     incluir_inativos: bool = False,
 ) -> Pagina:
+    """Lista portais."""
     filtros = [] if incluir_inativos else [Portal.ativo.is_(True)]
     return _paginar(session, Portal, filtros, (Portal.nome, Portal.id), page, size)
 
 
 def atualizar_portal(session: Session, portal_id: int, campos: Mapping[str, Any]) -> Portal:
+    """Atualiza portal."""
     portal = buscar_portal_por_id(session, portal_id)
     _validar_campos(campos, CAMPOS_EDITAVEIS_PORTAL, "portal")
 
@@ -523,6 +564,7 @@ def inativar_portal(session: Session, portal_id: int) -> Portal:
 
 
 def reativar_portal(session: Session, portal_id: int) -> Portal:
+    """Reativa portal."""
     portal = buscar_portal_por_id(session, portal_id)
     if not portal.ativo:
         portal.ativo = True
@@ -535,7 +577,9 @@ def reativar_portal(session: Session, portal_id: int) -> Portal:
 
 
 def _traduzir_antena(leitor_id: int, porta_numero: int):
+    """Traduz constraints de porta ativa e referências da antena para erros de domínio."""
     def traduzir(erro: IntegrityError):
+        """Mapeia a constraint PostgreSQL para a exceção de domínio adequada à operação."""
         if (
             _pgcode(erro) == _UNIQUE_VIOLATION
             and _nome_da_constraint(erro) == _INDICE_PORTA_ATIVA
@@ -554,6 +598,7 @@ def criar_antena(
     funcao: str,
     portal_id: int | None = None,
 ) -> Antena:
+    """Cria antena."""
     _exigir_leitor_ativo(session, leitor_id)
     _exigir_zona_ativa_para_antena(session, zona_associada_id)
     if portal_id is not None:
@@ -573,6 +618,7 @@ def criar_antena(
 
 
 def buscar_antena_por_id(session: Session, antena_id: int) -> Antena:
+    """Busca antena por id."""
     antena = session.get(Antena, antena_id)
     if antena is None:
         raise AntenaNaoEncontrada(antena_id)
@@ -587,6 +633,7 @@ def listar_antenas(
     leitor_id: int | None = None,
     portal_id: int | None = None,
 ) -> Pagina:
+    """Lista antenas."""
     filtros = [] if incluir_inativos else [Antena.ativo.is_(True)]
     if leitor_id is not None:
         filtros.append(Antena.leitor_id == leitor_id)
@@ -598,6 +645,7 @@ def listar_antenas(
 
 
 def atualizar_antena(session: Session, antena_id: int, campos: Mapping[str, Any]) -> Antena:
+    """Atualiza antena."""
     antena = buscar_antena_por_id(session, antena_id)
     _validar_campos(campos, CAMPOS_EDITAVEIS_ANTENA, "antena")
 

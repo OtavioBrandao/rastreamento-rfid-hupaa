@@ -58,8 +58,8 @@ O handler de 422 de `api/main.py` já removia `input`/`ctx` dos erros de `parame
 ## Primeiro administrador
 
 ```bash
-set -a; source .env.local; set +a
-python -m alembic upgrade head
+set -a; source config/environments/.env.local; set +a
+python -m alembic -c config/alembic.ini upgrade head
 python -m api.criar_admin --nome "Fulana de Tal" --email fulana@hupaa.example
 # Senha: (getpass)  Repita a senha: (getpass)
 
@@ -70,12 +70,12 @@ printf '%s\n' "$SENHA_ADMIN" | python -m api.criar_admin --nome ... --email ... 
 No PowerShell, ou sem exportar variáveis no shell, use o arquivo explicitamente:
 
 ```powershell
-.\.venv\Scripts\python.exe -m api.criar_admin --env-file .env.cloud --nome "Seu Nome" --email "seu@email.com"
+.\.venv\Scripts\python.exe -m api.criar_admin --env-file config/environments/.env.cloud --nome "Seu Nome" --email "seu@email.com"
 ```
 
-`--env-file` aceita também `.env.local` e caminhos absolutos. As variáveis do
+`--env-file` aceita também `config/environments/.env.local` e caminhos absolutos. As variáveis do
 arquivo explícito prevalecem sobre o ambiente do terminal. Sem a opção, continuam
-valendo as variáveis exportadas e o `.env` padrão; não há seleção automática de
+valendo as variáveis exportadas e o `config/environments/.env` padrão; não há seleção automática de
 banco remoto. Arquivo inexistente ou `DATABASE_URL` ausente gera uma mensagem
 orientativa antes de pedir a senha. Veja o [hotfix](hotfix-criar-admin-env-file.md).
 
@@ -86,7 +86,7 @@ orientativa antes de pedir a senha. Veja o [hotfix](hotfix-criar-admin-env-file.
 
 ## Configuração
 
-Variáveis lidas do ambiente **do processo da API**. Assim como `RFID_RECENCY_THRESHOLD_MINUTES`, precisam estar exportadas ao iniciar o uvicorn. Estão documentadas em `.env.example`, `.env.local.example` e `.env.cloud.example`.
+Variáveis lidas do ambiente **do processo da API**. Assim como `RFID_RECENCY_THRESHOLD_MINUTES`, precisam estar exportadas ao iniciar o uvicorn. Estão documentadas em `config/environments/.env.example`, `config/environments/.env.local.example` e `config/environments/.env.cloud.example`.
 
 | Variável | Padrão | Validação |
 |---|---|---|
@@ -128,15 +128,15 @@ Criação e edição de usuário gravam em `auditorias` na mesma transação: `a
 ## Arquivos
 
 - Novos: `api/config_auth.py`, `api/senhas.py`, `api/logging_config.py`, `api/service_auth.py`, `api/service_usuarios.py`, `api/dependencias_auth.py`, `api/schemas_auth.py`, `api/router_auth.py`, `api/router_usuarios.py`, `api/criar_admin.py` e a migration `alembic/versions/d026a1b2c3d4_iss026_usuarios_autenticacao.py`.
-- Alterados: `api/main.py` (routers, logging, validação na subida, handler de 422), `db/models.py`, `requirements.txt` (`argon2-cffi`), os três `.env.*.example`, `tests/conftest.py` (limpa `sessoes` e `usuarios`, **não** `perfis`), `tests/test_migrations.py` e `.github/workflows/migrations.yml` (19 tabelas e a nova head).
+- Alterados: `api/main.py` (routers, logging, validação na subida, handler de 422), `db/models.py`, `requirements/base.txt` (`argon2-cffi`), os três `config/environments/.env.*.example`, `tests/conftest.py` (limpa `sessoes` e `usuarios`, **não** `perfis`), `tests/test_migrations.py` e `.github/workflows/migrations.yml` (19 tabelas e a nova head).
 - Testes: `tests/suporte_auth.py`, `test_auth_api.py`, `test_usuarios_api.py`, `test_auth_concorrencia.py`, `test_migration_iss026.py`, `test_criar_admin.py` e `test_auth_config.py`.
 
 ## Validação e evidências
 
 ```bash
-python -m ruff check --select E4,E7,E9,F,I .
+python -m ruff check --config config/ruff.toml --select E4,E7,E9,F,I .
 python -m pytest -q                      # exige TEST_DATABASE_URL local
-python -m alembic upgrade head && python -m alembic check
+python -m alembic -c config/alembic.ini upgrade head && python -m alembic check
 ```
 
 - Todos os testes usam Postgres real, sem sqlite nem mock. O `TestClient` usa `base_url="https://testserver"`, porque o cookie é `Secure`.

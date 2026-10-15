@@ -16,6 +16,7 @@ MAX_JSON_DEPTH = 64
 
 
 def _check_json_depth(value):
+    """Recusa estrutura JSON que supera o limite de aninhamento aceito."""
     pending = [(value, 0)]
     while pending:
         item, depth = pending.pop()
@@ -26,10 +27,12 @@ def _check_json_depth(value):
 
 
 def _reject_non_standard_number(value: str) -> None:
+    """Rejeita constantes JSON não padronizadas como NaN e Infinity."""
     raise ValueError(f"número JSON não padronizado: {value}")
 
 
 def _finite_float(value):
+    """Converte número JSON e recusa representação não finita."""
     result = float(value)
     if not math.isfinite(result):
         raise ValueError("número JSON fora do intervalo finito")
@@ -37,6 +40,7 @@ def _finite_float(value):
 
 
 def _utc_timestamp(value: datetime) -> str:
+    """Gera o timestamp de recepção UTC com precisão de microssegundos."""
     if value.tzinfo is None:
         raise ValueError("received_at deve conter fuso horário")
     utc_value = value.astimezone(timezone.utc)

@@ -9,7 +9,7 @@ Esta investigação não altera código nem dados da inferência.
 
 ## Fontes e identificação
 
-Consultas somente de leitura no banco configurado em `.env.cloud`, logs do
+Consultas somente de leitura no banco configurado em `config/environments/.env.cloud`, logs do
 ingestor e replay em memória dos componentes existentes. O equipamento em
 atividade é o **ID 10**, nome “Equipamento 3”, EPC terminado em `B3B50EDF`.
 Existe outro cadastro com o mesmo nome (ID 6), sem zona confirmada; a análise

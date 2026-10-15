@@ -63,7 +63,7 @@ No broker externo, o launcher pergunta o transporte:
 
 Sem menu: `--mqtt-transport tls|plain`. No modo `plain`, o broker vem de
 `MQTT_PLAIN_HOST`/`MQTT_PLAIN_PORT` (padrão 1883) e, se o broker exigir,
-`MQTT_PLAIN_USERNAME`/`MQTT_PLAIN_PASSWORD`, todos em `.env.cloud` (ignorado
+`MQTT_PLAIN_USERNAME`/`MQTT_PLAIN_PASSWORD`, todos em `config/environments/.env.cloud` (ignorado
 pelo Git). Se `MQTT_PLAIN_HOST` faltar, o launcher pergunta, sugerindo
 `broker.hivemq.com`. O banco externo (`DATABASE_URL`/`APP_DATABASE_URL`) e a
 configuração TLS existente não mudam.
@@ -91,7 +91,7 @@ senha são opcionais. Sem o opt-in, as regras anteriores continuam valendo
 
 ## Validação
 
-- `python -m ruff check --select E4,E7,E9,F,I .`
+- `python -m ruff check --config config/ruff.toml --select E4,E7,E9,F,I .`
 - `python -m pytest -q` com `TEST_DATABASE_URL` apontando para um PostgreSQL
   descartável (não o banco do ensaio em andamento: a suíte apaga tabelas).
 - Testes novos: cadastro e renomeação de equipamentos por tag, preservação de

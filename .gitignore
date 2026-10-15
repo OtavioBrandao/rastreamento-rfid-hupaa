@@ -231,3 +231,9 @@ data/*
 # Artefatos locais de revisão
 .review/
 .lab_launcher/
+
+# Caches e saídas locais de verificação
+.npm-cache/
+.tmp_*/
+.pytest-tmp/
+docs/reference/html/

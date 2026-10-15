@@ -48,6 +48,7 @@ _STATUS = {
 
 
 def _executar(operacao, *args, **kwargs) -> UsuarioResposta:
+    """Executa operação administrativa e traduz erros de usuário para HTTP."""
     try:
         return usuario_para_resposta(operacao(*args, **kwargs))
     except service.ErroUsuario as erro:
@@ -64,6 +65,9 @@ def listar_usuarios(
     perfil: NomePerfil | None = Query(None),
     db: Session = Depends(get_db),
 ) -> UsuarioPagina:
+    """Lista usuarios.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     pagina = service.listar(db, page=page, size=size, ativo=ativo, perfil=perfil)
     return UsuarioPagina(
         items=[usuario_para_resposta(item) for item in pagina.items],
@@ -80,6 +84,9 @@ def criar_usuario(
     db: Session = Depends(get_db),
     admin: SessaoAutenticada = Depends(administrar_usuarios),
 ) -> UsuarioResposta:
+    """Cria usuario.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return _executar(
         service.criar, db, admin.usuario.id, nome=payload.nome, email=payload.email,
         perfil=payload.perfil, senha_temporaria=payload.senha_temporaria,
@@ -91,6 +98,9 @@ def consultar_usuario(
     usuario_id: int,
     db: Session = Depends(get_db),
 ) -> UsuarioResposta:
+    """Consulta usuario.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return _executar(service.obter, db, usuario_id)
 
 
@@ -101,6 +111,9 @@ def atualizar_usuario(
     db: Session = Depends(get_db),
     admin: SessaoAutenticada = Depends(administrar_usuarios),
 ) -> UsuarioResposta:
+    """Atualiza usuario.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return _executar(
         service.atualizar, db, admin.usuario.id, usuario_id,
         nome=payload.nome, perfil=payload.perfil,
@@ -116,6 +129,9 @@ def desativar_usuario(
     agora: datetime = Depends(obter_agora),
     admin: SessaoAutenticada = Depends(administrar_usuarios),
 ) -> UsuarioResposta:
+    """Desativa usuario.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return _executar(service.desativar, db, admin.usuario.id, usuario_id, agora)
 
 
@@ -128,6 +144,9 @@ def reativar_usuario(
     agora: datetime = Depends(obter_agora),
     admin: SessaoAutenticada = Depends(administrar_usuarios),
 ) -> UsuarioResposta:
+    """Reativa usuario.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return _executar(service.reativar, db, admin.usuario.id, usuario_id, agora)
 
 
@@ -142,6 +161,9 @@ def redefinir_senha_usuario(
     agora: datetime = Depends(obter_agora),
     admin: SessaoAutenticada = Depends(administrar_usuarios),
 ) -> UsuarioResposta:
+    """Redefine senha usuario.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return _executar(
         service.redefinir_senha, db, admin.usuario.id, usuario_id,
         payload.senha_temporaria, agora,

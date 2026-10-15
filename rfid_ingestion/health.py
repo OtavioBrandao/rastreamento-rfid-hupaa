@@ -15,6 +15,7 @@ from .connection import create_client
 
 
 def main() -> int:
+    """Executa a entrada de linha de comando de rfid_ingestion.health; devolve o código de saída quando aplicável."""
     client = None
     engine = None
     try:
@@ -28,6 +29,7 @@ def main() -> int:
         valido = []
 
         def on_connect(_client, _userdata, _flags, reason_code, _properties):
+            """Trata a resposta de conexão MQTT e sinaliza prontidão ou falha ao chamador."""
             valido.append(not reason_code.is_failure)
             conectado.set()
 

@@ -15,6 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm.exc import StaleDataError
 
+from api import __version__
 from api.auditoria import correlacao_da_requisicao, correlation_id_valido
 from api.config_auth import configuracao_auth_do_ambiente
 from api.logging_config import configurar_logging_api
@@ -41,14 +42,15 @@ configurar_logging_api()
 async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
     # Configuração de autenticação inválida derruba a subida, em vez de só
     # aparecer como 500 no primeiro login.
+    """Valida a configuração de autenticação antes de liberar a aplicação ASGI."""
     configuracao_auth_do_ambiente()
     yield
 
 
 app = FastAPI(
-    title="RFID Hospital MVP - API",
+    title="Rastreamento RFID HUPAA - API",
     description="API de cadastro do MVP de rastreamento RFID (EASY/HUPAA).",
-    version="0.1.0",
+    version=__version__,
     lifespan=ciclo_de_vida,
 )
 

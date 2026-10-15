@@ -20,10 +20,12 @@ TRADUCAO = (("create", "criar"), ("update", "atualizar"), ("delete", "excluir"))
 
 
 def _lista(valores) -> str:
+    """Formata o catálogo constante como lista SQL para a constraint de auditoria."""
     return ", ".join(f"'{valor}'" for valor in valores)
 
 
 def upgrade() -> None:
+    """Aplica a revisão: ISS-028: trilha de auditoria append-only, catálogo de ações e origem."""
     op.drop_constraint("ck_auditoria_acao_valida", "auditorias", type_="check")
     for antiga, nova in TRADUCAO:
         op.execute(sa.text("UPDATE auditorias SET acao = :nova WHERE acao = :antiga")
@@ -73,6 +75,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Sem o trigger, as traduções abaixo (UPDATE) passam a ser possíveis.
+    """Reverte a revisão: ISS-028: trilha de auditoria append-only, catálogo de ações e origem."""
     op.execute("DROP TRIGGER tg_auditorias_append_only ON auditorias")
     op.execute("DROP FUNCTION auditorias_append_only()")
 

@@ -53,10 +53,12 @@ INDICE_ANTENA_PORTAL = "ix_antenas_portal_id"
 
 
 def _ativo_column() -> sa.Column:
+    """Cria coluna booleana ativo com default do servidor para a entidade migrada."""
     return sa.Column("ativo", sa.Boolean(), server_default=sa.text("true"), nullable=False)
 
 
 def _exigir_que_nenhum_leitor_com_portal_fique_sem_antena(conexao) -> None:
+    """Recusa migração se um leitor vinculado a portal não tiver antena para preservar o vínculo."""
     orfaos = conexao.execute(
         sa.text(
             "SELECT l.id, l.identificador_serial, l.portal_id FROM leitores l "

@@ -5,7 +5,7 @@ A última leitura bruta é exposta à parte (`ultima_leitura`) como presença.
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, case, false, func, or_, select, true
+from sqlalchemy import and_, case, false, func, literal_column, or_, select, true
 from sqlalchemy.orm import Session, contains_eager
 
 from api.schemas_busca_ativos import AtivoBusca, BuscaAtivosPagina, LeituraRecente, ZonaBusca
@@ -20,7 +20,29 @@ PAGE_SIZE_MAX = 100
 PRESENCE_FRESH_WINDOW = timedelta(seconds=30)
 
 
+def _nome_natural():
+    """Produz chave SQL de nome com números naturais, antes da paginação.
+
+    Divide o nome em trechos textuais e numéricos: Bomba 2 precede Bomba 10.
+    Números são comparados por quantidade de dígitos e valor textual, sem
+    conversão para inteiro nem limite de tamanho. O ID desempata nomes iguais.
+    A expressão é fixa e não interpola filtros fornecidos pelo usuário.
+    """
+    return literal_column("""ARRAY(
+        SELECT CASE WHEN parte[1] ~ '^[0-9]+$'
+            THEN lpad(length(ltrim(parte[1], '0'))::text, 10, '0')
+                || ltrim(parte[1], '0')
+            ELSE parte[1] END
+        FROM regexp_matches(
+            translate(lower(equipamentos.nome),
+                'áàâãäéèêëíìîïóòôõöúùûüç', 'aaaaaeeeeiiiiooooouuuuc'),
+            '([0-9]+|[^0-9]+)', 'g') WITH ORDINALITY AS partes(parte, posicao)
+        ORDER BY posicao
+    )""")
+
+
 def _escape_like(value: str) -> str:
+    """Escapa barra, porcentagem e sublinhado para busca textual literal com LIKE."""
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
@@ -40,6 +62,11 @@ def buscar(
     sort: str = "nome",
 ) -> BuscaAtivosPagina:
     # Os vínculos ativos são únicos por equipamento e tag no PostgreSQL.
+    """Consulta ativos filtrados, conta o total e ordena antes de paginar.
+
+    now e threshold fixam a classificação temporal de toda a página. A prioridade
+    usa somente a tag ativa e agrupa presença/trânsito antes da ordem natural do
+    nome. A última leitura é presença; não altera a zona confirmada."""
     query = (
         db.query(Equipamento, Tag.epc)
         .join(Equipamento.tipo)
@@ -110,17 +137,16 @@ def buscar(
         query = query.outerjoin(last_read, true())
         fresh = last_read.c.lido_em >= now - PRESENCE_FRESH_WINDOW
         priority = case(
-            (fresh, 0),
+            (and_(fresh, status_predicates["disponivel"]), 0),
             (status_predicates["disponivel"], 1),
-            (status_predicates["atencao"], 2),
-            (status_predicates["nunca_detectado"], 3),
-            else_=4,
+            (fresh, 2),
+            (status_predicates["atencao"], 3),
+            (status_predicates["nunca_detectado"], 4),
+            else_=5,
         )
         ordering["prioridade"] = (
             priority.asc(),
-            case((fresh, last_read.c.lido_em)).desc().nullslast(),
-            Equipamento.ultima_deteccao_em.desc().nullslast(),
-            Equipamento.nome.asc(), Equipamento.id.asc(),
+            _nome_natural().asc(), Equipamento.id.asc(),
         )
     rows = query.order_by(*ordering[sort]).limit(page_size).offset((page - 1) * page_size).all()
     leituras = ultimas_leituras(db, (epc for _, epc in rows if epc))

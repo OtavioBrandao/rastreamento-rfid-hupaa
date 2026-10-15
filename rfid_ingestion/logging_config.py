@@ -7,11 +7,14 @@ import os
 
 
 class SecretFilter(logging.Filter):
+    """Filtro de logging que oculta credenciais conhecidas nos registros emitidos."""
     def __init__(self, secrets):
+        """Inicializa SecretFilter com as dependências e valores recebidos."""
         super().__init__()
         self.secrets = sorted((s for s in secrets if s), key=len, reverse=True)
 
     def filter(self, record):
+        """Substitui credenciais conhecidas no registro de log antes de sua emissão."""
         message = record.getMessage()
         for secret in self.secrets:
             message = message.replace(secret, "[REDACTED]")
@@ -20,6 +23,7 @@ class SecretFilter(logging.Filter):
 
 
 def configure_logging(level: str, secrets=None) -> None:
+    """Configura nível, formato e filtro de segredos dos logs do ingestor."""
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",

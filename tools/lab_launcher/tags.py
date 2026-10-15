@@ -13,6 +13,9 @@ from api.epc import normalizar_epc
 
 @dataclass(frozen=True)
 class EpcObservado:
+    """Estrutura Epc Observado usada por tools.lab_launcher.tags.
+
+    Campos: epc, leituras, ultima, equipamento."""
     epc: str
     leituras: int
     ultima: datetime

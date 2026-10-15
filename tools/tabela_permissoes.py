@@ -19,6 +19,7 @@ PUBLICAS = {("GET", "/health"), ("POST", "/auth/login"), ("POST", "/auth/logout"
 
 
 def _rotas(rotas, prefixo: str = "") -> Iterator[tuple[str, APIRoute]]:
+    """Percorre decorators de rota FastAPI para montar a matriz de permissões."""
     for rota in rotas:
         if isinstance(rota, APIRoute):
             yield prefixo + rota.path, rota
@@ -27,12 +28,14 @@ def _rotas(rotas, prefixo: str = "") -> Iterator[tuple[str, APIRoute]]:
 
 
 def _chamadas(dependant) -> Iterator:
+    """Extrai chamadas da árvore sintática para identificar dependências de autorização."""
     for sub in dependant.dependencies:
         yield sub.call
         yield from _chamadas(sub)
 
 
 def exigencia(metodo: str, rota: APIRoute) -> str:
+    """Resolve a permissão exigida pela rota a partir de suas dependências declaradas."""
     chamadas = list(_chamadas(rota.dependant))
     for chamada in chamadas:
         if hasattr(chamada, "permissao_consulta"):
@@ -46,6 +49,7 @@ def exigencia(metodo: str, rota: APIRoute) -> str:
 
 
 def main() -> None:
+    """Executa a entrada de linha de comando de tools.tabela_permissoes; devolve o código de saída quando aplicável."""
     linhas = sorted(
         (caminho, metodo, rota) for caminho, rota in _rotas(app.routes) for metodo in rota.methods
     )

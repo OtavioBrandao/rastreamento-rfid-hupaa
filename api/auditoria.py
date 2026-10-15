@@ -84,10 +84,12 @@ _CORRELATION_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
 def definir_autor(db: Session, usuario_id: int | None) -> None:
+    """Associa o ID do usuário ao contexto de auditoria da sessão SQLAlchemy."""
     db.info[CHAVE_AUTOR] = usuario_id
 
 
 def definir_motivo(db: Session, texto: str | None) -> None:
+    """Associa a justificativa ao contexto de auditoria da sessão SQLAlchemy."""
     db.info[CHAVE_MOTIVO] = texto
 
 
@@ -102,6 +104,7 @@ def definir_correcao(db: Session, justificativa: str, referencia: str | None) ->
 
 
 def encerrar_correcao(db: Session) -> None:
+    """Remove o contexto temporário de correção e motivo da sessão."""
     db.info.pop(CHAVE_MOTIVO, None)
     db.info.pop(CHAVE_CORRECAO, None)
 
@@ -114,6 +117,7 @@ def correlation_id_valido(valor: str | None) -> str:
 
 
 def correlacao(db: Session) -> str:
+    """Obtém a correlação da requisição ou gera uma identidade para a transação do sistema."""
     da_requisicao = correlacao_da_requisicao.get()
     if da_requisicao:
         return da_requisicao
@@ -121,6 +125,7 @@ def correlacao(db: Session) -> str:
 
 
 def _autor(db: Session) -> int | None:
+    """Consulta o autor associado ao contexto da sessão, ou None para o sistema."""
     return db.info.get(CHAVE_AUTOR)
 
 
@@ -128,6 +133,7 @@ def _autor(db: Session) -> int | None:
 
 
 def _json(valor):
+    """Serializa datas e Decimal para valores aceitos pelo registro JSON de auditoria."""
     if isinstance(valor, (datetime, date)):
         return valor.isoformat()
     if isinstance(valor, Decimal):
@@ -147,6 +153,7 @@ def _colunas(objeto):
 
 
 def _auditavel(tabela: str, coluna: str) -> bool:
+    """Filtra segredos, campos normalizados e exclusões específicas da tabela."""
     return not (
         coluna in CAMPOS_FORA_SEMPRE
         or coluna.endswith("_normalizado")
@@ -155,6 +162,7 @@ def _auditavel(tabela: str, coluna: str) -> bool:
 
 
 def _estado(objeto) -> dict:
+    """Captura o estado auditável do objeto ORM sem credenciais ou dados excluídos."""
     tabela = objeto.__table__.name
     return {
         coluna: _json(getattr(objeto, chave))
@@ -163,10 +171,12 @@ def _estado(objeto) -> dict:
 
 
 def _epc(conexao, tag_id) -> str | None:
+    """Resolve o EPC da tag para enriquecer a trilha de auditoria."""
     return conexao.scalar(select(Tag.epc).where(Tag.id == tag_id)) if tag_id else None
 
 
 def _perfil(conexao, perfil_id) -> str | None:
+    """Resolve o nome do perfil para enriquecer a trilha de auditoria."""
     return conexao.scalar(select(Perfil.nome).where(Perfil.id == perfil_id)) if perfil_id else None
 
 
@@ -174,6 +184,7 @@ def _perfil(conexao, perfil_id) -> str | None:
 
 
 def _linha(db: Session, acao: str, objeto, antes: dict | None, depois: dict | None) -> dict:
+    """Monta o registro de auditoria com autor, ação, correlação e estados anterior/posterior."""
     autor = _autor(db)
     return {
         "usuario_id": autor,
@@ -189,6 +200,7 @@ def _linha(db: Session, acao: str, objeto, antes: dict | None, depois: dict | No
 
 
 def _criacao(db: Session, conexao, objeto) -> dict:
+    """Monta auditoria de criação, enriquecendo vínculos de EPC e perfis de usuário."""
     depois = _estado(objeto)
     acao = "criar"
     if isinstance(objeto, AssociacaoTagEquipamento):
@@ -200,6 +212,7 @@ def _criacao(db: Session, conexao, objeto) -> dict:
 
 
 def _alteracao(db: Session, conexao, objeto) -> dict | None:
+    """Compara o histórico ORM e monta antes/depois dos campos auditáveis que mudaram."""
     tabela = objeto.__table__.name
     estado = inspect(objeto)
     antes, depois, mudou = {}, {}, {}
@@ -246,15 +259,18 @@ def _alteracao(db: Session, conexao, objeto) -> dict | None:
 
 
 def _exclusao(db: Session, objeto) -> dict:
+    """Monta registro de exclusão com o estado anterior auditável."""
     return _linha(db, "excluir", objeto, _estado(objeto), None)
 
 
 def _auditado(objeto) -> bool:
+    """Informa se o objeto ORM pertence a uma tabela coberta pela auditoria."""
     tabela = getattr(objeto, "__table__", None)
     return tabela is not None and tabela.name in TABELAS_AUDITADAS
 
 
 def linhas_do_flush(db: Session) -> list[dict]:
+    """Coleta criações, alterações e exclusões da sessão em registros de auditoria."""
     conexao = db.connection()
     linhas = [_criacao(db, conexao, objeto) for objeto in db.new if _auditado(objeto)]
     for objeto in db.dirty:
@@ -277,6 +293,7 @@ def _carregar_excluidos(db: Session, _contexto, _instancias) -> None:
 
 @event.listens_for(Session, "after_flush")
 def _auditar_flush(db: Session, _contexto) -> None:
+    """Insere os registros de auditoria na mesma transação do flush de negócio."""
     linhas = linhas_do_flush(db)
     if linhas:
         # Core, não `db.add`: estamos dentro do flush.
@@ -289,6 +306,7 @@ def _auditar_flush(db: Session, _contexto) -> None:
 
 
 def _devolver_valor(_alvo, valor, _antigo, _iniciador):
+    """Preserva o valor do atributo no listener que acompanha alterações ORM."""
     return valor
 
 

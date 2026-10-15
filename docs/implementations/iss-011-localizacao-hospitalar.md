@@ -1,6 +1,6 @@
 # ISS-011 — Hierarquia de Localização Hospitalar (Andares, Setores e Zonas)
 
-Este documento detalha a implementação do subsistema de localização física do **RFID Hospital MVP**, referente à **ISS-011 (PR #49)**.
+Este documento detalha a implementação do subsistema de localização física do **Rastreamento RFID HUPAA**, referente à **ISS-011 (PR #49)**.
 
 ---
 

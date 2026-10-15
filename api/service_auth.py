@@ -44,29 +44,37 @@ class LoginRecusado(Exception):
 
 
 class SenhaAtualIncorreta(Exception):
+    """Falha de domínio: senha atual incorreta; traduzida pelo chamador para resposta ou diagnóstico."""
     pass
 
 
 class NovaSenhaIgualAtual(Exception):
+    """Falha de domínio: nova senha igual atual; traduzida pelo chamador para resposta ou diagnóstico."""
     pass
 
 
 @dataclass
 class SessaoAutenticada:
+    """Estrutura Sessao Autenticada usada por api.service_auth.
+
+    Campos: sessao_id, expira_em, usuario."""
     sessao_id: int
     expira_em: datetime
     usuario: Usuario
 
 
 def normalizar_email(email: str) -> str:
+    """Remove espaços externos e converte e-mail para a forma canônica em minúsculas."""
     return email.strip().lower()
 
 
 def hash_do_token(token: str) -> str:
+    """Calcula SHA-256 do token opaco; o banco armazena apenas o resumo da credencial."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _usuario_travado_por_email(db: Session, email: str) -> Usuario | None:
+    """Busca usuário pelo e-mail normalizado sob lock para serializar autenticação."""
     return db.scalar(
         select(Usuario)
         .where(Usuario.email == email)
@@ -76,6 +84,7 @@ def _usuario_travado_por_email(db: Session, email: str) -> Usuario | None:
 
 
 def _usuario_travado_por_id(db: Session, usuario_id: int) -> Usuario:
+    """Busca usuário por ID sob lock para serializar alteração da conta."""
     return db.scalars(
         select(Usuario)
         .where(Usuario.id == usuario_id)
@@ -85,6 +94,7 @@ def _usuario_travado_por_id(db: Session, usuario_id: int) -> Usuario:
 
 
 def _bloqueado(usuario: Usuario, agora: datetime) -> bool:
+    """Verifica se o instante de bloqueio da conta ainda é posterior ao relógio informado."""
     return usuario.bloqueado_ate is not None and usuario.bloqueado_ate > agora
 
 

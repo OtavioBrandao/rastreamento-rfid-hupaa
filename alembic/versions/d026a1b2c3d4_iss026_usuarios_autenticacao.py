@@ -29,6 +29,7 @@ def _abortar_se_emails_colidirem(bind) -> None:
 
 
 def upgrade() -> None:
+    """Aplica a revisão: ISS-026: perfis semeados, e-mail normalizado, estado de login e sessões."""
     bind = op.get_bind()
     # Impede um INSERT concorrente de criar colisão entre a checagem e o UPDATE.
     bind.execute(sa.text("LOCK TABLE usuarios IN SHARE ROW EXCLUSIVE MODE"))
@@ -92,6 +93,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Reverte a revisão: ISS-026: perfis semeados, e-mail normalizado, estado de login e sessões."""
     op.drop_index("ix_sessoes_usuario_nao_revogadas", table_name="sessoes")
     op.drop_table("sessoes")
     op.drop_constraint("ck_usuarios_tentativas_nao_negativas", "usuarios", type_="check")

@@ -47,12 +47,12 @@ do laboratório EASY e deixa o operador mover os itens com o mouse.
   e última zona apareçam com o nome no dashboard.
 - Launcher: as opções 1 e 4 abrem o simulador depois do ingestor saudável e o
   encerram com `Ctrl+C`. No modo externo continua exigindo a credencial de
-  publicação separada (`.env.cloud.reader-01`). Foram removidos `--scenario`,
+  publicação separada (`config/environments/.env.cloud.reader-01`). Foram removidos `--scenario`,
   `--count`, `--messages`, `--interval`, `--epc`, `--passage/--single` e a
   conferência automática no banco (`verify.py`), que só faziam sentido para
   roteiros fixos.
-- Dependência: `requirements-lab.txt` (`flet[desktop]==1.0.3`), fora de
-  `requirements.txt` para não entrar na imagem do ingestor. Sem o Flet, o
+- Dependência: `requirements/lab.txt` (`flet[desktop]==1.0.3`), fora de
+  `requirements/base.txt` para não entrar na imagem do ingestor. Sem o Flet, o
   launcher interrompe antes de subir serviços e indica o comando de instalação.
 
 ## Validação

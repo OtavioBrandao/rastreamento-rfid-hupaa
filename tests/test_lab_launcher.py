@@ -77,7 +77,8 @@ def test_modo_externo_sintetico_exige_perfil_de_publicacao(monkeypatch, tmp_path
     with pytest.raises(ValueError, match="--publisher-env-file"):
         cli._perfil_publicador("managed", valores, None, False)
 
-    perfil = tmp_path / ".env.cloud.reader-01"
+    perfil = tmp_path / "config" / "environments" / ".env.cloud.reader-01"
+    perfil.parent.mkdir(parents=True)
     perfil.write_text(
         "MQTT_USERNAME=leitor\nMQTT_PASSWORD=segredo-leitor\n"
         "MQTT_TOPIC=easy/dev/hupaa/portal-01/reader-01/readings\n",
@@ -436,7 +437,7 @@ def test_simulador_sem_flet_falha_antes_de_subir_servicos(monkeypatch, capsys):
     monkeypatch.setattr(cli, "compose", lambda *a, **k: pytest.fail("não deve subir serviços"))
     with pytest.raises(cli.typer.Exit):
         cli.start(env="local", source="synthetic", no_terminals=True)
-    assert "requirements-lab.txt" in capsys.readouterr().err
+    assert "requirements/lab.txt" in capsys.readouterr().err
 
 
 def test_simulador_nao_aceita_tags_do_leitor_fisico(monkeypatch, capsys):

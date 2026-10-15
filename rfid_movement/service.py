@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 def append_automatic_movement(connection: Connection, passage_id: int) -> MovementWriteResult:
+    """Registra movimento de passagem confirmada resolvendo a associação EPC no tempo do evento.
+
+    Devolve MovementWriteResult para ausência, associação ambígua, passagem inválida
+    ou duplicata. Usa a conexão recebida; o chamador controla commit e rollback."""
     passage = repository.load_passage(connection, passage_id)
     if passage is None:
         return MovementWriteResult("passage_missing", passagem_id=passage_id)
@@ -77,6 +81,10 @@ def append_manual_correction(
     registro_anterior_id: int | None = None, zona_origem_id: int | None = None,
     referencia: str | None = None,
 ) -> MovementWriteResult:
+    """Acrescenta correção justificada ao histórico sem alterar registros anteriores.
+
+    Exige instante com fuso, equipamento existente e destino distinto da origem.
+    Quando indicado, valida o registro anterior. O chamador controla a transação."""
     if movimentada_em.tzinfo is None or movimentada_em.utcoffset() is None:
         raise ValueError("movimentada_em exige fuso horário")
     if not justificativa or not justificativa.strip():

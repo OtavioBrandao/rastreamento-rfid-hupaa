@@ -28,6 +28,7 @@ class ComposeConfigurationTests(unittest.TestCase):
             [
                 "docker",
                 "compose",
+                "-f", "deploy/compose.yaml",
                 "--env-file",
                 env_file,
                 "--profile",
@@ -45,7 +46,7 @@ class ComposeConfigurationTests(unittest.TestCase):
         return json.loads(result.stdout)
 
     def test_local_profile_has_healthy_dependencies_and_internal_dns(self) -> None:
-        config = self.compose_config("local", ".env.local.example")
+        config = self.compose_config("local", "config/environments/.env.local.example")
         services = config["services"]
 
         self.assertEqual(
@@ -78,7 +79,7 @@ class ComposeConfigurationTests(unittest.TestCase):
         self.assertIn("rfid-dev", config["networks"])
 
     def test_managed_profile_does_not_start_local_infrastructure(self) -> None:
-        config = self.compose_config("managed", ".env.cloud.example")
+        config = self.compose_config("managed", "config/environments/.env.cloud.example")
         services = config["services"]
 
         self.assertEqual(set(services), {"migrate-managed", "ingestor-managed"})

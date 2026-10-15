@@ -46,7 +46,7 @@ npm test
 npm run build
 ```
 
-Na raiz do repositório, as verificações Python continuam sendo `python -m pytest -q` e `python -m ruff check --select E4,E7,E9,F,I .`.
+Na raiz do repositório, as verificações Python continuam sendo `python -m pytest -q` e `python -m ruff check --config config/ruff.toml --select E4,E7,E9,F,I .`.
 
 ## O que foi feito e o que permanece pendente
 
@@ -80,9 +80,9 @@ O React chama `frontend/src/services/dashboard.ts`, que usa `fetch` para a FastA
 - `GET /equipamentos/{id}/movimentacoes`: histórico paginado no detalhe, já existente da ISS-018/#67.
 - `GET /tipos-equipamento?size=100` e `GET /localizacoes/arvore`: opções de filtro já existentes.
 
-O proxy do Vite encaminha `/api`, `/equipamentos`, `/tipos-equipamento`, `/localizacoes` e `/auth` (sessão, desde a [ISS-027](iss-027-perfis-rbac.md)) para `http://127.0.0.1:8000`; `/usuarios` fica de fora porque não há tela de usuários. O fluxo já usado com banco externo continua em **um comando para subir a API**, a partir da raiz do checkout: `python -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --env-file .env.cloud`. Em outra janela, iniciar `npm run dev` em `frontend/` do mesmo checkout. Não é necessário subir um PostgreSQL Docker adicional nesse fluxo.
+O proxy do Vite encaminha `/api`, `/equipamentos`, `/tipos-equipamento`, `/localizacoes` e `/auth` (sessão, desde a [ISS-027](iss-027-perfis-rbac.md)) para `http://127.0.0.1:8000`; `/usuarios` fica de fora porque não há tela de usuários. O fluxo já usado com banco externo continua em **um comando para subir a API**, a partir da raiz do checkout: `python -m uvicorn api.main:app --host 127.0.0.1 --port 8000 --env-file config/environments/.env.cloud`. Em outra janela, iniciar `npm run dev` em `frontend/` do mesmo checkout. Não é necessário subir um PostgreSQL Docker adicional nesse fluxo.
 
-Quando o código do PR está em um worktree separado, pode-se manter `.venv` e `.env.cloud` na pasta original: executar ali o mesmo comando, acrescentando `--app-dir <caminho-do-worktree>` para carregar `api.main` do PR. O frontend deve rodar a partir de `frontend/` do worktree. A migration do índice é aplicada no banco do ambiente no processo normal de implantação; iniciar a API não executa migrations automaticamente. Em hospedagem separada, `VITE_API_BASE_URL` aponta para a API e a origem precisa ser autorizada na configuração de implantação; o projeto não abre CORS irrestrito.
+Quando o código do PR está em um worktree separado, pode-se manter `.venv` e `config/environments/.env.cloud` na pasta original: executar ali o mesmo comando, acrescentando `--app-dir <caminho-do-worktree>` para carregar `api.main` do PR. O frontend deve rodar a partir de `frontend/` do worktree. A migration do índice é aplicada no banco do ambiente no processo normal de implantação; iniciar a API não executa migrations automaticamente. Em hospedagem separada, `VITE_API_BASE_URL` aponta para a API e a origem precisa ser autorizada na configuração de implantação; o projeto não abre CORS irrestrito.
 
 ### Estados e limites
 

@@ -10,6 +10,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Aplica a revisão: ISS-017: referência da projeção à movimentação auditável."""
     op.add_column(
         "equipamentos", sa.Column("ultima_movimentacao_id", sa.BigInteger(), nullable=True)
     )
@@ -20,6 +21,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Reverte a revisão: ISS-017: referência da projeção à movimentação auditável."""
     op.drop_constraint(
         "fk_equipamentos_ultima_movimentacao_id", "equipamentos", type_="foreignkey"
     )

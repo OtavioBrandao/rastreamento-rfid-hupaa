@@ -8,6 +8,7 @@ from db.models import Equipamento, HistoricoMovimentacao, Passagem
 
 
 def lock_equipment(connection: Connection, equipment_id: int):
+    """Carrega o equipamento com SELECT FOR UPDATE para serializar a projeção de zona."""
     return connection.execute(
         select(
             Equipamento.id, Equipamento.ultima_zona_id,
@@ -38,6 +39,7 @@ def update_location(
 
 
 def pending_ids(engine: Engine, *, limit: int = 100, after_id: int = 0) -> tuple[int, ...]:
+    """Lista passagens confirmadas ainda sem projeção reconciliada a partir do cursor informado."""
     if limit < 1:
         raise ValueError("limit deve ser positivo")
     movement = aliased(HistoricoMovimentacao)

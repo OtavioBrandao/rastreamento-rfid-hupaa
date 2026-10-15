@@ -15,7 +15,7 @@ da Sprint 2 não deve seguir como se tivesse dado certo.
 
 ## O que foi feito
 
-- O cenário externo sintético agora seleciona `.env.cloud.reader-01` quando o
+- O cenário externo sintético agora seleciona `config/environments/.env.cloud.reader-01` quando o
   arquivo existe. Sem ele, o menu pergunta pelo arquivo da credencial de
   publicação; execução sem interação exige `--publisher-env-file`.
 - O perfil é validado antes de construir ou iniciar serviços: precisa ter
@@ -29,15 +29,15 @@ da Sprint 2 não deve seguir como se tivesse dado certo.
 
 ## Como executar
 
-No Ubuntu, mantenha `.env.cloud` para o ingestor e um arquivo privado
-`.env.cloud.reader-01` para o publicador, com credencial Publish e
+No Ubuntu, mantenha `config/environments/.env.cloud` para o ingestor e um arquivo privado
+`config/environments/.env.cloud.reader-01` para o publicador, com credencial Publish e
 `MQTT_TOPIC=easy/dev/hupaa/portal-01/reader-01/readings`. O arquivo fica fora
 do Git. Pelo menu, escolha **4**; o perfil padrão será encontrado
 automaticamente. Para outro nome de arquivo:
 
 ```bash
 ./.venv/bin/python -m tools.lab_launcher start --env managed --source synthetic \
-  --publisher-env-file .env.cloud.reader-01
+  --publisher-env-file config/environments/.env.cloud.reader-01
 ```
 
 O ensaio real no HiveMQ deve confirmar a ACL configurada no cluster. Os testes

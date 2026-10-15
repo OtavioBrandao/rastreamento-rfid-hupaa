@@ -41,6 +41,7 @@ def semear(session: Session) -> list[TipoEquipamento]:
 
 
 def main() -> None:
+    """Executa a entrada de linha de comando de api.seed_tipos_equipamento; devolve o código de saída quando aplicável."""
     session = SessionLocal()
     try:
         # Os nomes são lidos AINDA com a sessão aberta: depois do

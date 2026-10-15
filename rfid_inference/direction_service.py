@@ -17,6 +17,9 @@ LOGGER = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class DirectionCounters:
+    """Estrutura Direction Counters usada por rfid_inference.direction_service.
+
+    Campos: passages_processed, directions_confirmed, directions_ambiguous, directions_unknown, retries."""
     passages_processed: int = 0
     directions_confirmed: int = 0
     directions_ambiguous: int = 0
@@ -25,12 +28,14 @@ class DirectionCounters:
 
 
 class DirectionInferenceService:
+    """Coordena direção, contadores, recuperação periódica e callback de localização."""
     def __init__(
         self, repository: DirectionRepository, ambiguity_ms: int, *,
         monotonic_clock: Callable[[], float] = time.monotonic,
         retry_interval_seconds: float = 5.0,
         confirmed_handler: Callable[[int], object] | None = None,
     ) -> None:
+        """Inicializa DirectionInferenceService com as dependências e valores recebidos."""
         if type(ambiguity_ms) is not int or ambiguity_ms < 0:
             raise ValueError("ambiguidade deve ser inteiro não negativo")
         self.repository = repository
@@ -42,6 +47,7 @@ class DirectionInferenceService:
         self.counters = DirectionCounters()
 
     def process(self, passage_id: int) -> DirectionInferenceResult | None:
+        """Infere e persiste a direção; dispara projeção apenas para confirmação bem-sucedida."""
         context = self.repository.load(passage_id)
         if context is None:
             return None
@@ -81,6 +87,7 @@ class DirectionInferenceService:
         return result
 
     def process_pending(self, *, limit: int = 100) -> None:
+        """Reprocessa passagens sem direção e contabiliza falhas sem abortar o lote de recuperação."""
         try:
             pending = self.repository.pending_ids(limit)
         except Exception:
@@ -100,6 +107,7 @@ class DirectionInferenceService:
                 }))
 
     def tick(self, now_monotonic: float | None = None) -> None:
+        """Executa recuperação periódica de direção quando o próximo prazo monotônico é atingido."""
         now = self.monotonic_clock() if now_monotonic is None else now_monotonic
         if now >= self._next_retry_at:
             self._next_retry_at = now + self.retry_interval_seconds

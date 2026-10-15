@@ -110,7 +110,7 @@ de frontend e sua documentação. Não houve alteração de migrations.
 - `npm test`: 58 testes passaram.
 - `npm run build`: TypeScript e Vite aprovados.
 - Ruff (`E4,E7,E9,F,I`): aprovado.
-- `alembic upgrade head` e `alembic check`: aprovados em PostgreSQL 16
+- `alembic -c config/alembic.ini upgrade head` e `alembic check`: aprovados em PostgreSQL 16
   descartável local, sem diferenças de schema.
 - `git diff --check`: aprovado, sem marcadores de conflito restantes.
 

@@ -8,6 +8,7 @@ from .config import Settings
 
 
 def tls_context(settings: Settings) -> ssl.SSLContext:
+    """Cria contexto TLS com validação de certificado e CA opcional da configuração."""
     context = ssl.create_default_context(cafile=settings.mqtt_ca_cert)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     return context
@@ -19,6 +20,7 @@ def create_client(
     protocol=mqtt.MQTTv311,
     persistent_session: bool = False,
 ) -> mqtt.Client:
+    """Configura Paho MQTT, autenticação, transporte TLS e persistência de sessão solicitada."""
     settings.validate()
     options = {
         "callback_api_version": mqtt.CallbackAPIVersion.VERSION2,

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 
 def em_utc(value: datetime | None) -> datetime | None:
+    """Normaliza datetime do banco para UTC, preservando None para ausência de detecção."""
     if value is None:
         return None
     if value.tzinfo is None or value.utcoffset() is None:

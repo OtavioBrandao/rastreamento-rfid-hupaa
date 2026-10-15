@@ -47,10 +47,12 @@ _STATUS_POR_CODIGO = {
 
 
 def _erro(status_code: int, codigo: str, mensagem: str, **extra) -> HTTPException:
+    """Constrói resposta HTTP segura para falha de correção manual."""
     return HTTPException(status_code, detail={"codigo": codigo, "mensagem": mensagem, **extra})
 
 
 def _traduzir(erro: Exception) -> HTTPException:
+    """Converte falhas de correção do domínio em códigos HTTP da API."""
     if isinstance(erro, service.ConflitoDeVersao):
         return _erro(status.HTTP_409_CONFLICT, "conflito_de_versao",
                      "O equipamento foi alterado por outra operação. Recarregue e revise.",
@@ -91,6 +93,9 @@ def corrigir_localizacao(
     agora: datetime = Depends(obter_agora),
     admin: SessaoAutenticada = Depends(corrigir_equipamentos),
 ) -> CorrecaoLocalizacaoResposta:
+    """Corrige localizacao.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         resultado = service.corrigir_localizacao_equipamento(
             db, autor_id=admin.usuario.id, equipamento_id=equipamento_id,
@@ -116,6 +121,9 @@ def corrigir_cadastro(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
+    """Corrige cadastro.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         equipamento = service.corrigir_cadastro(
             db, equipamento_id=equipamento_id, justificativa=payload.justificativa,

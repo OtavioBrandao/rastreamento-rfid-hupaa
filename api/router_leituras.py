@@ -26,5 +26,6 @@ def resumo_leituras(
     somente_cadastradas: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> dict:
+    """Consulta contagens por tag/antena e última leitura na janela solicitada."""
     return resumo(db, now=datetime.now(UTC), janela=timedelta(seconds=janela_segundos),
                   somente_cadastradas=somente_cadastradas)

@@ -114,13 +114,13 @@ PowerShell, com Docker Desktop ativo:
 ```powershell
 $env:MQTT_BIND_ADDRESS='127.0.0.1'
 $env:MQTT_LOCAL_PORT='18884'
-docker compose -p rfid-iss005-smoke up -d
+docker compose -f deploy/compose.yaml -p rfid-iss005-smoke up -d
 try {
     $env:RUN_MQTT_INTEGRATION='1'
     $env:TEST_MQTT_PORT='18884'
     & .venv/Scripts/python.exe -m unittest discover -s tests -v
 } finally {
-    docker compose -p rfid-iss005-smoke down
+    docker compose -f deploy/compose.yaml -p rfid-iss005-smoke down
 }
 ```
 

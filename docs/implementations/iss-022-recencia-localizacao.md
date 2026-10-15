@@ -29,7 +29,7 @@ migration ou escrita: ele pode mudar apenas pela passagem do tempo.
 
 `RFID_RECENCY_THRESHOLD_MINUTES` define o limite em minutos inteiros positivos
 no ambiente **do processo da API**. Seu default provisório é `30`. Os templates
-`.env.example`, `.env.local.example` e `.env.cloud.example` mostram esse valor;
+`config/environments/.env.example`, `config/environments/.env.local.example` e `config/environments/.env.cloud.example` mostram esse valor;
 o operador precisa exportá-lo para o processo da API ao iniciar o FastAPI. Um
 valor ausente usa o default; valores vazios, não inteiros, zero ou negativos
 falham explicitamente. Alterar a variável não exige mudar código.
@@ -60,7 +60,7 @@ Na raiz do repositório:
 ```bash
 python -m pytest -q tests/test_recency.py tests/test_api_recency.py
 python -m pytest -q
-python -m ruff check --select E4,E7,E9,F,I .
+python -m ruff check --config config/ruff.toml --select E4,E7,E9,F,I .
 cd frontend
 npm ci
 npm test

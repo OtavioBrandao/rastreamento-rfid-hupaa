@@ -21,6 +21,7 @@ LIMITE_PUBACK_S = 10.0
 
 
 def _falha_puback(topic: str, desconectado: bool) -> str:
+    """Monta diagnóstico de publicação sem PUBACK, distinguindo timeout de desconexão."""
     if desconectado:
         return (f"conexão MQTT encerrada antes do PUBACK para {topic}; confira se a "
                 "credencial do publicador tem permissão Publish nesse tópico")
@@ -63,6 +64,7 @@ class Publicador:
     def __init__(self, config: dict[str, str], reader_id: str, *,
                  portal_id: str = "portal-01", capacidade: int = 1_000_000,
                  contador_inicial: int | None = None) -> None:
+        """Inicializa Publicador com as dependências e valores recebidos."""
         self.topic = topico_sintetico(config, reader_id, portal_id)
         self.contador = (novo_contador(capacidade) if contador_inicial is None
                          else contador_inicial)
@@ -81,12 +83,15 @@ class Publicador:
         self.confirmadas = 0
 
     def conectar(self, timeout: float = 10) -> None:
+        """Conecta o publicador ao broker, inicia o loop de rede e espera a confirmação de conexão."""
         def on_connect(_client, _userdata, _flags, reason_code, _properties):
+            """Trata a resposta de conexão MQTT e sinaliza prontidão ou falha ao chamador."""
             if reason_code.is_failure:
                 self._erro.append("conexão MQTT do publicador recusada; confira a credencial")
             self._conectado.set()
 
         def on_disconnect(_client, _userdata, _flags, _reason_code, _properties):
+            """Registra desconexão MQTT e interrompe publicação quando ela é inesperada."""
             self._desconectado.set()
 
         self._client.on_connect = on_connect
@@ -100,6 +105,7 @@ class Publicador:
             raise RuntimeError(self._erro[0])
 
     def emitir(self, epc: str, porta: int, rssi: int) -> None:
+        """Publica uma leitura sintética QoS 1 e acompanha seu PUBACK sem bloquear a interface."""
         if self.contador >= self._fim:
             raise RuntimeError("contador sintético esgotado; reinicie o simulador")
         result = self._client.publish(
@@ -125,8 +131,10 @@ class Publicador:
 
     @property
     def pendentes(self) -> int:
+        """Conta publicações QoS 1 que ainda aguardam confirmação do broker."""
         return len(self._em_voo)
 
     def fechar(self) -> None:
+        """Encerra publicação e loop MQTT, liberando os recursos do publicador."""
         self._client.disconnect()
         self._client.loop_stop()

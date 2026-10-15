@@ -1,5 +1,6 @@
 import { getReadSummary } from '../../services/dashboard'
 import { useLiveQuery } from '../../services/live'
+import { assetRank, compareAssetNames } from '../../services/assetPriority'
 import type { EquipmentItem } from '../../types/dashboard'
 import { ageLabel, antennaLabel, isFresh } from '../DashboardParts'
 
@@ -9,8 +10,14 @@ const WINDOW_SECONDS = 300
 export function RegisteredDetections({ items, onSelect }: { items: EquipmentItem[]; onSelect: (item: EquipmentItem) => void }) {
   const query = useLiveQuery('registered-detections', (signal) => getReadSummary(WINDOW_SECONDS, true, signal))
   const byId = new Map(items.map((item) => [item.id, item]))
+  const now = Date.now()
+  const rank = (row: NonNullable<typeof query.data>['items'][number]) => {
+    const asset = row.equipamento && byId.get(row.equipamento.id)
+    return asset ? assetRank({ ...asset, ultima_leitura: row.ultima_leitura }, now)
+      : isFresh(row.ultima_leitura, now) ? 1 : 5
+  }
   const rows = [...(query.data?.items ?? [])].filter((row) => row.equipamento)
-    .sort((a, b) => Number(isFresh(b.ultima_leitura)) - Number(isFresh(a.ultima_leitura)) || b.leituras - a.leituras)
+    .sort((a, b) => rank(a) - rank(b) || compareAssetNames(a.equipamento!, b.equipamento!))
   return <section className="panel inventory-panel registered-detections" aria-labelledby="registered-detections-title">
     <div className="panel-heading"><div><p className="eyebrow">EQUIPAMENTOS CADASTRADOS</p><h2 id="registered-detections-title">Detectados recentemente</h2></div><span>Leituras dos últimos 5 minutos</span></div>
     {query.loading && <p role="status">Carregando leituras...</p>}

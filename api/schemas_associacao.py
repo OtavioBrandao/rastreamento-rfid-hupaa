@@ -14,11 +14,13 @@ from api.epc import EpcInvalido, normalizar_epc
 
 
 class AssociarPayload(BaseModel):
+    """Contrato de dados Associar Payload; valida campos e serializa a resposta da API."""
     epc: str = Field(..., min_length=1, max_length=64)
 
     @field_validator("epc")
     @classmethod
     def validar_epc(cls, valor: str) -> str:
+        """Valida epc."""
         try:
             return normalizar_epc(valor)
         except EpcInvalido as error:
@@ -26,11 +28,13 @@ class AssociarPayload(BaseModel):
 
 
 class SubstituirPayload(BaseModel):
+    """Contrato de dados Substituir Payload; valida campos e serializa a resposta da API."""
     epc_novo: str = Field(..., min_length=1, max_length=64)
 
     @field_validator("epc_novo")
     @classmethod
     def validar_epc(cls, valor: str) -> str:
+        """Valida epc."""
         try:
             return normalizar_epc(valor)
         except EpcInvalido as error:
@@ -38,6 +42,7 @@ class SubstituirPayload(BaseModel):
 
 
 class AssociacaoOut(BaseModel):
+    """Contrato de dados Associacao Out; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -49,6 +54,7 @@ class AssociacaoOut(BaseModel):
 
 
 class ResolucaoEpcOut(BaseModel):
+    """Contrato de dados Resolucao Epc Out; valida campos e serializa a resposta da API."""
     epc: str
     equipamento_id: int
     equipamento_nome: str

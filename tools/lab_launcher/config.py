@@ -23,7 +23,7 @@ def carregar(modo: str, arquivo: Path | None, interativo: bool,
     ``MQTT_PLAIN_USERNAME``/``MQTT_PLAIN_PASSWORD``) substituem o broker TLS;
     o banco externo continua o mesmo.
     """
-    path = arquivo or ROOT / (".env.local" if modo == "local" else ".env.cloud")
+    path = arquivo or ROOT / "config" / "environments" / (".env.local" if modo == "local" else ".env.cloud")
     exemplo = path.with_name(path.name + ".example")
     if not path.exists() and exemplo.exists() and modo == "local":
         path.write_bytes(exemplo.read_bytes())

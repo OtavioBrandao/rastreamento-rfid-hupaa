@@ -1,10 +1,10 @@
 import { useState, type KeyboardEvent } from 'react'
 import { belongsToZone, type BoundPortal, type BoundZone } from '../../services/mapTopology'
+import { assetPriority } from '../../services/assetPriority'
 import type { EquipmentItem } from '../../types/dashboard'
 import { LocationBadge, PresenceBadge, StatusBadge, detectionLabel } from '../DashboardParts'
 import { MapReferences } from './MapReferences'
 import { RegisteredDetections } from './RegisteredDetections'
-import { clusterTone } from './ZoneCluster'
 
 const tabs = [
   { id: 'detectados', label: 'Equipamentos detectados' },
@@ -15,16 +15,12 @@ const tabs = [
 ] as const
 type TabId = typeof tabs[number]['id']
 
-// Na zona selecionada, quem está em trânsito vem antes de quem pode estar com a localização desatualizada.
-export function zonePriority(items: EquipmentItem[], now = Date.now()) {
-  const rank = (item: EquipmentItem) => item.localizacao_desatualizada ? 2 : clusterTone(item, now) === 'recente' ? 0 : 1
-  return [...items].sort((a, b) => rank(a) - rank(b) || a.nome.localeCompare(b.nome, 'pt-BR'))
-}
+export const zonePriority = assetPriority
 
 function EquipmentTable({ items, onSelect, empty }: { items: EquipmentItem[]; onSelect: (item: EquipmentItem) => void; empty: string }) {
   return items.length ? <div className="table-wrap"><table className="equipment-table">
     <thead><tr><th>Equipamento</th><th>Status</th><th>Última zona confirmada</th><th>Última detecção / leitura</th></tr></thead>
-    <tbody>{items.map((item) => <tr key={item.id}>
+    <tbody>{assetPriority(items).map((item) => <tr key={item.id}>
       <td><button className="table-item-button" type="button" onClick={() => onSelect(item)}>{item.nome}<small>{item.epc ?? 'Sem EPC associado'}</small></button></td>
       <td><StatusBadge status={item.status}/></td>
       <td>{item.ultima_zona?.caminho ?? 'Nenhuma passagem confirmada'}<LocationBadge item={item}/></td>
