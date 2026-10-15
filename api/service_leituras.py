@@ -29,6 +29,7 @@ LIMITE_NAO_CADASTRADAS = 200
 
 
 def _antenas(db: Session, ids: Iterable[int]) -> dict[int, dict]:
+    """Lista antenas e zonas para identificar a origem das leituras na resposta."""
     ids = set(ids)
     if not ids:
         return {}
@@ -66,6 +67,7 @@ def ultimas_leituras(db: Session, epcs: Iterable[str]) -> dict[str, dict]:
 
 def resumo(db: Session, *, now: datetime, janela: timedelta,
            somente_cadastradas: bool = False) -> dict:
+    """Agrega leituras da janela por tag e antena e associa apenas o vínculo ativo do equipamento."""
     corte = now - janela
     cadastradas = {
         linha.epc: {

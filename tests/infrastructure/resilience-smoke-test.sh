@@ -28,8 +28,8 @@ export DB_RETRY_MULTIPLIER=2
 export DB_RETRY_JITTER=0
 
 compose() {
-    docker compose --project-name "$COMPOSE_PROJECT" \
-        --env-file "$ROOT_DIR/.env.local.example" --profile local "$@"
+    docker compose -f deploy/compose.yaml --project-name "$COMPOSE_PROJECT" \
+        --env-file "$ROOT_DIR/config/environments/.env.local.example" --profile local "$@"
 }
 
 cleanup() {
@@ -94,7 +94,7 @@ rm -f -- "$OUTPUT_FILE"
 compose config --quiet
 compose build ingestor-local
 compose up -d --wait postgres
-compose run --rm migrate-local alembic upgrade head
+compose run --rm migrate-local alembic -c config/alembic.ini upgrade head
 compose exec -T postgres psql -v ON_ERROR_STOP=1 \
     -U "$POSTGRES_USER" -d "$POSTGRES_DB" < tests/fixtures/topology.sql
 

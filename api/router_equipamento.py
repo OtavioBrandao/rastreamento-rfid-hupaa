@@ -53,6 +53,9 @@ def listar_movimentacoes(
     fim: datetime | None = Query(None),
     db: Session = Depends(get_db),
 ) -> MovimentacaoPagina:
+    """Lista movimentacoes.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     if any(value is not None and (value.tzinfo is None or value.utcoffset() is None)
            for value in (inicio, fim)):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -122,6 +125,9 @@ def criar_equipamento(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
+    """Cria equipamento.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         equipamento = service.criar(
             db,
@@ -149,6 +155,9 @@ def listar_equipamentos(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoPagina:
+    """Lista equipamentos.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     pagina = service.listar(db, page=page, size=size, incluir_inativos=incluir_inativos)
     return EquipamentoPagina(
         items=[para_resposta(item, recency_context) for item in pagina.items],
@@ -169,6 +178,9 @@ def buscar_equipamento_por_identificador(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
+    """Busca equipamento por identificador.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         equipamento = service.buscar_por_identificador(db, identificador_interno)
     except (
@@ -189,6 +201,9 @@ def detalhar_equipamento(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
+    """Obtém os detalhes de equipamento.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         equipamento = service.buscar_por_id(db, equipamento_id)
     except service.EquipamentoNaoEncontrado as erro:
@@ -207,6 +222,9 @@ def atualizar_equipamento(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
+    """Atualiza equipamento.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         equipamento = service.atualizar(
             db,
@@ -233,6 +251,9 @@ def inativar_equipamento(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
+    """Inativa equipamento.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         equipamento = service.inativar(db, equipamento_id)
     except service.EquipamentoNaoEncontrado as erro:
@@ -250,6 +271,9 @@ def reativar_equipamento(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> EquipamentoResposta:
+    """Reativa equipamento.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         equipamento = service.reativar(db, equipamento_id)
     except service.EquipamentoNaoEncontrado as erro:

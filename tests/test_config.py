@@ -12,7 +12,7 @@ class SettingsTests(unittest.TestCase):
         defaults = Settings()
         for name in (".env.example", ".env.local.example", ".env.cloud.example"):
             with self.subTest(template=name):
-                source = read_environment(name)
+                source = read_environment(Path("config/environments") / name)
                 self.assertTrue({"MQTT_MAX_PAYLOAD_BYTES", "RFID_DEFAULT_ADAPTER",
                                  "RFID_READER_ADAPTERS", "EZ700_TIMESTAMP_FORMAT",
                                  "MQTT_RECONNECT_INITIAL_DELAY", "MQTT_RECONNECT_MAX_DELAY",

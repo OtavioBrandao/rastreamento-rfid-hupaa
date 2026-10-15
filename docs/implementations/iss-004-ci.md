@@ -45,8 +45,8 @@ diretamente se o problema está em `Lint`, `Testes` ou `Migrations`.
   tabelas esperadas e roda os testes. O workflow reutilizável não possui gatilho
   próprio, portanto cada PR ou push produz uma única execução dessa validação.
 
-O cache usado por `actions/setup-python` considera `requirements.txt` e
-`requirements-dev.txt`; somente pacotes do pip são armazenados, nunca variáveis ou
+O cache usado por `actions/setup-python` considera `requirements/base.txt` e
+`requirements/dev.txt`; somente pacotes do pip são armazenados, nunca variáveis ou
 segredos de ambiente.
 
 ## PostgreSQL efêmero
@@ -66,14 +66,14 @@ Prepare o ambiente, em Ubuntu 24.04:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements/dev.txt
 ```
 
 Lint e formatação de imports, equivalentes às etapas do job `Lint`:
 
 ```bash
-python -m ruff check --select E4,E7,E9,F .
-python -m ruff check --select I .
+python -m ruff check --config config/ruff.toml --select E4,E7,E9,F .
+python -m ruff check --config config/ruff.toml --select I .
 ```
 
 Testes unitários, sem serviço externo:
@@ -85,16 +85,16 @@ python -m pytest -q
 Para reproduzir também a integração viável no CI com o Compose já existente:
 
 ```bash
-docker compose up -d mosquitto
+docker compose -f deploy/compose.yaml up -d mosquitto
 RUN_MQTT_INTEGRATION=1 TEST_MQTT_PORT=1883 python -m pytest -q
-docker compose --profile local down --volumes --remove-orphans
+docker compose -f deploy/compose.yaml --profile local down --volumes --remove-orphans
 ```
 
 O ambiente PostgreSQL padronizado da ISS-003 já está disponível. Para validar schema,
 healthchecks, integração MQTT e reset exclusivamente local, use:
 
 ```bash
-make smoke
+make -f scripts/Makefile smoke
 ```
 
 O smoke cria um projeto e um volume descartáveis, aplica a migration atual, remove o
@@ -134,14 +134,14 @@ altera o Compose nem cria uma segunda implementação dos comandos Alembic.
 
 Em 13/09/2026, na branch `feat/iss-004-ci-lint-tests`:
 
-- `python -m ruff check --select E4,E7,E9,F .`: aprovado.
-- `python -m ruff check --select I .`: aprovado.
+- `python -m ruff check --config config/ruff.toml --select E4,E7,E9,F .`: aprovado.
+- `python -m ruff check --config config/ruff.toml --select I .`: aprovado.
 - `python -m pytest -q`: 30 aprovados e 4 ignorados legitimamente (integração MQTT
   opt-in e OpenSSL ausente no host Windows).
 - suíte com Mosquitto e `RUN_MQTT_INTEGRATION=1`: 31 aprovados e 3 ignorados
   legitimamente (OpenSSL ausente no host Windows).
-- `alembic upgrade head`: aprovado em PostgreSQL 16 vazio.
-- `alembic current`: `44ef89b10f17 (head)`.
+- `alembic -c config/alembic.ini upgrade head`: aprovado em PostgreSQL 16 vazio.
+- `alembic -c config/alembic.ini current`: `44ef89b10f17 (head)`.
 - inspeção do banco: 17 tabelas no schema `public`, contando `alembic_version`.
 - primeira execução do GitHub Actions no PR #39: `Lint` aprovado em 21 s, `Testes`
   aprovado em 29 s e `Migrations` aprovado em 42 s.
@@ -155,12 +155,12 @@ do histórico final.
 
 Executada em 14/09/2026 no Ubuntu 24.04:
 
-- `python -m ruff check --select E4,E7,E9,F .`: aprovado.
-- `python -m ruff check --select I .`: aprovado.
+- `python -m ruff check --config config/ruff.toml --select E4,E7,E9,F .`: aprovado.
+- `python -m ruff check --config config/ruff.toml --select I .`: aprovado.
 - `python -m pytest -q`: 36 aprovados, 1 pulado e 18 subtestes aprovados.
 - suíte com Mosquitto e `RUN_MQTT_INTEGRATION=1`: 37 aprovados e 18 subtestes.
 - configuração Compose local e managed: aprovada estruturalmente.
-- `make smoke`: aprovado nos dois ciclos, incluindo reset e recriação do schema.
+- `make -f scripts/Makefile smoke`: aprovado nos dois ciclos, incluindo reset e recriação do schema.
 - `actionlint` nos dois workflows: aprovado sem avisos.
 - ciclo em PostgreSQL local descartável: `upgrade head`, segundo `upgrade head`,
   `downgrade base` e novo `upgrade head`, todos aprovados.

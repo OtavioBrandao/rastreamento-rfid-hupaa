@@ -38,6 +38,7 @@ router = APIRouter(tags=["associacoes"], dependencies=[Depends(_PERMISSAO)])
 
 
 def _para_saida(associacao: AssociacaoTagEquipamento) -> AssociacaoOut:
+    """Converte associação ORM em resposta pública com seus dados de tag e vigência."""
     return AssociacaoOut(
         id=associacao.id,
         epc=associacao.tag.epc,
@@ -57,6 +58,9 @@ def _para_saida(associacao: AssociacaoTagEquipamento) -> AssociacaoOut:
 def associar_tag(
     equipamento_id: int, payload: AssociarPayload, db: Session = Depends(get_db)
 ) -> AssociacaoOut:
+    """Associa tag.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         associacao = service.associar(db, equipamento_id, payload.epc)
     except service.EquipamentoInvalido as error:
@@ -76,6 +80,9 @@ def associar_tag(
 def substituir_tag(
     equipamento_id: int, payload: SubstituirPayload, db: Session = Depends(get_db)
 ) -> AssociacaoOut:
+    """Substitui tag.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         associacao = service.substituir(db, equipamento_id, payload.epc_novo)
     except service.EquipamentoInvalido as error:
@@ -95,6 +102,7 @@ def substituir_tag(
     summary="Consultar o vínculo de tag ativo de um equipamento",
 )
 def obter_vinculo_ativo(equipamento_id: int, db: Session = Depends(get_db)) -> AssociacaoOut:
+    """Obtém a associação de tag vigente do equipamento."""
     vinculo = service.vinculo_ativo_por_equipamento(db, equipamento_id)
     if vinculo is None:
         raise HTTPException(
@@ -109,6 +117,9 @@ def obter_vinculo_ativo(equipamento_id: int, db: Session = Depends(get_db)) -> A
     summary="Encerrar o vínculo de tag ativo de um equipamento",
 )
 def encerrar_vinculo(equipamento_id: int, db: Session = Depends(get_db)) -> AssociacaoOut:
+    """Encerra vinculo.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         associacao = service.encerrar(db, equipamento_id)
     except service.NenhumVinculoAtivo as error:
@@ -124,6 +135,7 @@ def encerrar_vinculo(equipamento_id: int, db: Session = Depends(get_db)) -> Asso
 def historico_vinculos(
     equipamento_id: int, db: Session = Depends(get_db)
 ) -> list[AssociacaoOut]:
+    """Consulta os vínculos temporais de tags do equipamento."""
     return [_para_saida(item) for item in service.historico_por_equipamento(db, equipamento_id)]
 
 
@@ -133,6 +145,7 @@ def historico_vinculos(
     summary="Resolver um EPC para o equipamento que ele identifica atualmente",
 )
 def resolver_epc(epc: str, db: Session = Depends(get_db)) -> ResolucaoEpcOut:
+    """Resolve o equipamento associado ao EPC no instante solicitado."""
     associacao = service.resolver_epc(db, epc)
     if associacao is None:
         raise HTTPException(

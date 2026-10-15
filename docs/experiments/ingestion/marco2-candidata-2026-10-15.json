@@ -1,0 +1,14 @@
+{
+  "data": "2026-10-15",
+  "versao": "0.1.0-rc.1",
+  "origem": "sintetica; Publicador do simulador, sem janela Flet",
+  "ambiente": "Docker Compose local descartavel; Windows 11; PostgreSQL 16; Mosquitto",
+  "mensagens_publicadas": 12,
+  "leituras_persistidas": 12,
+  "passagens": 1,
+  "direcao": "a_para_b",
+  "direcao_status": "confirmed",
+  "movimentacoes": 1,
+  "ultima_zona": "Zona B",
+  "limite": "Sem medicao RF, sem novo ensaio fisico e sem validacao da rede hospitalar."
+}

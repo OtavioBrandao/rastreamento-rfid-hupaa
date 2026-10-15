@@ -36,6 +36,7 @@ LOCAL_MQTT_HOSTNAMES = frozenset({"localhost", "mosquitto"})
 
 
 def _optional_value(value: str | None) -> str | None:
+  """Obtém texto opcional de configuração, usando o padrão quando ausente."""
   if value is None or value == "":
       return None
   return value
@@ -44,6 +45,7 @@ def _optional_value(value: str | None) -> str | None:
 def _integer_value(
   source: Mapping[str, str], name: str, default: int
 ) -> int:
+  """Lê e converte configuração inteira, com erro contextual para valor inválido."""
   raw_value = source.get(name)
   if raw_value is None or not raw_value.strip():
       return default
@@ -56,6 +58,7 @@ def _integer_value(
 def _float_value(
     source: Mapping[str, str], name: str, default: float
 ) -> float:
+    """Lê configuração numérica e recusa valores não finitos."""
     raw_value = source.get(name)
     if raw_value is None or not raw_value.strip():
         return default
@@ -106,6 +109,7 @@ class Settings:
 
   @classmethod
   def from_env(cls, environ: Mapping[str, str] | None = None) -> "Settings":
+      """Constrói Settings com as variáveis fornecidas ou com o ambiente do processo."""
       source = os.environ if environ is None else environ
       mode = source.get("MQTT_MODE", "local")
       tls = source.get("MQTT_TLS_ENABLED", "true" if mode == "cloud" else "false")
@@ -198,6 +202,7 @@ class Settings:
       return settings
 
   def validate(self) -> None:
+      """Valida transporte, credenciais, tópico, limites e parâmetros temporais da ingestão."""
       if type(self.max_payload_bytes) is not int or self.max_payload_bytes < 1:
           raise ValueError("MQTT_MAX_PAYLOAD_BYTES deve ser inteiro positivo")
       if self.ez700_timestamp_format not in ("rfc3339", "epoch_ms", "counter"):
@@ -290,6 +295,7 @@ class Settings:
       multiplier: float,
       jitter: float,
   ) -> None:
+      """Verifica atraso inicial, teto, multiplicador e jitter da política de recuperação."""
       values = (initial_delay, max_delay, multiplier, jitter)
       if not all(math.isfinite(value) for value in values):
           raise ValueError(f"{prefix} exige valores finitos")

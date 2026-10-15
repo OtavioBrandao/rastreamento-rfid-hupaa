@@ -41,49 +41,65 @@ class ErroTopologiaPortal(Exception):
 
 
 class MapeamentoNaoEncontrado(ErroTopologiaPortal):
+    """Falha de domínio: mapeamento nao encontrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, mapeamento_id: int) -> None:
+        """Inicializa MapeamentoNaoEncontrado com as dependências e valores recebidos."""
         self.mapeamento_id = mapeamento_id
         super().__init__(f"Mapeamento {mapeamento_id} não encontrado.")
 
 
 class PortalNaoEncontrado(ErroTopologiaPortal):
+    """Falha de domínio: portal nao encontrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, portal_id: int) -> None:
+        """Inicializa PortalNaoEncontrado com as dependências e valores recebidos."""
         self.portal_id = portal_id
         super().__init__(f"Portal {portal_id} não encontrado.")
 
 
 class AntenaNaoEncontrada(ErroTopologiaPortal):
+    """Falha de domínio: antena nao encontrada; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, antena_id: int) -> None:
+        """Inicializa AntenaNaoEncontrada com as dependências e valores recebidos."""
         self.antena_id = antena_id
         super().__init__(f"Antena {antena_id} não encontrada.")
 
 
 class PortalInativo(ErroTopologiaPortal):
+    """Falha de domínio: portal inativo; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, portal_id: int) -> None:
+        """Inicializa PortalInativo com as dependências e valores recebidos."""
         self.portal_id = portal_id
         super().__init__(f"Portal {portal_id} está inativo.")
 
 
 class AntenaInativa(ErroTopologiaPortal):
+    """Falha de domínio: antena inativa; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, antena_id: int) -> None:
+        """Inicializa AntenaInativa com as dependências e valores recebidos."""
         self.antena_id = antena_id
         super().__init__(f"Antena {antena_id} está inativa.")
 
 
 class LeitorNaoEncontrado(ErroTopologiaPortal):
+    """Falha de domínio: leitor nao encontrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, leitor_id: int) -> None:
+        """Inicializa LeitorNaoEncontrado com as dependências e valores recebidos."""
         self.leitor_id = leitor_id
         super().__init__(f"Leitor {leitor_id} não encontrado.")
 
 
 class LeitorInativo(ErroTopologiaPortal):
+    """Falha de domínio: leitor inativo; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, leitor_id: int) -> None:
+        """Inicializa LeitorInativo com as dependências e valores recebidos."""
         self.leitor_id = leitor_id
         super().__init__(f"Leitor {leitor_id} associado à antena está inativo.")
 
 
 class AntenaNaoPertenceAoPortal(ErroTopologiaPortal):
+    """Falha de domínio: antena nao pertence ao portal; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, antena_id: int, portal_esperado_id: int, portal_atual_id: int | None) -> None:
+        """Inicializa AntenaNaoPertenceAoPortal com as dependências e valores recebidos."""
         self.antena_id = antena_id
         self.portal_esperado_id = portal_esperado_id
         self.portal_atual_id = portal_atual_id
@@ -95,13 +111,17 @@ class AntenaNaoPertenceAoPortal(ErroTopologiaPortal):
 
 
 class LadoInvalido(ErroTopologiaPortal):
+    """Falha de domínio: lado invalido; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, lado: str) -> None:
+        """Inicializa LadoInvalido com as dependências e valores recebidos."""
         self.lado = lado
         super().__init__(f"Lado {lado!r} inválido. Deve ser 'a' ou 'b'.")
 
 
 class FuncaoInvalida(ErroTopologiaPortal):
+    """Falha de domínio: funcao invalida; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, funcao: str) -> None:
+        """Inicializa FuncaoInvalida com as dependências e valores recebidos."""
         self.funcao = funcao
         super().__init__(
             f"Função operacional {funcao!r} inválida. Deve ser 'entrada', 'saida' ou 'auxiliar'."
@@ -109,7 +129,9 @@ class FuncaoInvalida(ErroTopologiaPortal):
 
 
 class ZonaIncompativelComLado(ErroTopologiaPortal):
+    """Falha de domínio: zona incompativel com lado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, portal_id: int, lado: str, zona_informada_id: int, zona_esperada_id: int) -> None:
+        """Inicializa ZonaIncompativelComLado com as dependências e valores recebidos."""
         self.portal_id = portal_id
         self.lado = lado
         self.zona_informada_id = zona_informada_id
@@ -121,9 +143,11 @@ class ZonaIncompativelComLado(ErroTopologiaPortal):
 
 
 class ZonaIncompativelComAntena(ErroTopologiaPortal):
+    """Falha de domínio: zona incompativel com antena; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(
         self, antena_id: int, zona_antena_id: int, lado: str, zona_lado_id: int
     ) -> None:
+        """Inicializa ZonaIncompativelComAntena com as dependências e valores recebidos."""
         self.antena_id = antena_id
         self.zona_antena_id = zona_antena_id
         self.lado = lado
@@ -135,7 +159,9 @@ class ZonaIncompativelComAntena(ErroTopologiaPortal):
 
 
 class MapeamentoAtivoExistente(ErroTopologiaPortal):
+    """Falha de domínio: mapeamento ativo existente; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, antena_id: int, mapeamento_ativo_id: int | None = None) -> None:
+        """Inicializa MapeamentoAtivoExistente com as dependências e valores recebidos."""
         self.antena_id = antena_id
         self.mapeamento_ativo_id = mapeamento_ativo_id
         detalhe = f" (mapeamento id={mapeamento_ativo_id})" if mapeamento_ativo_id else ""
@@ -146,7 +172,9 @@ class MapeamentoAtivoExistente(ErroTopologiaPortal):
 
 
 class MapeamentoJaEncerrado(ErroTopologiaPortal):
+    """Falha de domínio: mapeamento ja encerrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, mapeamento_id: int) -> None:
+        """Inicializa MapeamentoJaEncerrado com as dependências e valores recebidos."""
         self.mapeamento_id = mapeamento_id
         super().__init__(
             f"Mapeamento {mapeamento_id} já está encerrado e é histórico (imutável)."
@@ -158,6 +186,9 @@ class MapeamentoJaEncerrado(ErroTopologiaPortal):
 
 @dataclass(frozen=True)
 class ItemTopologiaAntena:
+    """Estrutura Item Topologia Antena usada por api.service_topologia_portal.
+
+    Campos: mapeamento_id, antena_id, reader_id, porta_numero, lado, zona_id, funcao, inicio."""
     mapeamento_id: int
     antena_id: int
     reader_id: str
@@ -170,6 +201,9 @@ class ItemTopologiaAntena:
 
 @dataclass(frozen=True)
 class TopologiaPortal:
+    """Estrutura Topologia Portal usada por api.service_topologia_portal.
+
+    Campos: portal_id, nome, ativo, zona_a_id, zona_a_nome, zona_b_id, zona_b_nome, antenas."""
     portal_id: int
     nome: str
     ativo: bool
@@ -184,10 +218,12 @@ class TopologiaPortal:
 
 
 def _pgcode(erro: IntegrityError) -> str | None:
+    """Extrai SQLSTATE do erro de integridade PostgreSQL."""
     return getattr(erro.orig, "pgcode", None)
 
 
 def _constraint_name(erro: IntegrityError) -> str:
+    """Extrai o nome da constraint PostgreSQL que rejeitou a operação."""
     return getattr(getattr(erro.orig, "diag", None), "constraint_name", None) or ""
 
 
@@ -206,6 +242,7 @@ def _commit_mapeamento(session: Session, antena_id: int) -> None:
 
 
 def _validar_lado(lado: str) -> str:
+    """Valida lado."""
     lado_norm = lado.strip().lower()
     if lado_norm not in LADOS_VALIDOS:
         raise LadoInvalido(lado)
@@ -213,6 +250,7 @@ def _validar_lado(lado: str) -> str:
 
 
 def _validar_funcao(funcao: str) -> str:
+    """Valida funcao."""
     funcao_norm = funcao.strip().lower()
     if funcao_norm not in FUNCOES_VALIDAS:
         raise FuncaoInvalida(funcao)
@@ -319,6 +357,7 @@ def criar_mapeamento(
 
 
 def buscar_mapeamento_por_id(session: Session, mapeamento_id: int) -> MapeamentoAntenaPortal:
+    """Busca mapeamento por id."""
     mapeamento = session.get(MapeamentoAntenaPortal, mapeamento_id)
     if mapeamento is None:
         raise MapeamentoNaoEncontrado(mapeamento_id)
@@ -393,6 +432,7 @@ def inativar_mapeamento(session: Session, mapeamento_id: int) -> MapeamentoAnten
 def listar_mapeamentos_portal(
     session: Session, portal_id: int, incluir_historico: bool = False
 ) -> list[MapeamentoAntenaPortal]:
+    """Lista mapeamentos portal."""
     portal = session.get(Portal, portal_id)
     if portal is None:
         raise PortalNaoEncontrado(portal_id)
@@ -405,6 +445,7 @@ def listar_mapeamentos_portal(
 
 
 def listar_historico_antena(session: Session, antena_id: int) -> list[MapeamentoAntenaPortal]:
+    """Lista historico antena."""
     antena = session.get(Antena, antena_id)
     if antena is None:
         raise AntenaNaoEncontrada(antena_id)

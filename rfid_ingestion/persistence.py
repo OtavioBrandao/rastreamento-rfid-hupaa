@@ -12,11 +12,17 @@ class JsonlEventStore:
     """Grava um evento JSON por linha e faz flush após cada append."""
 
     def __init__(self, path: Path) -> None:
+        """Inicializa JsonlEventStore com as dependências e valores recebidos."""
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = Lock()
 
     def append(self, event: Mapping[str, Any]) -> None:
+        """Acrescenta um envelope JSONL sob lock e faz flush do buffer Python.
+
+        Não executa fsync; a garantia de persistência de leituras aceitas depende
+        do commit PostgreSQL e da política de durabilidade do banco/broker.
+        """
         serialized = json.dumps(
             event,
             ensure_ascii=True,

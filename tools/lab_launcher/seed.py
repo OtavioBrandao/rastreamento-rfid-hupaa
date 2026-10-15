@@ -234,6 +234,7 @@ def semear_equipamentos(session: Session, tags: list[tuple[str, str | None]],
 
 
 def main() -> int:
+    """Executa a entrada de linha de comando de tools.lab_launcher.seed; devolve o código de saída quando aplicável."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reader-id", default="reader-01")
     parser.add_argument("--serial")

@@ -156,6 +156,7 @@ class Equipamento(Base):
 
 
 class Tag(Base):
+    """Identidade EPC persistida; associações temporais determinam o equipamento correspondente."""
     __tablename__ = "tags"
 
     id = Column(BigInteger, primary_key=True)
@@ -771,6 +772,7 @@ ORIGENS_AUDITORIA = ("usuario", "sistema", "anonimo")
 
 
 def _lista_sql(valores: tuple[str, ...]) -> str:
+    """Formata constantes do catálogo para uso em expressão SQL de constraint."""
     return ", ".join(f"'{valor}'" for valor in valores)
 
 

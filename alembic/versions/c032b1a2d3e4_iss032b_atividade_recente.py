@@ -10,6 +10,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Aplica a revisão: ISS-032B: índice para atividade recente global com limite."""
     op.create_index(
         "ix_historico_atividade_recente", "historico_movimentacoes",
         ["movimentada_em", "id"],
@@ -18,4 +19,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Reverte a revisão: ISS-032B: índice para atividade recente global com limite."""
     op.drop_index("ix_historico_atividade_recente", table_name="historico_movimentacoes")

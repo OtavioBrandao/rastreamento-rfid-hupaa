@@ -11,6 +11,7 @@ class DatabaseConfigurationError(ValueError):
 
 
 def create_app_engine(environ=None) -> Engine:
+    """Cria engine de ingestão a partir de APP_DATABASE_URL com validação de configuração."""
     source = os.environ if environ is None else environ
     raw = source.get("APP_DATABASE_URL", "")
     if not raw.strip():

@@ -60,15 +60,15 @@ O Neon expõe duas connection strings pro mesmo banco, diferindo só por `-poole
 
 ## 4. Variáveis de ambiente
 
-Adicionadas em `.env.example`, `.env.local.example` e `.env.cloud.example` (placeholders, sem segredo real):
+Adicionadas em `config/environments/.env.example`, `config/environments/.env.local.example` e `config/environments/.env.cloud.example` (placeholders, sem segredo real):
 
 DATABASE_URL=postgresql+psycopg2://neondb_owner:<senha>@<host>.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
 APP_DATABASE_URL=postgresql+psycopg2://rfid_app:<senha>@<host>-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require
 
 
-> Nota: o Neon fornece a string com prefixo `postgresql://`; o SQLAlchemy/Alembic exige `postgresql+psycopg2://` (driver explícito) — ajustar manualmente ao colar no `.env`.
+> Nota: o Neon fornece a string com prefixo `postgresql://`; o SQLAlchemy/Alembic exige `postgresql+psycopg2://` (driver explícito) — ajustar manualmente ao colar no `config/environments/.env`.
 
-`.env` real nunca é commitado (já coberto pelo `.gitignore` existente do projeto).
+`config/environments/.env` real nunca é commitado (já coberto pelo `.gitignore` existente do projeto).
 
 ## 5. Limites do plano Free (verificado, pode mudar — revisar periodicamente)
 
@@ -82,7 +82,7 @@ APP_DATABASE_URL=postgresql+psycopg2://rfid_app:<senha>@<host>-pooler.us-east-2.
 | Backup / PITR | **6 horas** de histórico de restauração instantânea (limitado a 1 GB-mês de mudanças) + 1 snapshot manual |
 | Histórico de monitoramento | 1 dia |
 
-**Impacto prático já observado:** durante a configuração, uma sessão `psql` ficou parada poucos minutos (enquanto configurávamos o `.env` em outro terminal) e o compute suspendeu no meio de uma sequência de comandos SQL — o `psql` reconectou sozinho, mas os comandos que ainda não tinham rodado falharam (`role "rfid_app" does not exist`, porque o `CREATE ROLE` anterior nunca chegou a executar antes da queda). **Lição prática:** ao rodar uma sequência de comandos SQL relacionados, evitar pausas longas no meio — ou aceitar que pode ser necessário rodar o bloco de novo do início.
+**Impacto prático já observado:** durante a configuração, uma sessão `psql` ficou parada poucos minutos (enquanto configurávamos o `config/environments/.env` em outro terminal) e o compute suspendeu no meio de uma sequência de comandos SQL — o `psql` reconectou sozinho, mas os comandos que ainda não tinham rodado falharam (`role "rfid_app" does not exist`, porque o `CREATE ROLE` anterior nunca chegou a executar antes da queda). **Lição prática:** ao rodar uma sequência de comandos SQL relacionados, evitar pausas longas no meio — ou aceitar que pode ser necessário rodar o bloco de novo do início.
 
 **RNF-011 (backup):** as 6h de PITR do Free tier são uma janela curta pra um "backup" no sentido forte — registrado como limitação conhecida, a ser revisitada se o projeto migrar pra um plano pago ou se RPO/RTO formais forem exigidos pelo HUPAA.
 
@@ -103,16 +103,16 @@ Cria uma cópia copy-on-write do banco (schema + dados) com sua própria connect
 ```sql
 ALTER ROLE rfid_app WITH PASSWORD '<nova senha>';
 ```
-Depois: atualizar `.env` em todos os ambientes que usam esse role, e reiniciar qualquer processo que já tivesse a senha antiga carregada em memória. A senha antiga para de funcionar imediatamente após o `ALTER ROLE` — coordenar com a dupla antes de rotacionar em produção pra evitar interrupção.
+Depois: atualizar `config/environments/.env` em todos os ambientes que usam esse role, e reiniciar qualquer processo que já tivesse a senha antiga carregada em memória. A senha antiga para de funcionar imediatamente após o `ALTER ROLE` — coordenar com a dupla antes de rotacionar em produção pra evitar interrupção.
 
 ## 8. Incidente registrado durante a configuração (lição aprendida)
 
-Ao rodar `alembic upgrade head` pela primeira vez contra o Neon, a migration aplicada foi a **versão antiga** (`f2d8d6cd6b62`, anterior às correções da revisão de código do Otávio — sem o `CHECK` de período válido, sem a correção do `event_id`). Causa raiz: o ambiente local (notebook) estava numa branch Git desatualizada (`feat/iss-002a-modelagem-dados`, no primeiro commit), porque o `git pull` da `main` mergeada nunca tinha sido feito nesse ambiente específico.
+Ao rodar `alembic -c config/alembic.ini upgrade head` pela primeira vez contra o Neon, a migration aplicada foi a **versão antiga** (`f2d8d6cd6b62`, anterior às correções da revisão de código do Otávio — sem o `CHECK` de período válido, sem a correção do `event_id`). Causa raiz: o ambiente local (notebook) estava numa branch Git desatualizada (`feat/iss-002a-modelagem-dados`, no primeiro commit), porque o `git pull` da `main` mergeada nunca tinha sido feito nesse ambiente específico.
 
 **Correção aplicada:**
-1. `alembic downgrade base` — revertido enquanto o arquivo de migration antigo ainda existia localmente (importante: reverter *antes* de atualizar o código, senão o Alembic perde a referência de como desfazer a migration errada)
+1. `alembic -c config/alembic.ini downgrade base` — revertido enquanto o arquivo de migration antigo ainda existia localmente (importante: reverter *antes* de atualizar o código, senão o Alembic perde a referência de como desfazer a migration errada)
 2. `git checkout main && git pull origin main` — trouxe a migration corrigida (`44ef89b10f17`)
-3. `alembic upgrade head` — reaplicado com o schema correto, confirmado via `\d associacoes_tag_equipamento` que o `ck_associacao_periodo_valido` estava presente
+3. `alembic -c config/alembic.ini upgrade head` — reaplicado com o schema correto, confirmado via `\d associacoes_tag_equipamento` que o `ck_associacao_periodo_valido` estava presente
 
 **Prática recomendada daqui pra frente:** antes de rodar qualquer migration contra o Neon de produção, confirmar `git log --oneline -5` e `ls alembic/versions/` — checar que o ambiente está atualizado com a `main`, especialmente em ambientes/notebooks usados com menos frequência.
 
@@ -134,7 +134,7 @@ DELETE FROM tipos_equipamento WHERE nome = 'TESTE_ISS002B';
 
 - [x] Conexão SSL confirmada (TLS 1.3, `channel_binding=require`)
 - [x] Role de aplicação (`rfid_app`) sem privilégio administrativo, criado via SQL
-- [x] Segredos fora do repositório (`.env` gitignored, só placeholders nos `.example`)
+- [x] Segredos fora do repositório (`config/environments/.env` gitignored, só placeholders nos `.example`)
 - [x] Limites do free tier documentados (seção 5)
 - [x] Estratégia de branch para testar migrations documentada (seção 6)
 - [ ] Conexão validada a partir do ambiente do Otávio — **pendente**

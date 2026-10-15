@@ -24,6 +24,7 @@ class CorrecaoRecusada(ValueError):
     """Regra de negócio recusou a correção. `codigo` é estável para a API."""
 
     def __init__(self, codigo: str, mensagem: str) -> None:
+        """Inicializa CorrecaoRecusada com as dependências e valores recebidos."""
         super().__init__(mensagem)
         self.codigo = codigo
 
@@ -32,6 +33,7 @@ class ConflitoDeVersao(Exception):
     """O equipamento mudou desde que o cliente o leu (versão otimista, ISS-025)."""
 
     def __init__(self, versao_atual: int) -> None:
+        """Inicializa ConflitoDeVersao com as dependências e valores recebidos."""
         super().__init__(f"equipamento alterado por outra operação (versão atual {versao_atual})")
         self.versao_atual = versao_atual
 
@@ -82,6 +84,9 @@ def corrigir_localizacao(
 
 @dataclass(slots=True)
 class LocationCounters:
+    """Estrutura Location Counters usada por rfid_location.service.
+
+    Campos: processed, updated, stale, duplicate, conflicts, unresolved, retries."""
     processed: int = 0
     updated: int = 0
     stale: int = 0
@@ -92,10 +97,12 @@ class LocationCounters:
 
 
 class LocationProjectionService:
+    """Reconcilia passagens confirmadas com histórico e última zona em transações serializadas."""
     def __init__(
         self, engine: Engine, *, monotonic_clock: Callable[[], float] = time.monotonic,
         retry_interval_seconds: float = 5.0,
     ) -> None:
+        """Inicializa LocationProjectionService com as dependências e valores recebidos."""
         self.engine = engine
         self.monotonic_clock = monotonic_clock
         self.retry_interval_seconds = retry_interval_seconds
@@ -104,6 +111,7 @@ class LocationProjectionService:
         self.counters = LocationCounters()
 
     def _log(self, result: LocationProjectionResult) -> None:
+        """Registra evento estruturado de processamento no logger do módulo."""
         LOGGER.info(json.dumps({
             "event_type": f"rfid_location_{result.status}",
             "equipment_id": result.equipment_id, "passage_id": result.passage_id,
@@ -117,6 +125,7 @@ class LocationProjectionService:
         }))
 
     def _count(self, result: LocationProjectionResult) -> None:
+        """Atualiza contadores de resultado da projeção sem modificar o estado persistido."""
         self.counters.processed += 1
         if result.status == "updated":
             self.counters.updated += 1
@@ -130,6 +139,10 @@ class LocationProjectionService:
             self.counters.unresolved += 1
 
     def process_passage(self, passage_id: int) -> LocationProjectionResult:
+        """Grava movimentação automática e atualiza a última zona sob lock na mesma transação.
+
+        Eventos antigos preservam o histórico sem regredir a projeção; empate temporal
+        conflitante é sinalizado. A operação é idempotente pelo vínculo com a passagem."""
         with self.engine.begin() as connection:
             written = append_automatic_movement(connection, passage_id)
             if written.status not in ("recorded", "duplicate"):
@@ -181,6 +194,7 @@ class LocationProjectionService:
         return result
 
     def process_pending(self, *, limit: int = 100) -> None:
+        """Reconcilia passagens confirmadas com cursor circular e isolamento das falhas de cada item."""
         try:
             ids = repository.pending_ids(
                 self.engine, limit=limit, after_id=self._pending_after_id
@@ -205,6 +219,7 @@ class LocationProjectionService:
                 }))
 
     def tick(self, now_monotonic: float | None = None) -> None:
+        """Executa reconciliação periódica da localização quando o prazo monotônico é atingido."""
         now = self.monotonic_clock() if now_monotonic is None else now_monotonic
         if now >= self._next_retry_at:
             self._next_retry_at = now + self.retry_interval_seconds

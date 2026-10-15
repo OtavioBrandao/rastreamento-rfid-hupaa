@@ -45,21 +45,28 @@ __all__ = [
 
 
 class EquipamentoInativo(Exception):
+    """Falha de domínio: equipamento inativo; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, equipamento_id: int) -> None:
+        """Inicializa EquipamentoInativo com as dependências e valores recebidos."""
         super().__init__(f"Equipamento {equipamento_id} está inativo: reative antes de corrigir.")
 
 
 class ZonaInvalida(Exception):
+    """Falha de domínio: zona invalida; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, zona_id: int) -> None:
+        """Inicializa ZonaInvalida com as dependências e valores recebidos."""
         super().__init__(f"Zona {zona_id} inexistente ou inativa.")
 
 
 class SemMudanca(Exception):
+    """Falha de domínio: sem mudanca; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self) -> None:
+        """Inicializa SemMudanca com as dependências e valores recebidos."""
         super().__init__("Nada a corrigir: os valores informados são iguais aos atuais.")
 
 
 def _nome_da_zona(conexao, zona_id: int | None) -> str | None:
+    """Resolve o nome da zona para a resposta de correção manual."""
     if zona_id is None:
         return None
     return conexao.scalar(select(Zona.nome).where(Zona.id == zona_id))
@@ -69,6 +76,7 @@ def corrigir_localizacao_equipamento(
     db: Session, *, autor_id: int, equipamento_id: int, zona_id: int, justificativa: str,
     referencia: str | None, versao_esperada: int, agora: datetime,
 ):
+    """Corrige localizacao equipamento."""
     conexao = db.connection()
     atual = lock_equipment(conexao, equipamento_id)  # trava ANTES de conferir status
     if atual is None:
@@ -120,6 +128,7 @@ def corrigir_cadastro(
     versao_esperada: int, nome: str | None, tipo_id: int | None,
     identificador_interno: str | None, descricao: str | None, descricao_informada: bool,
 ) -> Equipamento:
+    """Corrige cadastro."""
     equipamento = db.scalar(
         select(Equipamento).where(Equipamento.id == equipamento_id)
         .with_for_update().execution_options(populate_existing=True)

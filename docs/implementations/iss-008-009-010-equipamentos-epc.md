@@ -1,6 +1,6 @@
 # ISS-008, ISS-009 e ISS-010 — Gestão de Ativos, Tipos e Vínculo de Tags (EPC)
 
-Este documento descreve a implementação do módulo de domínio de ativos hospitalares do **RFID Hospital MVP**, abrangendo as issues:
+Este documento descreve a implementação do módulo de domínio de ativos hospitalares do **Rastreamento RFID HUPAA**, abrangendo as issues:
 - **ISS-009 (PR #45):** CRUD de Tipos de Equipamentos
 - **ISS-008 (PR #46):** CRUD de Equipamentos com Identificador Interno Normalizado
 - **ISS-010 (PR #48):** Associação Segura e Temporal de EPCs a Equipamentos

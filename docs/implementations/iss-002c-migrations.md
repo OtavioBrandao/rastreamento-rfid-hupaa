@@ -4,18 +4,18 @@ Documento de apoio à ISS-002c (Épico E1, Must, RNF-011, RNF-012, RNF-016). Com
 
 ## 1. Comandos padronizados
 
-Todos assumem `DATABASE_URL` já definida (via `.env` local ou exportada na sessão) e ambiente virtual ativado.
+Todos assumem `DATABASE_URL` já definida (via `config/environments/.env` local ou exportada na sessão) e ambiente virtual ativado.
 
 | Ação | Comando |
 |---|---|
-| **Aplicar** todas as migrations pendentes | `python -m alembic upgrade head` |
-| **Verificar** a versão atual do banco | `python -m alembic current` |
+| **Aplicar** todas as migrations pendentes | `python -m alembic -c config/alembic.ini upgrade head` |
+| **Verificar** a versão atual do banco | `python -m alembic -c config/alembic.ini current` |
 | **Verificar** o histórico completo de migrations | `python -m alembic history` |
-| **Reverter** a última migration | `python -m alembic downgrade -1` |
-| **Reverter** tudo (banco volta a vazio) | `python -m alembic downgrade base` |
+| **Reverter** a última migration | `python -m alembic -c config/alembic.ini downgrade -1` |
+| **Reverter** tudo (banco volta a vazio) | `python -m alembic -c config/alembic.ini downgrade base` |
 | **Criar** uma migration nova a partir de mudanças em `db/models.py` | `python -m alembic revision --autogenerate -m "descrição da mudança"` |
 
-**Um banco vazio chega ao schema atual com um único comando**: `python -m alembic upgrade head` (critério de aceitação da issue — validado em banco local e em branch de teste do Neon).
+**Um banco vazio chega ao schema atual com um único comando**: `python -m alembic -c config/alembic.ini upgrade head` (critério de aceitação da issue — validado em banco local e em branch de teste do Neon).
 
 ## 2. Convenção para novas migrations
 
@@ -35,11 +35,11 @@ Seguro apagar o arquivo e regenerar via `--autogenerate` depois de corrigir `db/
 
 ### Cenário B — Erro descoberto ANTES de aplicar no Neon principal (só em banco local/branch de teste)
 ```bash
-python -m alembic downgrade base   # limpa o banco de teste
+python -m alembic -c config/alembic.ini downgrade base   # limpa o banco de teste
 # corrige db/models.py
 rm alembic/versions/<arquivo_com_erro>.py
 python -m alembic revision --autogenerate -m "schema inicial"
-python -m alembic upgrade head     # reaplica, já corrigido
+python -m alembic -c config/alembic.ini upgrade head     # reaplica, já corrigido
 ```
 
 ### Cenário C — Erro descoberto DEPOIS de já ter aplicado no Neon principal (produção)
@@ -48,9 +48,9 @@ python -m alembic upgrade head     # reaplica, já corrigido
 1. **Correção incremental (preferida):** criar uma migration nova que ajusta o que está errado (ex.: `ALTER TABLE ... ADD CONSTRAINT ...`). Mantém o histórico rastreável e não exige coordenar downtime com a dupla.
 2. **Rollback completo (emergência):** só quando a correção incremental não for viável.
 ```bash
-   python -m alembic downgrade base
+   python -m alembic -c config/alembic.ini downgrade base
    # corrigir db/models.py e a migration
-   python -m alembic upgrade head
+   python -m alembic -c config/alembic.ini upgrade head
 ```
    **Antes de rodar isso contra o Neon principal:** avisar a outra pessoa da dupla (evita ela rodar algo no meio do processo), e testar a correção numa **branch de teste do Neon** primeiro (`neonctl branches create --name teste-rollback --parent main`) — nunca testar uma correção de emergência direto em produção.
 

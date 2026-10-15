@@ -45,6 +45,7 @@ class ConfigLocalizacaoPiloto:
     zonas: tuple[str, ...] = ("Corredor", "Posto de Enfermagem", "Enfermaria 01")
 
     def __post_init__(self) -> None:
+        """Valida as invariantes dos campos após a construção da estrutura."""
         for rotulo, valor in (("andar", self.andar), ("setor", self.setor)):
             if not valor.strip():
                 raise ValueError(f"{rotulo} não pode ser vazio")
@@ -64,10 +65,12 @@ class ResultadoSeed:
 
     @property
     def total_criado(self) -> int:
+        """Soma as entidades criadas pelo seed nesta execução."""
         return int(self.andar_criado) + int(self.setor_criado) + len(self.zonas_criadas)
 
 
 def semear(session: Session, config: ConfigLocalizacaoPiloto | None = None) -> ResultadoSeed:
+    """Cria ou reutiliza o cadastro base do cenário, preservando identificadores e regras de integridade."""
     config = config or ConfigLocalizacaoPiloto()
     resultado = ResultadoSeed()
 
@@ -103,6 +106,7 @@ def semear(session: Session, config: ConfigLocalizacaoPiloto | None = None) -> R
 
 
 def _config_da_linha_de_comando(argv: list[str] | None) -> ConfigLocalizacaoPiloto:
+    """Constrói configuração do seed piloto a partir dos argumentos da CLI."""
     padrao = ConfigLocalizacaoPiloto()
     parser = argparse.ArgumentParser(description="Seed do setor piloto do 4º andar (ISS-011).")
     parser.add_argument("--andar", default=padrao.andar, help="nome do andar")
@@ -122,6 +126,7 @@ def _config_da_linha_de_comando(argv: list[str] | None) -> ConfigLocalizacaoPilo
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Executa a entrada de linha de comando de api.seed_localizacao_piloto; devolve o código de saída quando aplicável."""
     config = _config_da_linha_de_comando(argv)
     session = SessionLocal()
     try:

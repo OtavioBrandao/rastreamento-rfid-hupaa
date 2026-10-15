@@ -52,16 +52,19 @@ _ADAPTER = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 def _adapter(valor: Any) -> None:
+    """Valida adapter de normalização contra os valores suportados."""
     if not isinstance(valor, str) or not _ADAPTER.fullmatch(valor):
         raise ValueError("deve ser texto com letras, dígitos, '_' e '-' (até 64 caracteres)")
 
 
 def _protocolo(valor: Any) -> None:
+    """Valida protocolo declarado na configuração de ingestão do leitor."""
     if valor != "mqtt" or not isinstance(valor, str):
         raise ValueError("deve ser 'mqtt'")
 
 
 def _formato_timestamp(valor: Any) -> None:
+    """Valida o nome do perfil temporal aceito pela configuração."""
     if valor not in ("rfc3339", "epoch_ms") or not isinstance(valor, str):
         raise ValueError("deve ser 'rfc3339' ou 'epoch_ms'")
 
@@ -69,6 +72,7 @@ def _formato_timestamp(valor: Any) -> None:
 def _topico(valor: Any) -> None:
     # Mesmas regras de tópico da ingestão (fonte única). Aceita a forma de
     # assinatura (com `+`); o alfabeto dos segmentos já exclui `:`, `@` e espaço.
+    """Valida a sintaxe do tópico de leitura aceito pelo ingestor."""
     if not isinstance(valor, str) or len(valor) > 255:
         raise ValueError("deve ser um tópico MQTT (texto de até 255 caracteres)")
     try:
@@ -81,6 +85,7 @@ def _topico(valor: Any) -> None:
 
 def _qos(valor: Any) -> None:
     # `bool` é subclasse de int: `True` não é um QoS.
+    """Exige o QoS suportado pelo contrato de persistência da ingestão."""
     if type(valor) is not int or valor not in (0, 1, 2):
         raise ValueError("deve ser o inteiro 0, 1 ou 2")
 
@@ -95,6 +100,7 @@ PARAMETROS_INGESTAO_PERMITIDOS: dict[str, Callable[[Any], None]] = {
 
 
 def _validar_parametros_ingestao(valor: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Valida chaves e tipos da configuração de ingestão associada ao leitor."""
     if valor is None:
         return None
 
@@ -118,6 +124,7 @@ def _validar_parametros_ingestao(valor: dict[str, Any] | None) -> dict[str, Any]
 
 
 def _validar_reader_id(valor: str | None) -> str | None:
+    """Valida identidade lógica do leitor usada no segmento do tópico MQTT."""
     valor = _validar_texto_preenchido(valor)
     if valor is not None and not _ALFABETO_TOPICO.fullmatch(valor):
         raise ValueError(
@@ -133,6 +140,7 @@ class _AtualizacaoParcial(BaseModel):
 
     @model_validator(mode="after")
     def _recusar_null_explicito(self):
+        """Recusa null explícito em campos cujo PATCH permite omissão, mas não remoção."""
         for campo in self.model_fields_set & self._NAO_NULOS:
             if getattr(self, campo) is None:
                 raise ValueError(f"'{campo}' não pode ser null")
@@ -143,6 +151,7 @@ class _AtualizacaoParcial(BaseModel):
 
 
 class LeitorCriar(BaseModel):
+    """Contrato de dados Leitor Criar; valida campos e serializa a resposta da API."""
     reader_id: str = Field(..., max_length=64)
     fabricante: str = Field(..., max_length=255)
     modelo: str = Field(..., max_length=255)
@@ -183,6 +192,7 @@ class LeitorAtualizar(_AtualizacaoParcial):
 
 
 class LeitorResposta(BaseModel):
+    """Contrato de dados Leitor Resposta; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -201,6 +211,7 @@ class LeitorResposta(BaseModel):
 
 
 class LeitorPagina(BaseModel):
+    """Contrato de dados Leitor Pagina; valida campos e serializa a resposta da API."""
     items: list[LeitorResposta]
     page: int
     size: int
@@ -214,6 +225,7 @@ FuncaoAntena = Literal["entrada", "saida", "indefinido"]
 
 
 class AntenaCriar(BaseModel):
+    """Contrato de dados Antena Criar; valida campos e serializa a resposta da API."""
     leitor_id: int = Field(..., gt=0)
     # A ingestão só aceita `antenna` inteiro >= 1 (rfid_ingestion/normalization.py).
     porta_numero: int = Field(..., gt=0)
@@ -238,6 +250,7 @@ class AntenaAtualizar(_AtualizacaoParcial):
 
 
 class AntenaResposta(BaseModel):
+    """Contrato de dados Antena Resposta; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -252,6 +265,7 @@ class AntenaResposta(BaseModel):
 
 
 class AntenaPagina(BaseModel):
+    """Contrato de dados Antena Pagina; valida campos e serializa a resposta da API."""
     items: list[AntenaResposta]
     page: int
     size: int
@@ -263,6 +277,7 @@ class AntenaPagina(BaseModel):
 
 
 class PortalCriar(BaseModel):
+    """Contrato de dados Portal Criar; valida campos e serializa a resposta da API."""
     nome: str = Field(..., max_length=255)
     zona_a_id: int = Field(..., gt=0)
     zona_b_id: int = Field(..., gt=0)
@@ -272,6 +287,7 @@ class PortalCriar(BaseModel):
 
 
 class PortalAtualizar(_AtualizacaoParcial):
+    """Contrato de dados Portal Atualizar; valida campos e serializa a resposta da API."""
     _NAO_NULOS: ClassVar[frozenset[str]] = frozenset({"nome", "zona_a_id", "zona_b_id"})
 
     nome: str | None = Field(default=None, max_length=255)
@@ -283,6 +299,7 @@ class PortalAtualizar(_AtualizacaoParcial):
 
 
 class PortalResposta(BaseModel):
+    """Contrato de dados Portal Resposta; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -296,6 +313,7 @@ class PortalResposta(BaseModel):
 
 
 class PortalPagina(BaseModel):
+    """Contrato de dados Portal Pagina; valida campos e serializa a resposta da API."""
     items: list[PortalResposta]
     page: int
     size: int

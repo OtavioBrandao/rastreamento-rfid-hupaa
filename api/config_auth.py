@@ -29,6 +29,9 @@ PADRAO_COOKIE_SEGURO = True
 
 @dataclass(frozen=True)
 class ConfiguracaoAuth:
+    """Estrutura Configuracao Auth usada por api.config_auth.
+
+    Campos: sessao_duracao, login_max_tentativas, login_bloqueio, cookie_seguro."""
     sessao_duracao: timedelta
     login_max_tentativas: int
     login_bloqueio: timedelta
@@ -36,6 +39,7 @@ class ConfiguracaoAuth:
 
 
 def _inteiro_positivo(source: Mapping[str, str], nome: str, padrao: int) -> int:
+    """Lê inteiro positivo do ambiente, aplicando o padrão e recusando valores inválidos."""
     bruto = source.get(nome)
     if bruto is None:
         return padrao
@@ -49,6 +53,7 @@ def _inteiro_positivo(source: Mapping[str, str], nome: str, padrao: int) -> int:
 
 
 def _booleano(source: Mapping[str, str], nome: str, padrao: bool) -> bool:
+    """Converte opção textual de ambiente em booleano ou rejeita configuração inválida."""
     bruto = source.get(nome)
     if bruto is None:
         return padrao
@@ -61,6 +66,7 @@ def _booleano(source: Mapping[str, str], nome: str, padrao: bool) -> bool:
 
 
 def configuracao_auth_do_ambiente(environ: Mapping[str, str] | None = None) -> ConfiguracaoAuth:
+    """Lê e valida parâmetros de sessão, cookie e bloqueio sem acessar o banco."""
     source = os.environ if environ is None else environ
     return ConfiguracaoAuth(
         sessao_duracao=timedelta(minutes=_inteiro_positivo(

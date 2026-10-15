@@ -16,6 +16,9 @@ from api.epc import normalizar_epc
 
 @dataclass(frozen=True)
 class Antena:
+    """Estrutura Antena usada por tools.lab_simulator.modelo.
+
+    Campos: porta, nome, x, y."""
     porta: int
     nome: str
     x: float
@@ -43,6 +46,9 @@ PREFIXO_EPC = "E2804C41"
 
 @dataclass
 class Item:
+    """Estrutura Item usada por tools.lab_simulator.modelo.
+
+    Campos: nome, epc, x, y, ultima_leitura."""
     nome: str
     epc: str
     x: float
@@ -72,6 +78,7 @@ def detectar(x: float, y: float) -> list[tuple[Antena, int]]:
 
 
 def limitar(x: float, y: float) -> tuple[float, float]:
+    """Restringe uma coordenada ao intervalo permitido na planta."""
     return (min(max(x, MARGEM), 100 - MARGEM), min(max(y, MARGEM), 100 - MARGEM))
 
 
@@ -107,6 +114,7 @@ def posicoes_iniciais(quantidade: int, rng: random.Random) -> list[tuple[float, 
 
 
 def criar_itens(nomes: list[str], rng: random.Random) -> list[Item]:
+    """Cria itens."""
     nomes = [nome.strip() for nome in nomes]
     if any(not nome for nome in nomes):
         raise ValueError("informe um nome para cada item")

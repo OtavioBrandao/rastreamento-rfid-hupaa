@@ -1,7 +1,9 @@
+name: rfid-hospital-mvp
+
 x-python-service: &python-service
   build:
-    context: .
-    dockerfile: Dockerfile
+    context: ..
+    dockerfile: deploy/Dockerfile
   image: rfid-hospital-mvp:dev
   networks:
     - rfid-dev
@@ -38,7 +40,7 @@ services:
     ports:
       - "${MQTT_BIND_ADDRESS:-0.0.0.0}:${MQTT_LOCAL_PORT:-1883}:1883"
     volumes:
-      - ./mosquitto/mosquitto.dev.conf:/mosquitto/config/mosquitto.conf:ro
+      - ../mosquitto/mosquitto.dev.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto_data:/mosquitto/data
     networks:
       - rfid-dev
@@ -63,7 +65,7 @@ services:
   migrate-local:
     <<: *python-service
     profiles: ["local"]
-    command: ["alembic", "upgrade", "head"]
+    command: ["alembic", "-c", "config/alembic.ini", "upgrade", "head"]
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-rfid_dev}:${POSTGRES_PASSWORD:-rfid_dev_only}@postgres:5432/${POSTGRES_DB:-rfid_hospital_dev}
     depends_on:
@@ -114,7 +116,7 @@ services:
       RFID_DIRECTION_AMBIGUITY_MS: ${RFID_DIRECTION_AMBIGUITY_MS:-100}
       APP_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-rfid_dev}:${POSTGRES_PASSWORD:-rfid_dev_only}@postgres:5432/${POSTGRES_DB:-rfid_hospital_dev}
     volumes:
-      - ./data:/app/data
+      - ../data:/app/data
     depends_on:
       mosquitto:
         condition: service_healthy
@@ -125,7 +127,7 @@ services:
     <<: *python-service
     profiles: ["managed"]
     entrypoint: ["/app/docker/require-database-url.sh"]
-    command: ["alembic", "upgrade", "head"]
+    command: ["alembic", "-c", "config/alembic.ini", "upgrade", "head"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-}
 
@@ -175,7 +177,7 @@ services:
       RFID_DIRECTION_AMBIGUITY_MS: ${RFID_DIRECTION_AMBIGUITY_MS:-100}
       APP_DATABASE_URL: ${APP_DATABASE_URL:-}
     volumes:
-      - ./data:/app/data
+      - ../data:/app/data
     depends_on:
       migrate-managed:
         condition: service_completed_successfully

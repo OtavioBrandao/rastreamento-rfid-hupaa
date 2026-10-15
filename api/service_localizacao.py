@@ -69,19 +69,25 @@ class ErroLocalizacao(Exception):
 
 
 class AndarNaoEncontrado(ErroLocalizacao):
+    """Falha de domínio: andar nao encontrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, andar_id: int) -> None:
+        """Inicializa AndarNaoEncontrado com as dependências e valores recebidos."""
         self.andar_id = andar_id
         super().__init__(f"Andar {andar_id} não encontrado.")
 
 
 class SetorNaoEncontrado(ErroLocalizacao):
+    """Falha de domínio: setor nao encontrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, setor_id: int) -> None:
+        """Inicializa SetorNaoEncontrado com as dependências e valores recebidos."""
         self.setor_id = setor_id
         super().__init__(f"Setor {setor_id} não encontrado.")
 
 
 class ZonaNaoEncontrada(ErroLocalizacao):
+    """Falha de domínio: zona nao encontrada; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, zona_id: int) -> None:
+        """Inicializa ZonaNaoEncontrada com as dependências e valores recebidos."""
         self.zona_id = zona_id
         super().__init__(f"Zona {zona_id} não encontrada.")
 
@@ -96,6 +102,7 @@ class NomeDuplicado(ErroLocalizacao):
     }
 
     def __init__(self, nivel: str, nome: str) -> None:
+        """Inicializa NomeDuplicado com as dependências e valores recebidos."""
         self.nivel = nivel
         self.nome = nome
         self.nome_normalizado = normalizar_nome(nome)
@@ -113,6 +120,7 @@ class PaiInvalido(ErroLocalizacao):
     """
 
     def __init__(self, nivel_pai: str, pai_id: int, motivo: str) -> None:
+        """Inicializa PaiInvalido com as dependências e valores recebidos."""
         self.nivel_pai = nivel_pai
         self.pai_id = pai_id
         self.motivo = motivo
@@ -127,6 +135,7 @@ class PaiInativo(ErroLocalizacao):
     """
 
     def __init__(self, nivel: str, entidade_id: int, nivel_pai: str, pai_id: int) -> None:
+        """Inicializa PaiInativo com as dependências e valores recebidos."""
         self.nivel = nivel
         self.entidade_id = entidade_id
         self.nivel_pai = nivel_pai
@@ -139,7 +148,9 @@ class PaiInativo(ErroLocalizacao):
 
 
 class TemFilhosAtivos(ErroLocalizacao):
+    """Falha de domínio: tem filhos ativos; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, nivel: str, entidade_id: int, nivel_filho: str, total: int) -> None:
+        """Inicializa TemFilhosAtivos com as dependências e valores recebidos."""
         self.nivel = nivel
         self.entidade_id = entidade_id
         self.nivel_filho = nivel_filho
@@ -152,7 +163,9 @@ class TemFilhosAtivos(ErroLocalizacao):
 
 
 class ZonaEmUso(ErroLocalizacao):
+    """Falha de domínio: zona em uso; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, zona_id: int, referenciada_em: str, total: int) -> None:
+        """Inicializa ZonaEmUso com as dependências e valores recebidos."""
         self.zona_id = zona_id
         self.referenciada_em = referenciada_em
         self.total = total
@@ -166,6 +179,7 @@ class Pagina:
     """Resultado paginado dos `listar_*`."""
 
     def __init__(self, items: Sequence, page: int, size: int, total: int) -> None:
+        """Inicializa Pagina com as dependências e valores recebidos."""
         self.items = list(items)
         self.page = page
         self.size = size
@@ -196,6 +210,7 @@ def _commitar_detectando_duplicidade(session: Session, nivel: str, nome: str) ->
 
 
 def _paginar(session: Session, modelo, filtros: list, page: int, size: int) -> Pagina:
+    """Aplica contagem, limite e deslocamento à consulta e devolve a página solicitada."""
     page = max(1, page)
     size = max(1, min(size, TAMANHO_PAGINA_MAXIMO))
 
@@ -237,10 +252,12 @@ def _aplicar_edicao(
 
 
 def _contar(session: Session, modelo, *condicoes) -> int:
+    """Conta resultados da consulta sem carregar todas as entidades."""
     return session.scalar(select(func.count()).select_from(modelo).where(*condicoes)) or 0
 
 
 def _exigir_andar_ativo(session: Session, andar_id: int) -> Andar:
+    """Exige andar existente e ativo para vincular ou alterar o setor."""
     andar = session.get(Andar, andar_id)
     if andar is None:
         raise PaiInvalido("andar", andar_id, "não existe")
@@ -250,6 +267,7 @@ def _exigir_andar_ativo(session: Session, andar_id: int) -> Andar:
 
 
 def _exigir_setor_ativo(session: Session, setor_id: int) -> Setor:
+    """Exige setor existente e ativo para vincular ou alterar a zona."""
     setor = session.get(Setor, setor_id)
     if setor is None:
         raise PaiInvalido("setor", setor_id, "não existe")
@@ -267,6 +285,7 @@ def criar_andar(
     descricao: str | None = None,
     referencia_planta: str | None = None,
 ) -> Andar:
+    """Cria andar."""
     nome = nome.strip()
     andar = Andar(
         nome=nome,
@@ -294,6 +313,7 @@ def listar_andares(
     size: int = TAMANHO_PAGINA_PADRAO,
     incluir_inativos: bool = False,
 ) -> Pagina:
+    """Lista andares."""
     filtros = [] if incluir_inativos else [Andar.ativo.is_(True)]
     return _paginar(session, Andar, filtros, page, size)
 
@@ -307,6 +327,7 @@ def atualizar_andar(
     referencia_planta: str | None = None,
     referencia_planta_informada: bool = False,
 ) -> Andar:
+    """Atualiza andar."""
     andar = buscar_andar_por_id(session, andar_id)
     _aplicar_edicao(
         andar, nome, descricao, descricao_informada, referencia_planta, referencia_planta_informada
@@ -333,6 +354,7 @@ def inativar_andar(session: Session, andar_id: int) -> Andar:
 
 
 def reativar_andar(session: Session, andar_id: int) -> Andar:
+    """Reativa andar."""
     andar = buscar_andar_por_id(session, andar_id)
     if andar.ativo:
         return andar
@@ -352,6 +374,7 @@ def criar_setor(
     descricao: str | None = None,
     referencia_planta: str | None = None,
 ) -> Setor:
+    """Cria setor."""
     _exigir_andar_ativo(session, andar_id)
 
     nome = nome.strip()
@@ -369,6 +392,7 @@ def criar_setor(
 
 
 def buscar_setor_por_id(session: Session, setor_id: int) -> Setor:
+    """Busca setor por id."""
     setor = session.get(Setor, setor_id)
     if setor is None:
         raise SetorNaoEncontrado(setor_id)
@@ -382,6 +406,7 @@ def listar_setores(
     incluir_inativos: bool = False,
     andar_id: int | None = None,
 ) -> Pagina:
+    """Lista setores."""
     filtros = [] if incluir_inativos else [Setor.ativo.is_(True)]
     if andar_id is not None:
         filtros.append(Setor.andar_id == andar_id)
@@ -397,6 +422,7 @@ def atualizar_setor(
     referencia_planta: str | None = None,
     referencia_planta_informada: bool = False,
 ) -> Setor:
+    """Atualiza setor."""
     setor = buscar_setor_por_id(session, setor_id)
     _aplicar_edicao(
         setor, nome, descricao, descricao_informada, referencia_planta, referencia_planta_informada
@@ -449,6 +475,7 @@ def criar_zona(
     referencia_planta: str | None = None,
     observacoes: str | None = None,
 ) -> Zona:
+    """Cria zona."""
     _exigir_setor_ativo(session, setor_id)
 
     nome = nome.strip()
@@ -467,6 +494,7 @@ def criar_zona(
 
 
 def buscar_zona_por_id(session: Session, zona_id: int) -> Zona:
+    """Busca zona por id."""
     zona = session.get(Zona, zona_id)
     if zona is None:
         raise ZonaNaoEncontrada(zona_id)
@@ -480,6 +508,7 @@ def listar_zonas(
     incluir_inativos: bool = False,
     setor_id: int | None = None,
 ) -> Pagina:
+    """Lista zonas."""
     filtros = [] if incluir_inativos else [Zona.ativo.is_(True)]
     if setor_id is not None:
         filtros.append(Zona.setor_id == setor_id)
@@ -497,6 +526,7 @@ def atualizar_zona(
     observacoes: str | None = None,
     observacoes_informada: bool = False,
 ) -> Zona:
+    """Atualiza zona."""
     zona = buscar_zona_por_id(session, zona_id)
     _aplicar_edicao(
         zona, nome, descricao, descricao_informada, referencia_planta, referencia_planta_informada
@@ -595,6 +625,9 @@ def reativar_zona(session: Session, zona_id: int) -> Zona:
 
 @dataclass
 class ZonaNo:
+    """Estrutura Zona No usada por api.service_localizacao.
+
+    Campos: id, setor_id, nome, nome_normalizado, descricao, referencia_planta, observacoes, ativo."""
     id: int
     setor_id: int
     nome: str
@@ -607,6 +640,9 @@ class ZonaNo:
 
 @dataclass
 class SetorNo:
+    """Estrutura Setor No usada por api.service_localizacao.
+
+    Campos: id, andar_id, nome, nome_normalizado, descricao, referencia_planta, ativo, zonas."""
     id: int
     andar_id: int
     nome: str
@@ -619,6 +655,9 @@ class SetorNo:
 
 @dataclass
 class AndarNo:
+    """Estrutura Andar No usada por api.service_localizacao.
+
+    Campos: id, nome, nome_normalizado, descricao, referencia_planta, ativo, setores."""
     id: int
     nome: str
     nome_normalizado: str
@@ -631,6 +670,7 @@ class AndarNo:
 def _montar_arvore(
     session: Session, andares: Sequence[Andar], incluir_inativos: bool
 ) -> list[AndarNo]:
+    """Agrupa zonas em setores e setores em andares sem consultar um filho por vez."""
     nos_andar = [
         AndarNo(
             id=a.id,

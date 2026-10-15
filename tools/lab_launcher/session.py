@@ -13,6 +13,7 @@ STATE = SESSION_DIR / "session.json"
 
 
 def _limpar_configs_orfas() -> None:
+    """Remove arquivos temporários de observação sem sessão ativa correspondente."""
     if not SESSION_DIR.exists():
         return
     for path in SESSION_DIR.glob("*.watch.json"):
@@ -22,6 +23,7 @@ def _limpar_configs_orfas() -> None:
 
 
 def parar() -> None:
+    """Remove o marcador de sessão e a configuração temporária dos observadores."""
     if not STATE.exists():
         _limpar_configs_orfas()
         return
@@ -40,6 +42,7 @@ def parar() -> None:
 
 
 def iniciar() -> Path:
+    """Cria marcador de sessão e arquivo temporário de ambiente ignorado pelo Git."""
     SESSION_DIR.mkdir(exist_ok=True)
     parar()
     token = uuid4().hex

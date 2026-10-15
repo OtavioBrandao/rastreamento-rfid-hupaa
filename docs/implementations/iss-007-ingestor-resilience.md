@@ -190,7 +190,7 @@ Por projeto:
 | `DB_RETRY_MULTIPLIER` | `2` | pelo menos 1 |
 | `DB_RETRY_JITTER` | `0.2` | entre 0 e 1 |
 
-Os exemplos `.env.example`, `.env.local.example`, `.env.cloud.example` e os dois
+Os exemplos `config/environments/.env.example`, `config/environments/.env.local.example`, `config/environments/.env.cloud.example` e os dois
 perfis Compose expõem os mesmos defaults. Valores inválidos impedem a inicialização.
 
 ## Logs esperados
@@ -225,8 +225,8 @@ aplicação descarta o engine SQLAlchemy; não ficam threads de recuperação vi
 Testes rápidos, sem espera real longa:
 
 ```bash
-python -m ruff check --select E4,E7,E9,F .
-python -m ruff check --select I .
+python -m ruff check --config config/ruff.toml --select E4,E7,E9,F .
+python -m ruff check --config config/ruff.toml --select I .
 python -m pytest -q
 git diff --check
 ```
@@ -244,18 +244,18 @@ Neon compartilhado para esse tipo de teste.
 
 ## Como reproduzir manualmente uma indisponibilidade
 
-Com `make local-up` ativo:
+Com `make -f scripts/Makefile local-up` ativo:
 
 ```bash
 # Broker fora e de volta
-docker compose --env-file .env.local --profile local stop mosquitto
-docker compose --env-file .env.local --profile local start mosquitto
+docker compose -f deploy/compose.yaml --env-file config/environments/.env.local --profile local stop mosquitto
+docker compose -f deploy/compose.yaml --env-file config/environments/.env.local --profile local start mosquitto
 
 # Banco fora e de volta
-docker compose --env-file .env.local --profile local stop postgres
-docker compose --env-file .env.local --profile local start postgres
+docker compose -f deploy/compose.yaml --env-file config/environments/.env.local --profile local stop postgres
+docker compose -f deploy/compose.yaml --env-file config/environments/.env.local --profile local start postgres
 
-make logs-local
+make -f scripts/Makefile logs-local
 ```
 
 Durante a queda do banco, publique um evento válido somente em ambiente local de

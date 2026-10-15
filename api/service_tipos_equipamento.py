@@ -30,13 +30,17 @@ class ErroTipoEquipamento(Exception):
 
 
 class TipoEquipamentoNaoEncontrado(ErroTipoEquipamento):
+    """Falha de domínio: tipo equipamento nao encontrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, tipo_id: int) -> None:
+        """Inicializa TipoEquipamentoNaoEncontrado com as dependências e valores recebidos."""
         self.tipo_id = tipo_id
         super().__init__(f"Tipo de equipamento {tipo_id} não encontrado.")
 
 
 class NomeDuplicado(ErroTipoEquipamento):
+    """Falha de domínio: nome duplicado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, nome: str) -> None:
+        """Inicializa NomeDuplicado com as dependências e valores recebidos."""
         self.nome = nome
         self.nome_normalizado = normalizar_nome(nome)
         super().__init__(
@@ -46,7 +50,9 @@ class NomeDuplicado(ErroTipoEquipamento):
 
 
 class TipoEquipamentoEmUso(ErroTipoEquipamento):
+    """Falha de domínio: tipo equipamento em uso; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, tipo_id: int, total_equipamentos: int) -> None:
+        """Inicializa TipoEquipamentoEmUso com as dependências e valores recebidos."""
         self.tipo_id = tipo_id
         self.total_equipamentos = total_equipamentos
         super().__init__(
@@ -65,6 +71,7 @@ class PaginaTipos:
         size: int,
         total: int,
     ) -> None:
+        """Inicializa PaginaTipos com as dependências e valores recebidos."""
         self.items = list(items)
         self.page = page
         self.size = size
@@ -180,6 +187,7 @@ def atualizar(
 
 
 def contar_equipamentos(session: Session, tipo_id: int) -> int:
+    """Conta equipamentos que referenciam o tipo para aplicar as restrições de inativação."""
     return (
         session.scalar(
             select(func.count())

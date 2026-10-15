@@ -166,7 +166,7 @@ Testes unitários comparam também equivalência mantendo o mesmo reader_id.
 Para inspecionar manualmente, iniciar Mosquitto e ingestor em um terminal:
 
 ```bash
-docker compose up -d
+docker compose -f deploy/compose.yaml up -d
 EZ700_TIMESTAMP_FORMAT=epoch_ms RFID_READER_ADAPTERS='{"reader-02":"simulator"}' python -m rfid_ingestion
 ```
 

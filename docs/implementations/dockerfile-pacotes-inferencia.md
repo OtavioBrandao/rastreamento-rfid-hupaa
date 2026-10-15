@@ -15,8 +15,8 @@ disponível dentro da imagem. Nenhum contrato MQTT ou formato do EZ700 foi alter
 
 ## Validação
 
-O launcher usa `docker compose up --build` para reconstruir a imagem antes do
-teste. Para verificar manualmente: `docker compose --env-file .env.local
---profile local build ingestor-local` e depois `docker compose --env-file
-.env.local --profile local run --rm --no-deps ingestor-local python -c
+O launcher usa `docker compose -f deploy/compose.yaml up --build` para reconstruir a imagem antes do
+teste. Para verificar manualmente: `docker compose -f deploy/compose.yaml --env-file config/environments/.env.local
+--profile local build ingestor-local` e depois `docker compose -f deploy/compose.yaml --env-file
+config/environments/.env.local --profile local run --rm --no-deps ingestor-local python -c
 "import rfid_inference.debounce, rfid_movement, rfid_location"`.

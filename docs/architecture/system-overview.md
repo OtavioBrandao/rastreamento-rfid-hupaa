@@ -1,232 +1,190 @@
-# Visão Geral da Arquitetura — RFID Hospital MVP
+# Arquitetura do Rastreamento RFID HUPAA
 
-Este documento apresenta a arquitetura técnica de alto nível do **RFID Hospital MVP**, detalhando o fluxo de captura e persistência de leituras RFID, a modelagem de domínio hospitalar e de hardware, e as fronteiras entre o que está implementado e as inferências futuras.
+Esta é a arquitetura da versão candidata do MVP. A execução prioriza um notebook
+com serviços locais e permite substituir broker e banco por endpoints externos.
+O software rastreia a última passagem confirmada por zonas; não calcula coordenadas.
 
----
-
-## 1. Princípios Arquiteturais
-
-1. **Local-First e Desacoplado:** A captura de dados na borda opera com autonomia. O ingestor processa mensagens MQTT localmente ou via nuvem sem depender de sistemas externos para continuar coletando.
-2. **Entrega At-Least-Once com Idempotência Estrita:** A camada de mensageria opera com QoS 1. O sistema garante que reentregas de rede nunca produzam leituras duplicadas no banco relacional.
-3. **Determinismo Canônico:** O identificador do evento (`event_id`) é uma função hash SHA-256 dos dados e do contexto da leitura, sem depender de relógios de recepção ou UUIDs aleatórios.
-4. **Auditoria Forense Append-Only:** Toda mensagem recebida é imediatamente persistida em arquivo JSONL antes de qualquer transação de banco de dados.
-5. **Separação entre Captura e Negócio:** Leituras brutas são preservadas integralmente, mesmo que pertençam a tags ainda não cadastradas ou a equipamentos desconhecidos.
-
----
-
-## 2. Fluxo de Ingestão de Leitura RFID
-
-O diagrama abaixo ilustra o caminho percorrido por uma leitura RFID desde a emissão pela tag física até a projeção da última zona:
+## Arquitetura com leitores
 
 ```mermaid
-flowchart TD
-    subgraph Borda["Camada de Borda"]
-        TAG["Tag RFID UHF (EPC)"]
-        LEITOR["Leitor RFID / Simulador"]
-        TAG -.->|Radiofrequência| LEITOR
+flowchart TB
+    subgraph Campo[Ambiente físico / rede existente]
+        TAG[Equipamento com tag RFID UHF passiva]
+        A[Antena lado A]
+        B[Antena lado B]
+        R[Leitor Identix EZ700 / portas cadastradas]
+        TAG -. RF .-> A
+        TAG -. RF .-> B
+        A --- R
+        B --- R
     end
-
-    subgraph Mensageria["Camada de Mensageria"]
-        BROKER["Broker MQTT (HiveMQ Cloud / Mosquitto Local)<br/>Tópico: easy/.../portal-01/reader-01/readings"]
+    subgraph Receptor[Notebook / serviços do MVP]
+        MQ[Broker Mosquitto / MQTT QoS 1]
+        NET[Thread de rede / Paho MQTT]
+        JSON[Envelope e auditoria JSONL]
+        WRITE[Thread de persistência / lotes]
+        INF[Thread de inferência]
+        DB[(PostgreSQL)]
+        API[FastAPI / autenticação / permissões]
+        WEB[React / Vite]
+        MQ --> NET --> JSON --> WRITE
+        WRITE --> DB
+        WRITE -->|após commit: pedido de ACK| NET
+        NET -->|PUBACK| MQ
+        WRITE --> INF
+        INF --> DB
+        DB --> API --> WEB
     end
-
-    subgraph Ingestao["Serviço de Ingestão (Python / Paho)"]
-        RECEPTOR["Receptor MQTT (clean_session=false, QoS 1)"]
-        JSONL["Auditoria JSONL Append-only<br/>(data/raw_events.jsonl)"]
-        PARSER["Parser & Validador UTF-8 / JSON"]
-        CANONICAL["Normalizador Canônico<br/>Gera event_id sha256:..."]
-    end
-
-    subgraph Persistencia["Armazenamento Relacional (PostgreSQL)"]
-        REPO["Repositório RawReadingRepository"]
-        RESOLV["Resolução Topológica:<br/>(reader_id, porta) ➔ Antena Ativa"]
-        INSERT["INSERT INTO leituras_brutas<br/>ON CONFLICT (event_id) DO NOTHING"]
-    end
-
-    subgraph Processamento["Processamento de Inferência"]
-        DEBOUNCE["Debounce Temporal Implementado (ISS-014)"]
-        INFERENCE["Detecção de Passagem Implementada (ISS-015)"]
-        DIRECTION["Inferência de Direção Implementada (ISS-016)"]
-        UPDATE_LOC["Atualização da Última Zona (ISS-017)"]
-        HISTORY["Histórico de Movimentações (ISS-018)"]
-    end
-
-    LEITOR -->|Publica Payload JSON| BROKER
-    BROKER -->|Entrega Mensagem| RECEPTOR
-    RECEPTOR --> JSONL
-    RECEPTOR --> PARSER
-    PARSER --> CANONICAL
-    CANONICAL --> REPO
-    REPO --> RESOLV
-    RESOLV --> INSERT
-    INSERT -->|Commit OK| REPO
-    REPO -->|Transação Concluída| RECEPTOR
-    RECEPTOR -->|ACK Manual (PUBACK)| BROKER
-
-    INSERT -->|Somente inserted, após commit| DEBOUNCE
-    DEBOUNCE --> INFERENCE
-    INFERENCE --> DIRECTION
-    DIRECTION --> UPDATE_LOC
-    UPDATE_LOC --> HISTORY
+    R -->|MQTT / endereço LAN do notebook| MQ
 ```
 
----
+Na variante externa, o broker e PostgreSQL estão fora do notebook, e ingestor,
+API e interface continuam executados no ambiente configurado. O Compose `managed`
+sobe somente migrations e ingestor. O computador usa a rede existente; não cria
+hotspot. Leitores diferentes podem contribuir com antenas para o mesmo portal.
 
-## 3. Topologia de Domínio e Hardware
+O leitor lógico vem do tópico `easy/<ambiente>/<site>/<portal>/<reader_id>/readings`.
+O campo portal do tópico não substitui o cadastro temporal da topologia. A porta
+física da mensagem resolve uma antena ativa do leitor; a topologia determina seu
+significado em lado A/B, zona e função. O serial de fábrica é uma identidade distinta.
 
-A modelagem de entidades representa a hierarquia física suportada pelo modelo atual do MVP e o arranjo dos equipamentos de leitura:
+O payload observado está documentado no [tratamento do EZ700](../implementations/hotfix-ez700-contador-timestamp.md).
+Números no timestamp do EZ700 são tratados como contador, sem unidade presumida:
+o evento canônico usa a recepção UTC e mantém o valor original. O RSSI original
+é preservado com unidade desconhecida; não é convertido arbitrariamente para dBm.
+
+## Arquitetura com simulador
 
 ```mermaid
-classDiagram
-    class Andar {
-        +BigInt id
-        +String nome
-        +Boolean ativo
-    }
-
-    class Setor {
-        +BigInt id
-        +BigInt andar_id
-        +String nome
-        +Boolean ativo
-    }
-
-    class Zona {
-        +BigInt id
-        +BigInt setor_id
-        +String nome
-        +String observacoes
-        +Boolean ativo
-    }
-
-    class Portal {
-        +BigInt id
-        +String nome
-        +BigInt zona_a_id
-        +BigInt zona_b_id
-        +Boolean ativo
-    }
-
-    class Leitor {
-        +BigInt id
-        +String reader_id
-        +String identificador_serial
-        +String fabricante
-        +String modelo
-        +Boolean ativo
-    }
-
-    class Antena {
-        +BigInt id
-        +BigInt leitor_id
-        +BigInt portal_id
-        +Int porta_numero
-        +BigInt zona_associada_id
-        +String funcao
-        +Boolean ativo
-    }
-
-    class Equipamento {
-        +BigInt id
-        +String nome
-        +BigInt tipo_id
-        +String identificador_interno
-        +BigInt ultima_zona_id
-        +DateTime ultima_deteccao_em
-        +BigInt ultima_passagem_id
-        +BigInt ultima_movimentacao_id
-    }
-
-    class Tag {
-        +BigInt id
-        +String epc
-    }
-
-    class AssociacaoTagEquipamento {
-        +BigInt id
-        +BigInt tag_id
-        +BigInt equipamento_id
-        +DateTime inicio
-        +DateTime fim
-    }
-
-    class MapeamentoAntenaPortal {
-        +BigInt id
-        +BigInt antena_id
-        +BigInt portal_id
-        +String lado
-        +BigInt zona_id
-        +String funcao
-        +DateTime inicio
-        +DateTime fim
-    }
-
-    Andar "1" *-- "many" Setor
-    Setor "1" *-- "many" Zona
-    Zona "1" <-- "1" Portal : zona_a
-    Zona "1" <-- "1" Portal : zona_b
-    Zona "1" <-- "many" Antena : aponta para
-    Leitor "1" *-- "many" Antena : fisicamente conectada
-    Portal "1" o-- "many" Antena : agrega logicamente
-    Portal "1" -- "many" MapeamentoAntenaPortal : mapeia
-    Antena "1" -- "many" MapeamentoAntenaPortal : historico
-    Zona "1" <-- "many" MapeamentoAntenaPortal : zona do lado
-    Equipamento "1" -- "many" AssociacaoTagEquipamento
-    Tag "1" -- "many" AssociacaoTagEquipamento
+flowchart TB
+    OP[Operador / arraste do equipamento] --> MODEL[Modelo geométrico EASY]
+    MODEL --> UI[Janela Flet / alcance e estado visual]
+    MODEL --> SEND[Thread de envio / Publicador MQTT]
+    SEND -->|QoS 1 / tópico de leitor| MQ[Mosquitto ou broker externo]
+    SEND -->|cadastro nomeado de itens| DB[(PostgreSQL)]
+    MQ --> ING[Mesmo ingestor do modo físico]
+    ING --> PIPE[Debounce / passagem / direção / projeção]
+    PIPE --> DB
+    ING --> DB
+    ING --> LOG[JSONL]
+    DB --> API[FastAPI] --> WEB[Dashboard / mapas / leituras]
 ```
 
-### Regras Estruturais e Invariantes:
+O modelo usa coordenadas normalizadas 0–100, duas salas, portal e antenas em
+(28, 66) e (72, 66). Gera 1–12 itens com EPC aleatório de 96 bits e nomes dados
+pelo operador. O alcance circular tem raio ilustrativo 16, ajustado à proporção
+da planta. No alcance, cada item produz leitura a cada 0,2 s. O RSSI varia de
+-5700 a -6700 como valor sintético, sem unidade física validada.
 
-1. **Antenas pertencem estritamente a Leitores (`antenas.leitor_id`):**
-   - Uma antena física é cabeada em uma porta específica de um leitor. Esse vínculo é físico e imutável.
-2. **Antenas associam-se opcionalmente a Portais (`antenas.portal_id`):**
-   - Uma antena pode monitorar uma passagem vinculada a um portal, ou pode operar de forma avulsa (ex.: antena de teto ou ponto de inventário pontual).
-   - O campo `portal_id` é `NULLABLE` e editável.
-3. **Portais agregam antenas de leitores distintos:**
-   - Não existe relação direta `leitores.portal_id` (removida na ISS-012). Um portal físico entre duas zonas pode possuir uma antena conectada ao Leitor A (ex.: apontada para a Zona A) e outra antena conectada ao Leitor B (apontada para a Zona B).
-4. **Identidade Lógica do Leitor (`reader_id` vs `identificador_serial`):**
-   - `reader_id` é o identificador lógico atribuído na configuração de rede/MQTT e utilizado no segmento do tópico (`easy/.../<reader_id>/readings`).
-   - `identificador_serial` é o número de série gravado de fábrica pelo fabricante. Ambos são `NOT NULL` e `UNIQUE`, mas completamente desacoplados.
-5. **Vínculo Temporal de Tags a Equipamentos (`[inicio, fim)`):**
-   - Equipamentos não possuem coluna `epc` fixa. O vínculo é registrado na tabela `associacoes_tag_equipamento`.
-   - Um índice único parcial (`uq_tag_ativa`) assegura no banco de dados que uma tag só pode estar associada a no máximo um equipamento ativo (`WHERE fim IS NULL`).
-6. **Leituras Brutas Desacopladas de Cadastro:**
-   - A tabela `leituras_brutas` registra o `epc` em formato string sem chave estrangeira direta para a tabela `tags`.
-   - Isso garante que tags novas ou desconhecidas detectadas por um leitor **nunca sejam descartadas**, preservando a telemetria bruta para posterior conciliação.
-7. **Resolução de Antena Ativa e Reconfiguração de Hardware:**
-   - O índice único parcial `uq_antena_ativa_por_porta_leitor` restringe a no máximo uma antena com `ativo = true` por porta física do leitor.
-   - Antenas inativas históricas são preservadas para integridade referencial de leituras passadas. A ingestão sempre filtra por `Antena.ativo = true`.
-8. **Topologia Lógica Versionada de Portais (`[inicio, fim)`):**
-   - A tabela `mapeamentos_antena_portal` estabelece o significado operacional da antena no portal (lado A/B, zona adjacente e função `entrada`, `saida` ou `auxiliar`).
-   - O índice único parcial `uq_mapeamento_antena_ativo` restringe a no máximo um mapeamento com `fim IS NULL` por antena física.
-   - Múltiplas antenas no mesmo lado do portal são expressamente suportadas.
-   - Inativação ou mutação de portal, antena ou leitor é protegida contra mapeamentos lógicos vigentes (`fim IS NULL`).
+O simulador visual publica o formato compacto observado pelo adapter EZ700:
+`epc`, `rssi`, `antenna`, `timestamp`. O timestamp é um contador sintético de
+sete dígitos; o `reader_id` vem do tópico. Existe também o publicador de CLI
+`rfid_ingestion.simulator`, útil para testes de contrato dos adapters.
 
----
+A publicação tem acompanhamento de PUBACK e falha se houver desconexão ou
+confirmação pendente além do prazo. A janela não espera o banco ou a rede na
+thread visual. O cadastro e o pipeline são reais; a interação RF é simulada.
 
-## 4. Estado do processamento de inferência
+## Fluxo de processamento
 
-Para fins de avaliação e clareza do escopo do MVP, debounce, passagem, direção,
-histórico e última localização estão implementados no pipeline lógico:
+```mermaid
+sequenceDiagram
+    participant Fonte as Leitor / simulador
+    participant Broker
+    participant Rede as Receptor MQTT
+    participant Grava as Persistência
+    participant PG as PostgreSQL
+    participant Inf as Inferência
+    participant Tela as API / frontend
+    Fonte->>Broker: PUBLISH QoS 1
+    Broker->>Rede: Entrega com identidade da sessão
+    Rede->>Rede: Envelope, normalização e append JSONL
+    Rede->>Grava: Enfileira sem aguardar banco
+    Grava->>PG: INSERT em lote / ON CONFLICT event_id
+    PG-->>Grava: INSERT confirmado
+    Grava->>Rede: Solicita ACK da sessão corrente
+    Rede->>Broker: PUBACK
+    Grava->>Inf: Leitura inserida e identidade de evidência
+    Inf->>Inf: Debounce / correlação de lados / direção
+    Inf->>PG: Passagem e direção idempotentes
+    Inf->>PG: Transação: histórico + última zona
+    Tela->>PG: Consulta periódica
+    PG-->>Tela: Presença, zona confirmada e histórico
+```
 
-| Recurso | Status Atual | Issue Prevista | Descrição |
-|---|---|---|---|
-| **Debounce Temporal** | Implementado | **ISS-014** | Consolidação por `(EPC, antena_id)` usando event time, tolerância a reordenação e preservação integral das leituras brutas. |
-| **Detecção de Passagem** | Implementado | **ISS-015** | Correlação temporal por `(EPC, portal_id)` entre lados opostos, topologia histórica e persistência idempotente com `direcao=NULL`. |
-| **Inferência de Direção** | Implementado | **ISS-016** | A→B/B→A e zonas via topologia histórica; empate/próximos geram `ambiguous`, inconsistência gera `unknown`. |
-| **Última Zona do Ativo** | Implementado | **ISS-017** | Projeção transacional em `equipamentos`, com event time e referência ao histórico. |
-| **Histórico de Movimentações** | Implementado | **ISS-018** | Ledger append-only, resolução temporal de EPC, correção manual e consulta paginada; gravação automática integrada à ISS-017. |
+O ingestor separa rede, persistência e inferência em threads. Lotes têm até 200
+mensagens e o polling de processamento usa 0,2 s. O repositório de lotes mantém
+uma conexão dedicada em autocommit: um único INSERT é a unidade atômica. O cache
+de resolução de antenas tem TTL de 30 s. Mudanças de topologia podem levar esse
+tempo para aparecer no caminho de ingestão.
 
----
+Eventos inválidos ou sem hardware resolvido recebem rejeição explícita e
+diagnóstico; não viram localização. A auditoria JSONL guarda o envelope recebido.
+O arquivo usa flush, sem fsync por evento. Não é uma fila de replay automático.
 
-## 5. Referências e Detalhamento
+### Identidade e tempo
 
-- [Modelo de Dados Detalhado (Dicionário de Entidades)](data-model.md)
-- [Diagrama Entidade-Relacionamento Mermaid](er-diagrama.mermaid)
-- [Persistência de Leituras Brutas e Idempotência (ISS-006)](../implementations/iss-006-raw-readings-persistence.md)
-- [Resiliência e Recuperação do Ingestor (ISS-007)](../implementations/iss-007-ingestor-resilience.md)
-- [Topologia de Hardware (ISS-012)](../implementations/iss-012-topologia-hardware.md)
-- [Topologia Lógica de Portais (ISS-013)](../implementations/iss-013-topologia-logica-portais.md)
-- [Debounce Temporal de Leituras (ISS-014)](../implementations/iss-014-debounce-leituras.md)
-- [Detecção de Passagem (ISS-015)](../implementations/iss-015-deteccao-passagem.md)
-- [Inferência de Direção (ISS-016)](../implementations/iss-016-inferencia-direcao.md)
+O `event_id` SHA-256 inclui tópico, adapter, discriminador temporal e bytes
+originais. Reentrega idêntica é deduplicada; isso não é garantia universal de
+identidade física. Reinício do contador do leitor pode repetir bytes antigos.
+Para contador EZ700, o horário de recepção inclui atrasos de rede/fila e depende
+do relógio do notebook. O tempo do evento e o tempo monotônico de processamento
+têm responsabilidades distintas.
+
+O relógio da inferência não avança além da chegada mais antiga ainda pendente.
+Assim, atraso do banco não se transforma em falso silêncio de uma tag que já
+foi recebida. Debounce mantém estado por `(EPC, antena)`; passagem, por `(EPC, portal)`.
+
+### Inferência e projeção
+
+1. O debounce consolida eventos próximos, tolera reordenação e mantém referências
+   à primeira e à última leitura. As leituras brutas continuam no banco.
+2. O detector correlaciona lados opostos do mesmo portal, verifica atividade na
+   origem e conserva propostas até persistência. Uma âncora no destino permite
+   reconhecer retorno após o período refratário.
+3. A direção usa evidências e topologia vigentes no tempo do evento. O resultado
+   pode ser `confirmed`, `ambiguous` ou `unknown`.
+4. Uma direção confirmada resolve o vínculo temporal EPC/equipamento e acrescenta
+   histórico. Sob lock de equipamento, atualiza a projeção na mesma transação.
+   Eventos atrasados não substituem uma zona mais nova; empates conflitantes são
+   sinalizados. Recuperadores periódicos retomam direção/projeção pendentes.
+
+| Parâmetro inicial | Padrão | Significado |
+|---|---|---|
+| `RFID_DEBOUNCE_WINDOW_MS` | 250 ms | Intervalo de consolidação |
+| `RFID_OUT_OF_ORDER_TOLERANCE_MS` | 1000 ms | Tolerância à reordenação |
+| `RFID_PASSAGE_MAX_INTERVAL_MS` | 3000 ms | Intervalo máximo entre lados |
+| `RFID_PASSAGE_REFRACTORY_MS` | 1000 ms | Supressão logo após travessia |
+| `RFID_PASSAGE_OVERLAP_GRACE_MS` | 300 ms | Tolerância à sobreposição |
+| `RFID_PASSAGE_ORIGIN_HOLD_MS` | 1000 ms | Janela de atividade da origem |
+| `RFID_DIRECTION_AMBIGUITY_MS` | 100 ms | Proximidade temporal ambígua |
+
+São parâmetros de partida, sujeitos à calibração física no HUPAA. O estado em
+memória de debounce/passagem não tem replay completo automático após reinício;
+persistir leituras não garante recuperar toda inferência interrompida antes de
+gravar a passagem. Sessões MQTT persistentes, QoS e armazenamento do broker
+precisam estar configurados para recuperar mensagens ainda não confirmadas.
+As filas internas não são duráveis nem possuem limite explícito de tamanho;
+carga sustentada superior à capacidade do banco pode aumentar o uso de memória.
+
+## API e interface
+
+Routers validam contratos/permissões, services aplicam regras de domínio e
+transações; SQLAlchemy e constraints PostgreSQL protegem unicidade e referências.
+Sessões opacas usam cookie HttpOnly/SameSite=Strict; o banco guarda hash do token.
+Senhas usam Argon2id. A trilha de auditoria acompanha alterações de cadastro,
+vínculos, correções e usuários sem registrar senhas ou tokens.
+
+Dashboard, mapas, detalhe e histórico consultam periodicamente o backend (2 s);
+leituras do laboratório usam 1 s. Presença “Lida agora” usa janela de 30 s;
+recência da zona é um critério separado. `disponivel` é exibido como “Em trânsito”
+por convenção de interface, sem medir velocidade ou comprovar deslocamento contínuo.
+As tabelas usam [grupos e ordem estável](../implementations/ordenacao-estavel-tabelas.md).
+
+## Organização e documentação complementar
+
+- [Operação e perfis](../operations/execution.md)
+- [Guia de módulos e contratos transacionais](../reference/code-guide.md)
+- [Modelo de dados](data-model.md) e [diagrama ER](er-diagrama.mermaid)
+- [Decisões arquiteturais](../decisions/README.md)
+- [Evidências e limites do Marco 2](../milestones/marco-2.md)

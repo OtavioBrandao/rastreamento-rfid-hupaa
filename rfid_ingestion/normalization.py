@@ -9,6 +9,7 @@ from .topics import validate_topic
 
 
 def utc_timestamp(value, *, epoch_ms=False):
+    """Valida RFC3339 com fuso (ou epoch_ms explícito) e devolve texto UTC com microssegundos."""
     if not isinstance(value, str):
         raise ValueError("timestamp deve ser texto")
     if epoch_ms:
@@ -29,6 +30,7 @@ def utc_timestamp(value, *, epoch_ms=False):
 
 
 def finite_number(value):
+    """Informa se o valor é int/float finito, excluindo booleanos e overflow."""
     try:
         return type(value) in (int, float) and math.isfinite(value)
     except OverflowError:
@@ -43,6 +45,7 @@ def ez700(payload, settings):
 
 
 def simulator(payload, settings):
+    """Extrai tag, porta, sinal com unidade e observed_at do contrato do adapter simulator."""
     signal = payload.get("signal")
     if not isinstance(signal, dict):
         raise ValueError("signal deve ser objeto com value e unit")
@@ -57,6 +60,11 @@ ADAPTERS = {"ez700": ez700, "simulator": simulator}
 
 
 def normalize(payload, topic, raw, settings, *, received_at_utc=None):
+    """Normaliza o payload pelo adapter do leitor e devolve evento, erros, leitor e adapter.
+
+    O hash inclui tópico, adapter, formato temporal e bytes originais. Contadores
+    EZ700 usam received_at_utc; a unidade de RSSI desconhecida permanece em metadata.
+    Erros de entrada viram uma lista de motivos, sem interromper o receptor."""
     reader_id = None
     adapter = settings.normalization_adapter
     try:

@@ -29,6 +29,7 @@ SenhaNova = Annotated[
 
 
 def _texto_preenchido(valor: str | None) -> str | None:
+    """Recusa texto vazio após remover espaços externos."""
     if valor is None:
         return None
     valor = valor.strip()
@@ -38,11 +39,13 @@ def _texto_preenchido(valor: str | None) -> str | None:
 
 
 class LoginEntrada(BaseModel):
+    """Contrato de dados Login Entrada; valida campos e serializa a resposta da API."""
     email: str = Field(max_length=TAMANHO_MAXIMO_EMAIL)
     senha: str = Field(max_length=1024)
 
 
 class TrocarSenhaEntrada(BaseModel):
+    """Contrato de dados Trocar Senha Entrada; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(extra="forbid")
 
     senha_atual: str = Field(max_length=1024)
@@ -50,6 +53,7 @@ class TrocarSenhaEntrada(BaseModel):
 
 
 class UsuarioCriar(BaseModel):
+    """Contrato de dados Usuario Criar; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(extra="forbid")
 
     nome: str = Field(max_length=255)
@@ -62,6 +66,7 @@ class UsuarioCriar(BaseModel):
     @field_validator("email")
     @classmethod
     def _normalizar_email(cls, valor: str) -> str:
+        """Aplica a normalização de e-mail compartilhada com a autenticação."""
         valor = valor.strip().lower()
         if not _EMAIL.fullmatch(valor):
             raise ValueError("e-mail inválido (use o formato nome@dominio, só ASCII)")
@@ -79,6 +84,7 @@ class UsuarioAtualizar(BaseModel):
     @field_validator("nome")
     @classmethod
     def _validar_nome(cls, valor: str | None) -> str:
+        """Normaliza e valida o nome recebido pelo schema."""
         if valor is None:
             raise ValueError("nome não pode ser nulo")
         return _texto_preenchido(valor)
@@ -86,18 +92,21 @@ class UsuarioAtualizar(BaseModel):
     @field_validator("perfil")
     @classmethod
     def _validar_perfil(cls, valor: str | None) -> str:
+        """Valida o nome do perfil contra o catálogo permitido."""
         if valor is None:
             raise ValueError("perfil não pode ser nulo")
         return valor
 
 
 class RedefinirSenhaEntrada(BaseModel):
+    """Contrato de dados Redefinir Senha Entrada; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(extra="forbid")
 
     senha_temporaria: SenhaNova
 
 
 class UsuarioResposta(BaseModel):
+    """Contrato de dados Usuario Resposta; valida campos e serializa a resposta da API."""
     id: int
     nome: str
     email: str
@@ -113,6 +122,7 @@ class UsuarioResposta(BaseModel):
 
 
 class UsuarioPagina(BaseModel):
+    """Contrato de dados Usuario Pagina; valida campos e serializa a resposta da API."""
     items: list[UsuarioResposta]
     page: int
     size: int
@@ -121,6 +131,7 @@ class UsuarioPagina(BaseModel):
 
 
 class SessaoResposta(BaseModel):
+    """Contrato de dados Sessao Resposta; valida campos e serializa a resposta da API."""
     usuario: UsuarioResposta
     sessao_expira_em: datetime
     # Resolvidas pela matriz de `api/permissoes.py`, ordenadas (ISS-027).

@@ -25,6 +25,7 @@ SAMPLE_TID = "E280119020004F62B6190300"
 
 
 def _parser() -> argparse.ArgumentParser:
+    """Declara argumentos do publicador MQTT de linha de comando."""
     parser = argparse.ArgumentParser(
         description="Publica eventos RFID simulados em um broker MQTT."
     )
@@ -52,6 +53,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _payload(args: argparse.Namespace) -> dict[str, Any]:
+    """Monta um payload sintético no formato do adapter selecionado."""
     if args.format == "simulator":
         return {"tag": args.epc, "port": args.antenna,
                 "observed_at": args.timestamp or datetime.now(timezone.utc).isoformat(),
@@ -70,6 +72,7 @@ def _payload(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _validate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> str:
+    """Valida limites e argumentos de publicação antes de conectar ao broker."""
     try:
         topic = args.topic or reading_topic(args.reader_id, args.environment, args.site_id, args.portal_id)
         validate_topic(topic)
@@ -93,6 +96,7 @@ def _validate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    """Executa a entrada de linha de comando de rfid_ingestion.simulator; devolve o código de saída quando aplicável."""
     parser = _parser()
     args = parser.parse_args(argv)
     topic = _validate(args, parser)
@@ -125,11 +129,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         reason_code: mqtt.ReasonCode,
         _properties: mqtt.Properties | None,
     ) -> None:
+        """Trata a resposta de conexão MQTT e sinaliza prontidão ou falha ao chamador."""
         if reason_code.is_failure:
             connection_error.append(str(reason_code))
         connected.set()
 
     def on_connect_fail(_client: mqtt.Client, _userdata: Any) -> None:
+        """Sinaliza falha de estabelecimento de conexão do publicador MQTT."""
         connection_error.append("broker indisponível")
 
     client.on_connect = on_connect

@@ -29,6 +29,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """Aplica a revisão: iss-013: topologia logica versionada de portais."""
     op.create_table(
         'mapeamentos_antena_portal',
         sa.Column('id', sa.BigInteger(), primary_key=True),
@@ -154,6 +155,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Reverte a revisão: iss-013: topologia logica versionada de portais."""
     op.drop_index('ix_mapeamentos_zona_id', table_name='mapeamentos_antena_portal')
     op.drop_index('ix_mapeamentos_antena_id', table_name='mapeamentos_antena_portal')
     op.drop_index('ix_mapeamentos_portal_id', table_name='mapeamentos_antena_portal')

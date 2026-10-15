@@ -121,7 +121,7 @@ diferentes.
 
 Na base atual, `python -m pytest -q` com `TEST_DATABASE_URL` local descartável
 passou com **874 testes aprovados, 5 pulados e 90 subtestes aprovados**;
-`python -m ruff check --select E4,E7,E9,F,I .` passou. No frontend,
+`python -m ruff check --config config/ruff.toml --select E4,E7,E9,F,I .` passou. No frontend,
 `npm run build` e `npm test` passaram (4 testes). A suíte inclui regressões
 do pipeline de ingestão lógico; os 5 pulos dependem de infraestrutura não
 disponível neste ambiente. A revisão pela dupla Thiego/Otávio e a validação

@@ -11,6 +11,7 @@ StatusAtivo = Literal[
 
 
 class ZonaBusca(BaseModel):
+    """Contrato de dados Zona Busca; valida campos e serializa a resposta da API."""
     id: int
     nome: str
     referencia_planta: str | None
@@ -29,6 +30,7 @@ class LeituraRecente(BaseModel):
 
 
 class AtivoBusca(BaseModel):
+    """Contrato de dados Ativo Busca; valida campos e serializa a resposta da API."""
     id: int
     nome: str
     identificador_interno: str
@@ -43,6 +45,7 @@ class AtivoBusca(BaseModel):
 
 
 class BuscaAtivosPagina(BaseModel):
+    """Contrato de dados Busca Ativos Pagina; valida campos e serializa a resposta da API."""
     items: list[AtivoBusca]
     total: int
     page: int

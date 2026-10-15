@@ -15,6 +15,7 @@ FuncaoMapeamento = Literal["entrada", "saida", "auxiliar"]
 
 
 class MapeamentoCriar(BaseModel):
+    """Contrato de dados Mapeamento Criar; valida campos e serializa a resposta da API."""
     antena_id: int = Field(..., gt=0, description="ID da antena física cadastrada.")
     lado: LadoMapeamento = Field(..., description="Lado lógico do portal ('a' ou 'b').")
     funcao: FuncaoMapeamento = Field(
@@ -28,6 +29,7 @@ class MapeamentoCriar(BaseModel):
 
 
 class MapeamentoAtualizar(BaseModel):
+    """Contrato de dados Mapeamento Atualizar; valida campos e serializa a resposta da API."""
     lado: LadoMapeamento | None = Field(
         default=None, description="Novo lado lógico do portal ('a' ou 'b')."
     )
@@ -42,6 +44,7 @@ class MapeamentoAtualizar(BaseModel):
 
 
 class MapeamentoResposta(BaseModel):
+    """Contrato de dados Mapeamento Resposta; valida campos e serializa a resposta da API."""
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -56,11 +59,13 @@ class MapeamentoResposta(BaseModel):
 
 
 class ZonaResumo(BaseModel):
+    """Contrato de dados Zona Resumo; valida campos e serializa a resposta da API."""
     id: int
     nome: str
 
 
 class ItemTopologiaAntenaResposta(BaseModel):
+    """Contrato de dados Item Topologia Antena Resposta; valida campos e serializa a resposta da API."""
     mapeamento_id: int
     antena_id: int
     reader_id: str

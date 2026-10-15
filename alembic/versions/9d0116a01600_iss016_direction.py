@@ -10,6 +10,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Aplica a revisão: ISS-016: sentido lógico e zonas da passagem."""
     connection = op.get_bind()
     legacy = connection.scalar(sa.text(
         "SELECT count(*) FROM passagens WHERE direcao IS NOT NULL"
@@ -48,6 +49,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Reverte a revisão: ISS-016: sentido lógico e zonas da passagem."""
     connection = op.get_bind()
     confirmed = connection.scalar(sa.text(
         "SELECT count(*) FROM passagens WHERE direcao IN ('a_para_b', 'b_para_a')"

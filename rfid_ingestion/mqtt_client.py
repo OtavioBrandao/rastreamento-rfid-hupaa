@@ -38,11 +38,13 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _reason_value(reason_code: Any) -> int | None:
+    """Extrai o código inteiro de um ReasonCode Paho; devolve None se não for numérico."""
     value = getattr(reason_code, "value", reason_code)
     return value if isinstance(value, int) else None
 
 
 def _log(level: int, event_type: str, **fields: Any) -> None:
+    """Registra evento estruturado de processamento no logger do módulo."""
     LOGGER.log(level, json.dumps({"event_type": event_type, **fields}, sort_keys=True))
 
 
@@ -66,6 +68,7 @@ class MqttReceiver:
         observation_tick_handler: Callable[[float], None] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        """Inicializa MqttReceiver com as dependências e valores recebidos."""
         self.settings = settings
         self.store = store
         self.repository = repository
@@ -143,6 +146,7 @@ class MqttReceiver:
         *,
         reason: str | None = None,
     ) -> None:
+        """Marca falha terminal, limpa prontidão e solicita desconexão ao supervisor."""
         if self.failed.is_set():
             return
         self.failure = stage
@@ -174,12 +178,14 @@ class MqttReceiver:
         return worker is None or not worker.is_alive() or current_thread() is worker
 
     def _desconectar(self) -> None:
+        """Desconecta na thread de rede ou sinaliza a ela um pedido de desconexão."""
         if self._pode_usar_socket():
             self.client.disconnect()
         else:
             self._desconexao_pedida.set()
 
     def _on_subscribe(self, _client, _userdata, _mid, reason_codes, _properties):
+        """Confirma prontidão somente após SUBACK com QoS 1 e reinicia o backoff MQTT."""
         if not reason_codes or any(
             code.is_failure or code.value != self.settings.mqtt_qos
             for code in reason_codes
@@ -217,6 +223,7 @@ class MqttReceiver:
         reason_code: mqtt.ReasonCode,
         _properties: mqtt.Properties | None,
     ) -> None:
+        """Classifica CONNACK e assina o tópico; recusa falhas permanentes de autenticação ou protocolo."""
         code = _reason_value(reason_code)
         if reason_code.is_failure:
             category, reason_str = classify_connack_code(code)
@@ -260,6 +267,7 @@ class MqttReceiver:
         *,
         reason: str = "broker_unavailable",
     ) -> None:
+        """Registra falha transitória de conexão para recuperação pelo supervisor."""
         _log(
             logging.WARNING,
             "mqtt_disconnected",
@@ -275,6 +283,7 @@ class MqttReceiver:
         reason_code: mqtt.ReasonCode,
         _properties: mqtt.Properties | None,
     ) -> None:
+        """Limpa prontidão e registra o início da recuperação de uma sessão interrompida."""
         self.ready.clear()
         self.disconnected.set()
         if (
@@ -298,6 +307,10 @@ class MqttReceiver:
         _userdata: Any,
         message: mqtt.MQTTMessage,
     ) -> None:
+        """Monta e audita o envelope JSONL na recepção e o enfileira com o relógio monotônico.
+
+        Não espera a gravação no PostgreSQL. O PUBACK fica a cargo da etapa de
+        persistência; falha no JSONL encerra o receptor sem confirmar a mensagem."""
         if (
             self.failed.is_set()
             or self.shutdown.is_set()
@@ -331,6 +344,7 @@ class MqttReceiver:
         return self._monotonic_clock()
 
     def _concluir(self, chegada: float) -> None:
+        """Retira a chegada concluída da lista que limita o relógio da inferência."""
         with self._transito_lock:
             try:
                 self._em_transito.remove(chegada)
@@ -423,6 +437,7 @@ class MqttReceiver:
 
     @staticmethod
     def _resultado(event: dict[str, Any], result: PersistenceResult) -> dict[str, Any]:
+        """Monta o resumo de persistência com status, motivo, event_id e instante de recepção."""
         canonical = event["canonical_event"]
         return {
             "event_type": "rfid_persistence",
@@ -435,6 +450,7 @@ class MqttReceiver:
     def _registrar_resultado(
         self, event: dict[str, Any], result: PersistenceResult, chegada: float
     ) -> None:
+        """Registra normalização/persistência e encaminha leituras inseridas ao debounce."""
         canonical = event["canonical_event"]
         outcome = self._resultado(event, result)
         LOGGER.log(
@@ -464,6 +480,7 @@ class MqttReceiver:
             self._concluir(chegada)
 
     def _ack(self, message: mqtt.MQTTMessage, sessao: int) -> None:
+        """Encaminha PUBACK QoS 1 à thread de rede depois da decisão de persistência."""
         if message.qos != 1:
             return
         if self._pode_usar_socket():
@@ -472,6 +489,7 @@ class MqttReceiver:
             self._acks.put((message, sessao))
 
     def _enviar_acks(self) -> None:
+        """Drena os pedidos de PUBACK na thread que possui o socket MQTT."""
         while True:
             try:
                 message, sessao = self._acks.get_nowait()
@@ -480,6 +498,7 @@ class MqttReceiver:
             self._enviar_ack(message, sessao)
 
     def _enviar_ack(self, message: mqtt.MQTTMessage, sessao: int) -> None:
+        """Envia PUBACK somente para a sessão corrente e trata perda de conexão."""
         if sessao != self._sessao or self.disconnected.is_set():
             # A conexão caiu entre a leitura e o commit: o broker reentrega e a
             # leitura volta como duplicata, sem novo efeito no debounce. O mid
@@ -503,6 +522,7 @@ class MqttReceiver:
         result: PersistenceResult,
         received_at_monotonic: float | None = None,
     ) -> None:
+        """Converte leitura inserida em DebounceReading; duplicatas e rejeições não alimentam a inferência."""
         if result.status == "duplicate":
             _log(
                 logging.INFO,
@@ -563,6 +583,7 @@ class MqttReceiver:
     def _emit_observations(
         self, observations: tuple[ConsolidatedObservation, ...]
     ) -> None:
+        """Registra observações consolidadas e invoca o handler de passagem, isolando falhas."""
         for observation in observations:
             _log(
                 logging.INFO,
@@ -591,6 +612,7 @@ class MqttReceiver:
                     )
 
     def flush_debounce(self) -> tuple[ConsolidatedObservation, ...]:
+        """Finaliza e emite observações pendentes uma única vez durante o encerramento."""
         if self._debounce_flushed:
             return ()
         observations = self.debouncer.flush()
@@ -609,6 +631,7 @@ class MqttReceiver:
         return observations
 
     def _poll_debounce(self) -> None:
+        """Finaliza janelas de debounce com o relógio limitado pela leitura ainda pendente."""
         try:
             observations = self.debouncer.advance_time(self.relogio_inferencia())
         except Exception:
@@ -632,6 +655,7 @@ class MqttReceiver:
             )
 
     def _processar_uma_vez(self, primeiro=None) -> None:
+        """Processa pendências e avança debounce e serviços de inferência no mesmo relógio."""
         self._flush_pending(primeiro)
         self._poll_debounce()
         if self.observation_tick_handler is not None:
@@ -680,6 +704,7 @@ class MqttReceiver:
                 return
 
     def _network_session(self) -> None:
+        """Executa uma tentativa de sessão MQTT e trata TLS, reconexão, ACKs e desligamento."""
         self._sessao += 1
         self._mqtt_attempt += 1
         _log(
@@ -760,6 +785,7 @@ class MqttReceiver:
             self.client.disconnect()
 
     def _recover_database(self) -> bool:
+        """Aplica backoff, sonda PostgreSQL e libera consumo quando o banco volta a responder."""
         delay = self._db_backoff.next_delay()
         _log(
             logging.WARNING,
@@ -805,6 +831,7 @@ class MqttReceiver:
         return True
 
     def _supervise(self) -> None:
+        """Alterna sessões MQTT e recuperação de banco até falha permanente ou solicitação de parada."""
         try:
             while not self.shutdown.is_set() and not self.failed.is_set():
                 if self.database_unavailable.is_set():
@@ -834,6 +861,7 @@ class MqttReceiver:
             self.ready.clear()
 
     def _start_worker(self) -> None:
+        """Inicia threads de persistência, inferência e supervisão uma única vez."""
         if self._worker is not None and self._worker.is_alive():
             return
         self.shutdown.clear()
@@ -854,6 +882,7 @@ class MqttReceiver:
         self._worker.start()
 
     def start(self, timeout: float = 10) -> None:
+        """Inicia as threads e aguarda SUBACK até o timeout; falha ou prazo encerram o receptor."""
         self._start_worker()
         deadline = time.monotonic() + timeout
         while not self.ready.wait(0.05):
@@ -865,6 +894,7 @@ class MqttReceiver:
                 raise RuntimeError("Conexão/assinatura MQTT não confirmada")
 
     def request_shutdown(self) -> None:
+        """Sinaliza encerramento cooperativo e solicita desconexão sem bloquear a thread chamadora."""
         if self.shutdown.is_set():
             return
         _log(
@@ -877,6 +907,7 @@ class MqttReceiver:
         self._desconectar()
 
     def stop(self) -> None:
+        """Solicita parada, aguarda workers e finaliza o debounce pendente."""
         self.request_shutdown()
         for thread in (self._worker, self._processor, self._inferencia):
             if thread is not None and thread is not current_thread():
@@ -887,6 +918,7 @@ class MqttReceiver:
             self._shutdown_complete_logged = True
 
     def run(self) -> int:
+        """Executa o receptor até Ctrl+C/SIGTERM e devolve código 0 para parada ou 1 para falha."""
         _log(
             logging.INFO,
             "ingestor_started",

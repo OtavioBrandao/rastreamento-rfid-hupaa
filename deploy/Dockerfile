@@ -8,10 +8,10 @@ WORKDIR /app
 
 RUN addgroup --system app && adduser --system --ingroup app app
 
-COPY requirements.txt ./
-RUN python -m pip install --no-cache-dir -r requirements.txt
+COPY requirements/base.txt ./requirements/base.txt
+RUN python -m pip install --no-cache-dir -r requirements/base.txt
 
-COPY alembic.ini ./
+COPY config/alembic.ini ./config/alembic.ini
 COPY alembic ./alembic
 COPY db ./db
 COPY docker ./docker

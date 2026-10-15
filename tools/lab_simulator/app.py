@@ -34,6 +34,7 @@ class Envio:
     """Fila consumida por uma thread própria; a interface nunca espera o broker."""
 
     def __init__(self, publicador) -> None:
+        """Inicializa Envio com as dependências e valores recebidos."""
         self.publicador = publicador
         self.fila: queue.Queue[tuple[str, int, int]] = queue.Queue()
         self.erro: str | None = None
@@ -42,13 +43,16 @@ class Envio:
         self._thread = threading.Thread(target=self._executar, daemon=True)
 
     def iniciar(self) -> None:
+        """Inicia a thread de publicação que mantém a interface livre de esperas MQTT."""
         self._thread.start()
 
     def parar(self) -> None:
+        """Sinaliza parada da thread de envio e fecha a conexão do publicador."""
         self._parar.set()
         self._thread.join(timeout=5)
 
     def _executar(self) -> None:
+        """Executa operação administrativa e traduz erros de usuário para HTTP."""
         try:
             self.publicador.conectar()
             self.conectado = True
@@ -71,6 +75,7 @@ class Envio:
 
 def _linha(x1: float, y1: float, x2: float, y2: float, cor: str = COR_PAREDE,
            espessura: float = 2) -> ft.Container:
+    """Cria elemento de linha da planta na interface do simulador."""
     return ft.Container(left=x1 * SX - espessura / 2, top=y1 * SY - espessura / 2,
                         width=max((x2 - x1) * SX, 0) + espessura,
                         height=max((y2 - y1) * SY, 0) + espessura, bgcolor=cor)
@@ -78,6 +83,7 @@ def _linha(x1: float, y1: float, x2: float, y2: float, cor: str = COR_PAREDE,
 
 def _rotulo(texto: str, x: float, y: float, tamanho: int = 15, largura: int = 260
             ) -> ft.Container:
+    """Cria rótulo de identificação na planta do simulador."""
     return ft.Container(
         left=x * SX - largura / 2, top=y * SY - tamanho, width=largura,
         content=ft.Text(texto, size=tamanho, weight=ft.FontWeight.BOLD, color="#6b7f86",
@@ -104,6 +110,7 @@ def _planta() -> list[ft.Control]:
 
 
 def _marcador(x: float, y: float, icone, cor: str, legenda: str) -> ft.Container:
+    """Cria marcador visual de antena ou equipamento na planta do simulador."""
     return ft.Container(
         left=x * SX - 40, top=y * SY - 14, width=80,
         content=ft.Column([ft.Icon(icone, color=cor, size=26),
@@ -113,9 +120,11 @@ def _marcador(x: float, y: float, icone, cor: str, legenda: str) -> ft.Container
 
 
 class Simulador:
+    """Coordena controles Flet, equipamentos arrastáveis, alcance ilustrativo e publicação MQTT."""
     def __init__(self, page: ft.Page, envio: Envio,
                  cadastrar: Callable[[list[Item]], dict[str, str]],
                  destino: str) -> None:
+        """Inicializa Simulador com as dependências e valores recebidos."""
         self.page = page
         self.envio = envio
         self.cadastrar = cadastrar
@@ -161,6 +170,7 @@ class Simulador:
         self.log = ft.ListView(height=200, spacing=2, auto_scroll=True)
 
     def montar(self) -> None:
+        """Monta a janela Flet com planta, formulário de itens e indicadores da conexão."""
         painel = ft.Column(
             width=330, scroll=ft.ScrollMode.AUTO, spacing=10,
             controls=[
@@ -188,6 +198,7 @@ class Simulador:
         self.page.run_task(self.ciclo)
 
     def definir_nomes(self) -> None:
+        """Cria campos de nome para a quantidade de equipamentos escolhida pelo operador."""
         try:
             total = int(self.quantidade.value or "0")
             if not 1 <= total <= modelo.MAX_ITENS:
@@ -204,6 +215,7 @@ class Simulador:
         self._avisar("")
 
     def gerar(self) -> None:
+        """Valida nomes e inicia a geração/cadastro dos equipamentos sintéticos."""
         try:
             itens = modelo.criar_itens([c.value or "" for c in self.campos_nomes.controls],
                                        self.rng)
@@ -215,6 +227,7 @@ class Simulador:
         self.page.run_thread(self._cadastrar_e_posicionar, itens)
 
     def _cadastrar_e_posicionar(self, itens: list[Item]) -> None:
+        """Cadastra os EPCs no banco e cria seus marcadores em posições fora das antenas."""
         try:
             self.cadastrar(itens)
         except Exception as erro:  # noqa: BLE001 - falha de banco exibida ao usuário
@@ -233,6 +246,7 @@ class Simulador:
         self._avisar("Itens prontos. Arraste-os até as antenas.")
 
     def sortear(self) -> None:
+        """Redistribui os equipamentos em posições ilustrativas fora dos alcances de leitura."""
         for item, (x, y) in zip(self.itens,
                                 modelo.posicoes_iniciais(len(self.itens), self.rng),
                                 strict=True):
@@ -241,6 +255,7 @@ class Simulador:
         self.page.update()
 
     def _visual(self, item: Item) -> ft.GestureDetector:
+        """Monta o componente visual arrastável de um equipamento sintético."""
         bolinha = ft.Container(
             width=ITEM_DIAMETRO, height=ITEM_DIAMETRO, shape=ft.BoxShape.CIRCLE,
             bgcolor=COR_ITEM, border=ft.Border.all(3, "#ffffff"),
@@ -262,11 +277,13 @@ class Simulador:
         return detector
 
     def _posicionar(self, item: Item) -> None:
+        """Atualiza a posição do marcador conforme as coordenadas do item na planta."""
         detector, _ = self.visuais[item.epc]
         detector.left = item.x * SX - ITEM_CAIXA / 2
         detector.top = item.y * SY - ITEM_DIAMETRO / 2
 
     def _arrastar(self, item: Item, evento: ft.DragUpdateEvent) -> None:
+        """Aplica o deslocamento do mouse ao item, respeitando os limites da planta."""
         delta = evento.local_delta
         if delta is None:
             return
@@ -275,6 +292,7 @@ class Simulador:
         self.visuais[item.epc][0].update()
 
     async def ciclo(self) -> None:
+        """Avalia periodicamente itens no alcance, enfileira leituras e atualiza os indicadores visuais."""
         while True:
             agora = time.monotonic()
             for item, antena, valor in modelo.leituras_devidas(self.itens, agora):
@@ -292,6 +310,7 @@ class Simulador:
             await asyncio.sleep(TICK_S)
 
     def _atualizar_alcances(self) -> None:
+        """Atualiza alcances."""
         atual = {(item.epc, antena.porta) for item in self.itens
                  for antena, _ in modelo.detectar(item.x, item.y)}
         nomes = {item.epc: item.nome for item in self.itens}
@@ -307,6 +326,7 @@ class Simulador:
             bolinha.bgcolor = COR_ITEM_LIDO if epc in lidos else COR_ITEM
 
     def _atualizar_estado(self) -> None:
+        """Atualiza estado."""
         publicador = self.envio.publicador
         if self.envio.erro:
             self.estado.value = f"Erro no MQTT: {self.envio.erro}"
@@ -323,10 +343,12 @@ class Simulador:
             self.estado.color = COR_ITEM_LIDO
 
     def _registrar(self, texto: str) -> None:
+        """Acrescenta evento textual ao painel de acompanhamento do simulador."""
         self.log.controls.append(ft.Text(f"{time.strftime('%H:%M:%S')} {texto}", size=11))
         del self.log.controls[:-60]
 
     def _avisar(self, texto: str, erro: bool = False) -> None:
+        """Apresenta mensagem ao operador na interface do simulador."""
         self.mensagem.value = texto
         self.mensagem.color = ft.Colors.RED_700 if erro else "#4b5d63"
         self.page.update()

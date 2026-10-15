@@ -33,12 +33,14 @@ def cadastrar(itens: list[Item]) -> dict[str, str]:
 
 
 def destino(config: dict[str, str]) -> str:
+    """Formata a identificação do destino MQTT exibida na janela sem credenciais."""
     tls = config.get("MQTT_TLS_ENABLED", "false").lower() == "true"
     return (f"{'mqtts' if tls else 'mqtt'}://{config.get('MQTT_HOST', '?')}:"
             f"{config.get('MQTT_PORT', '?')}")
 
 
 def main() -> int:
+    """Executa a entrada de linha de comando de tools.lab_simulator.__main__; devolve o código de saída quando aplicável."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--reader-id", default="reader-01")
     parser.add_argument("--portal-id", default="portal-01")
@@ -60,6 +62,7 @@ def main() -> int:
     envio.iniciar()
 
     def iniciar(page: ft.Page) -> None:
+        """Constrói o simulador Flet na página fornecida pelo runtime desktop."""
         page.title = "Simulador RFID · Laboratório EASY"
         page.window.width = 1280
         page.window.height = 760

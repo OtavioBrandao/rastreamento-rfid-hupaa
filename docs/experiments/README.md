@@ -1,6 +1,6 @@
-# Experimentos e Evidências de Validação — RFID Hospital MVP
+# Experimentos e Evidências de Validação — Rastreamento RFID HUPAA
 
-Este diretório centraliza os registros empíricos, evidências de testes de integração, relatórios de execução e documentação de laboratório do **RFID Hospital MVP**.
+Este diretório centraliza os registros empíricos, evidências de testes de integração, relatórios de execução e documentação de laboratório do **Rastreamento RFID HUPAA**.
 
 ---
 
@@ -18,11 +18,17 @@ Para garantir honestidade técnica e precisão metodológica na apresentação a
 
 > [!IMPORTANT]
 > **Testes com simuladores não constituem validação de hardware físico.**
-> Embora a suíte automatizada execute centenas de testes unitários e de integração com cobertura total dos contratos de dados, a homologação final do firmware Identix EZ700 no HiveMQ Cloud sob a rede do HUPAA permanece explicitamente documentada como **PENDENTE DE VALIDAÇÃO FÍSICA**.
+> Embora a suíte automatizada execute centenas de testes unitários e de integração com verificação dos contratos cobertos pelos casos existentes, a homologação final do firmware Identix EZ700 no HiveMQ Cloud sob a rede do HUPAA permanece explicitamente documentada como **PENDENTE DE VALIDAÇÃO FÍSICA**.
 
 ---
 
 ## 2. Matriz de Evidências Disponíveis
+
+- [Validação da candidata para o Marco 2](../operations/validation.md): testes
+  automatizados, build, documentação e limites de reprodução em 15/10/2026.
+- [Ensaio sintético local da candidata](ingestion/marco2-candidata-2026-10-15.json):
+  publicador do simulador → Compose reorganizado → 12 leituras → passagem A→B
+  confirmada → histórico e Zona B. Sem validação RF ou novo ensaio com leitor.
 
 ### 📡 Experimentos de Mensageria e Rede (`docs/experiments/mqtt/`)
 
@@ -61,11 +67,11 @@ Para reproduzir localmente as verificações automatizadas de ponta a ponta:
 ```bash
 # 1. Ativar ambiente virtual e instalar dependências
 source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
+python -m pip install -r requirements/dev.txt
 
 # 2. Executar linters de qualidade
-python -m ruff check --select E4,E7,E9,F .
-python -m ruff check --select I .
+python -m ruff check --config config/ruff.toml --select E4,E7,E9,F .
+python -m ruff check --config config/ruff.toml --select I .
 
 # 3. Executar suíte de testes unitários e de integração
 # (PostgreSQL e Mosquitto locais devem estar em execução para testes integrados)

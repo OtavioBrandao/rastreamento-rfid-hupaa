@@ -8,6 +8,9 @@ from datetime import datetime, timedelta
 
 @dataclass(frozen=True, slots=True)
 class DirectionEvidence:
+    """Estrutura Direction Evidence usada por rfid_inference.direction.
+
+    Campos: antenna_id, reading_id, observed_at, epc, reading_antenna_id, mappings."""
     antenna_id: int | None
     reading_id: int | None
     observed_at: datetime | None
@@ -18,6 +21,9 @@ class DirectionEvidence:
 
 @dataclass(frozen=True, slots=True)
 class DirectionMapping:
+    """Estrutura Direction Mapping usada por rfid_inference.direction.
+
+    Campos: portal_id, side, zone_id."""
     portal_id: int
     side: str
     zone_id: int
@@ -25,6 +31,9 @@ class DirectionMapping:
 
 @dataclass(frozen=True, slots=True)
 class DirectionContext:
+    """Estrutura Direction Context usada por rfid_inference.direction.
+
+    Campos: passage_id, epc, portal_id, zone_a_id, zone_b_id, first, second."""
     passage_id: int
     epc: str
     portal_id: int
@@ -36,6 +45,9 @@ class DirectionContext:
 
 @dataclass(frozen=True, slots=True)
 class DirectionInferenceResult:
+    """Estrutura Direction Inference Result usada por rfid_inference.direction.
+
+    Campos: passage_id, epc, portal_id, status, direction, origin_side, destination_side, origin_zone_id, destination_zone_id, origin_antenna_id, destination_antenna_id, origin_reading_id, destination_reading_id, origin_observed_at, destination_observed_at, rule."""
     passage_id: int
     epc: str
     portal_id: int
@@ -66,6 +78,7 @@ def infer_direction(context: DirectionContext, ambiguity: timedelta) -> Directio
     first, second = context.first, context.second
 
     def result(status: str, rule: str, direction: str = "indeterminada") -> DirectionInferenceResult:
+        """Constrói o resultado da direção com a regra aplicada e suas evidências."""
         confirmed = status == "confirmed"
         origin = first.mappings[0] if confirmed else None
         destination = second.mappings[0] if confirmed else None

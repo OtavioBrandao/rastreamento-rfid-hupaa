@@ -14,13 +14,13 @@ export POSTGRES_PASSWORD=rfid_smoke_only
 export POSTGRES_DB=rfid_smoke
 export TEST_DATABASE_URL="postgresql+psycopg2://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:$POSTGRES_PORT/$POSTGRES_DB"
 cleanup() {
-    docker compose -p "$COMPOSE_PROJECT" -f "$ROOT_DIR/compose.yaml" \
+    docker compose -f deploy/compose.yaml -p "$COMPOSE_PROJECT" \
         --profile local down --volumes >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 cd -- "$ROOT_DIR"
 "$PYTHON_BIN" -c 'import paho.mqtt.client'
-docker compose -p "$COMPOSE_PROJECT" --profile local up -d --wait mosquitto postgres
+docker compose -f deploy/compose.yaml -p "$COMPOSE_PROJECT" --profile local up -d --wait mosquitto postgres
 "$PYTHON_BIN" - <<'PY'
 import os
 import socket
@@ -34,6 +34,6 @@ for attempt in range(30):
 else:
     raise SystemExit("[FALHOU] Mosquitto não abriu a porta de teste")
 PY
-DATABASE_URL="$TEST_DATABASE_URL" "$PYTHON_BIN" -m alembic upgrade head
+DATABASE_URL="$TEST_DATABASE_URL" "$PYTHON_BIN" -m alembic -c config/alembic.ini upgrade head
 RUN_MQTT_INTEGRATION=1 "$PYTHON_BIN" -m pytest -q
 printf '[PASSOU] Dois simuladores, mensagens inválidas, JSONL e PostgreSQL no Mosquitto local.\n'

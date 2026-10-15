@@ -31,7 +31,7 @@ administração integradas aos recursos existentes.
 
 Passaram os 58 testes do frontend, o build TypeScript/Vite, Ruff
 (`E4,E7,E9,F,I`) e `git diff --check`. Não restaram marcadores de conflito.
-Em PostgreSQL 16 descartável local, `alembic upgrade head` e `alembic check`
+Em PostgreSQL 16 descartável local, `alembic -c config/alembic.ini upgrade head` e `alembic check`
 passaram sem diferenças de schema. Nenhum banco compartilhado foi alterado.
 
 Estes resultados validam software em ambiente sintético; o aceite físico do

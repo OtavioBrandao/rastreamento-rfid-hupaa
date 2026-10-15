@@ -89,6 +89,9 @@ def _http(erro: service.ErroHardware) -> HTTPException:
     summary="Cadastrar leitor",
 )
 def criar_leitor(payload: LeitorCriar, db: Session = Depends(get_db)) -> service.Leitor:
+    """Cria leitor.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.criar_leitor(db, **payload.model_dump())
     except service.ErroHardware as erro:
@@ -107,6 +110,9 @@ def listar_leitores(
     incluir_inativos: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> service.Pagina:
+    """Lista leitores.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return service.listar_leitores(db, page=page, size=size, incluir_inativos=incluir_inativos)
 
 
@@ -117,6 +123,9 @@ def listar_leitores(
     summary="Detalhar leitor",
 )
 def detalhar_leitor(leitor_id: int, db: Session = Depends(get_db)) -> service.Leitor:
+    """Obtém os detalhes de leitor.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.buscar_leitor_por_id(db, leitor_id)
     except service.ErroHardware as erro:
@@ -132,6 +141,9 @@ def detalhar_leitor(leitor_id: int, db: Session = Depends(get_db)) -> service.Le
 def atualizar_leitor(
     leitor_id: int, payload: LeitorAtualizar, db: Session = Depends(get_db)
 ) -> service.Leitor:
+    """Atualiza leitor.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.atualizar_leitor(db, leitor_id, payload.model_dump(exclude_unset=True))
     except service.ErroHardware as erro:
@@ -145,6 +157,9 @@ def atualizar_leitor(
     summary="Inativar leitor (baixa lógica; nunca bloqueada pelo histórico)",
 )
 def inativar_leitor(leitor_id: int, db: Session = Depends(get_db)) -> service.Leitor:
+    """Inativa leitor.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.inativar_leitor(db, leitor_id)
     except service.ErroHardware as erro:
@@ -158,6 +173,9 @@ def inativar_leitor(leitor_id: int, db: Session = Depends(get_db)) -> service.Le
     summary="Reativar leitor",
 )
 def reativar_leitor(leitor_id: int, db: Session = Depends(get_db)) -> service.Leitor:
+    """Reativa leitor.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.reativar_leitor(db, leitor_id)
     except service.ErroHardware as erro:
@@ -175,6 +193,9 @@ def reativar_leitor(leitor_id: int, db: Session = Depends(get_db)) -> service.Le
     summary="Cadastrar antena (leitor e zona ativos; portal ativo, se informado)",
 )
 def criar_antena(payload: AntenaCriar, db: Session = Depends(get_db)) -> service.Antena:
+    """Cria antena.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.criar_antena(db, **payload.model_dump())
     except service.ErroHardware as erro:
@@ -195,6 +216,9 @@ def listar_antenas(
     portal_id: int | None = Query(None, gt=0),
     db: Session = Depends(get_db),
 ) -> service.Pagina:
+    """Lista antenas.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return service.listar_antenas(
         db,
         page=page,
@@ -212,6 +236,9 @@ def listar_antenas(
     summary="Detalhar antena",
 )
 def detalhar_antena(antena_id: int, db: Session = Depends(get_db)) -> service.Antena:
+    """Obtém os detalhes de antena.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.buscar_antena_por_id(db, antena_id)
     except service.ErroHardware as erro:
@@ -227,6 +254,9 @@ def detalhar_antena(antena_id: int, db: Session = Depends(get_db)) -> service.An
 def atualizar_antena(
     antena_id: int, payload: AntenaAtualizar, db: Session = Depends(get_db)
 ) -> service.Antena:
+    """Atualiza antena.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.atualizar_antena(db, antena_id, payload.model_dump(exclude_unset=True))
     except service.ErroHardware as erro:
@@ -240,6 +270,9 @@ def atualizar_antena(
     summary="Inativar antena (baixa lógica; nunca bloqueada pelo histórico)",
 )
 def inativar_antena(antena_id: int, db: Session = Depends(get_db)) -> service.Antena:
+    """Inativa antena.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.inativar_antena(db, antena_id)
     except service.ErroHardware as erro:
@@ -253,6 +286,9 @@ def inativar_antena(antena_id: int, db: Session = Depends(get_db)) -> service.An
     summary="Reativar antena",
 )
 def reativar_antena(antena_id: int, db: Session = Depends(get_db)) -> service.Antena:
+    """Reativa antena.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.reativar_antena(db, antena_id)
     except service.ErroHardware as erro:
@@ -270,6 +306,9 @@ def reativar_antena(antena_id: int, db: Session = Depends(get_db)) -> service.An
     summary="Cadastrar portal (as duas zonas precisam existir, estar ativas e ser distintas)",
 )
 def criar_portal(payload: PortalCriar, db: Session = Depends(get_db)) -> service.Portal:
+    """Cria portal.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.criar_portal(db, **payload.model_dump())
     except service.ErroHardware as erro:
@@ -288,6 +327,9 @@ def listar_portais(
     incluir_inativos: bool = Query(False),
     db: Session = Depends(get_db),
 ) -> service.Pagina:
+    """Lista portais.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return service.listar_portais(db, page=page, size=size, incluir_inativos=incluir_inativos)
 
 
@@ -298,6 +340,9 @@ def listar_portais(
     summary="Detalhar portal",
 )
 def detalhar_portal(portal_id: int, db: Session = Depends(get_db)) -> service.Portal:
+    """Obtém os detalhes de portal.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.buscar_portal_por_id(db, portal_id)
     except service.ErroHardware as erro:
@@ -313,6 +358,9 @@ def detalhar_portal(portal_id: int, db: Session = Depends(get_db)) -> service.Po
 def atualizar_portal(
     portal_id: int, payload: PortalAtualizar, db: Session = Depends(get_db)
 ) -> service.Portal:
+    """Atualiza portal.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.atualizar_portal(db, portal_id, payload.model_dump(exclude_unset=True))
     except service.ErroHardware as erro:
@@ -326,6 +374,9 @@ def atualizar_portal(
     summary="Inativar portal (baixa lógica; nunca bloqueada pelo histórico)",
 )
 def inativar_portal(portal_id: int, db: Session = Depends(get_db)) -> service.Portal:
+    """Inativa portal.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.inativar_portal(db, portal_id)
     except service.ErroHardware as erro:
@@ -339,6 +390,9 @@ def inativar_portal(portal_id: int, db: Session = Depends(get_db)) -> service.Po
     summary="Reativar portal",
 )
 def reativar_portal(portal_id: int, db: Session = Depends(get_db)) -> service.Portal:
+    """Reativa portal.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         return service.reativar_portal(db, portal_id)
     except service.ErroHardware as erro:

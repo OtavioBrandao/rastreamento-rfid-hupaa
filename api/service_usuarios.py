@@ -36,22 +36,30 @@ class ErroUsuario(Exception):
 
 
 class UsuarioNaoEncontrado(ErroUsuario):
+    """Falha de domínio: usuario nao encontrado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, usuario_id: int) -> None:
+        """Inicializa UsuarioNaoEncontrado com as dependências e valores recebidos."""
         super().__init__(f"Usuário {usuario_id} não encontrado.")
 
 
 class EmailDuplicado(ErroUsuario):
+    """Falha de domínio: email duplicado; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self) -> None:
+        """Inicializa EmailDuplicado com as dependências e valores recebidos."""
         super().__init__("Já existe um usuário com este e-mail.")
 
 
 class UltimoAdministrador(ErroUsuario):
+    """Falha de domínio: ultimo administrador; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self) -> None:
+        """Inicializa UltimoAdministrador com as dependências e valores recebidos."""
         super().__init__("Operação deixaria o sistema sem administrador ativo.")
 
 
 class OperacaoNaPropriaConta(ErroUsuario):
+    """Falha de domínio: operacao na propria conta; traduzida pelo chamador para resposta ou diagnóstico."""
     def __init__(self, operacao: str) -> None:
+        """Inicializa OperacaoNaPropriaConta com as dependências e valores recebidos."""
         super().__init__(f"Um administrador não pode {operacao} a própria conta.")
 
 
@@ -59,11 +67,15 @@ class AutorSemPermissao(ErroUsuario):
     """O autor perdeu o perfil de administrador enquanto a request esperava o lock."""
 
     def __init__(self) -> None:
+        """Inicializa AutorSemPermissao com as dependências e valores recebidos."""
         super().__init__("acesso_negado")
 
 
 @dataclass
 class PaginaUsuarios:
+    """Estrutura Pagina Usuarios usada por api.service_usuarios.
+
+    Campos: items, page, size, total."""
     items: list[Usuario]
     page: int
     size: int
@@ -71,10 +83,12 @@ class PaginaUsuarios:
 
     @property
     def pages(self) -> int:
+        """Calcula o total de páginas a partir da contagem e do tamanho da página."""
         return math.ceil(self.total / self.size) if self.size else 0
 
 
 def _perfil_por_nome(db: Session, nome: str) -> Perfil:
+    """Obtém o perfil persistido pelo nome aceito pela API."""
     perfil = db.scalar(select(Perfil).where(Perfil.nome == nome))
     if perfil is None:
         # Só acontece se a migration da ISS-026 não foi aplicada.
@@ -94,6 +108,7 @@ def travar_admins_ativos(db: Session) -> list[int]:
 
 
 def _travar(db: Session, autor_id: int, alvo_id: int | None) -> tuple[list[int], Usuario | None]:
+    """Carrega o usuário sob lock para alteração transacional consistente."""
     admins = travar_admins_ativos(db)
     if autor_id not in admins:
         db.rollback()
@@ -114,6 +129,7 @@ def _travar(db: Session, autor_id: int, alvo_id: int | None) -> tuple[list[int],
 
 
 def _impedir_sem_admin(admins: list[int], alvo: Usuario) -> None:
+    """Recusa operação que deixaria o sistema sem administrador ativo."""
     if alvo.id in admins and len(admins) == 1:
         raise UltimoAdministrador()
 
@@ -121,6 +137,7 @@ def _impedir_sem_admin(admins: list[int], alvo: Usuario) -> None:
 def listar(
     db: Session, page: int, size: int, ativo: bool | None = None, perfil: str | None = None,
 ) -> PaginaUsuarios:
+    """Lista usuarios."""
     filtros = []
     if ativo is not None:
         filtros.append(Usuario.ativo.is_(ativo))
@@ -136,6 +153,7 @@ def listar(
 
 
 def obter(db: Session, usuario_id: int) -> Usuario:
+    """Obtém usuarios."""
     usuario = db.scalar(
         select(Usuario).options(joinedload(Usuario.perfil)).where(Usuario.id == usuario_id)
     )
@@ -147,6 +165,7 @@ def obter(db: Session, usuario_id: int) -> Usuario:
 def criar(
     db: Session, autor_id: int, nome: str, email: str, perfil: str, senha_temporaria: str,
 ) -> Usuario:
+    """Cria usuarios."""
     senhas.validar_politica(senha_temporaria)
     senha_hash = senhas.gerar_hash(senha_temporaria)
     _travar(db, autor_id, None)
@@ -170,6 +189,7 @@ def criar(
 def atualizar(
     db: Session, autor_id: int, alvo_id: int, nome: str | None = None, perfil: str | None = None,
 ) -> Usuario:
+    """Atualiza usuarios."""
     admins, alvo = _travar(db, autor_id, alvo_id)
     if perfil is not None and perfil != alvo.perfil.nome:
         if perfil != PERFIL_ADMINISTRADOR:
@@ -186,6 +206,7 @@ def atualizar(
 
 
 def desativar(db: Session, autor_id: int, alvo_id: int, agora: datetime) -> Usuario:
+    """Desativa usuarios."""
     if autor_id == alvo_id:
         raise OperacaoNaPropriaConta("desativar")
     admins, alvo = _travar(db, autor_id, alvo_id)
@@ -219,6 +240,7 @@ def reativar(db: Session, autor_id: int, alvo_id: int, agora: datetime) -> Usuar
 def redefinir_senha(
     db: Session, autor_id: int, alvo_id: int, senha_temporaria: str, agora: datetime,
 ) -> Usuario:
+    """Redefine senha."""
     if autor_id == alvo_id:
         raise OperacaoNaPropriaConta("redefinir a senha de")
     senhas.validar_politica(senha_temporaria)

@@ -50,10 +50,12 @@ def probe(settings: Settings, operation: str, topic: str | None = None) -> str:
     result = ["inconclusivo"]
 
     def finish(code, expected):
+        """Finaliza o estado de observação do ensaio com o resultado recebido."""
         result[0] = "validado" if code.value in expected else "falhou"
         done.set()
 
     def connected(c, _u, _f, code, _p):
+        """Registra conexão MQTT e solicita a assinatura usada pelo verificador."""
         if operation == "invalid-auth":
             finish(code, (134, 135))
         elif code.is_failure:
@@ -69,6 +71,7 @@ def probe(settings: Settings, operation: str, topic: str | None = None) -> str:
     client.on_subscribe = lambda c, u, mid, codes, p: finish(codes[0], (135,))
 
     def disconnected(c, u, flags, code, p):
+        """Registra interrupção MQTT durante a verificação do ensaio."""
         if not done.is_set() and operation != "invalid-auth" and code.value == 135:
             finish(code, (135,))
 
@@ -87,6 +90,7 @@ def probe(settings: Settings, operation: str, topic: str | None = None) -> str:
 
 def run_simulator(source: dict[str, str], count: int, interval: float, invalid=None, timestamp=None) -> int:
     # Não herdar credenciais MQTT de outro perfil.
+    """Executa publicador sintético em subprocesso com o perfil de publicação escolhido."""
     environment = {k: v for k, v in os.environ.items() if not k.startswith("MQTT_")}
     environment.update(source)
     command = [sys.executable, "-m", "rfid_ingestion.simulator", "--reader-id",
@@ -101,6 +105,7 @@ def run_simulator(source: dict[str, str], count: int, interval: float, invalid=N
 
 
 def main(argv=None) -> int:
+    """Executa a entrada de linha de comando de rfid_ingestion.verification; devolve o código de saída quando aplicável."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", required=True)
     parser.add_argument("--publisher-env", action="append", default=[])
@@ -233,6 +238,7 @@ def main(argv=None) -> int:
         if engine is not None:
             engine.dispose()
         def sanitize(value):
+            """Remove informações sensíveis da evidência antes de gravar o relatório de validação."""
             if isinstance(value, dict):
                 return {key: sanitize(item) for key, item in value.items()}
             if isinstance(value, list):

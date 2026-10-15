@@ -12,7 +12,7 @@ Veja a [decisão e comparação dos provedores](../decisions/0002-managed-mqtt.m
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -r requirements/base.txt
 ```
 
 Python >= 3.10 e Paho `>=2.1,<3`, callbacks VERSION2, MQTT 3.1.1.
@@ -48,9 +48,9 @@ de autenticação, configuração inválida ou SUBACK sem QoS 1 encerram com có
 não zero: repetir não corrigiria esses casos. O ingestor usa sessão persistente
 MQTT 3.1.1 (`clean_session=false`) e reassina após toda conexão bem-sucedida.
 
-A aplicação lê variáveis exportadas. `.env.example` é o exemplo local;
-`.env.local.example` e `.env.cloud.example` são os perfis explícitos. Arquivos
-reais `.env`, `.env.*`, chaves privadas e dados de execução são ignorados pelo Git.
+A aplicação lê variáveis exportadas. `config/environments/.env.example` é o exemplo local;
+`config/environments/.env.local.example` e `config/environments/.env.cloud.example` são os perfis explícitos. Arquivos
+reais `config/environments/.env`, `config/environments/.env.*`, chaves privadas e dados de execução são ignorados pelo Git.
 Use um terminal por perfil para não herdar variáveis do outro modo.
 Os exemplos abaixo usam Bash; arquivos carregados com `source` devem ser confiáveis.
 Coloque valores especiais entre aspas simples e não use `set -x`.
@@ -58,16 +58,16 @@ Coloque valores especiais entre aspas simples e não use `set -x`.
 ### Local
 
 ```bash
-cp .env.local.example .env.local
-chmod 600 .env.local
-docker compose up -d
-set -a; source .env.local; set +a
+cp config/environments/.env.local.example config/environments/.env.local
+chmod 600 config/environments/.env.local
+docker compose -f deploy/compose.yaml up -d
+set -a; source config/environments/.env.local; set +a
 # Somente para os timestamps gerados pelo nosso simulador ez700:
 EZ700_TIMESTAMP_FORMAT=epoch_ms python -m rfid_ingestion
 ```
 
 O Compose mantém o listener da PoC em 1883 em todas as interfaces. Para
-desenvolvimento somente no notebook: `MQTT_BIND_ADDRESS=127.0.0.1 docker compose up -d`.
+desenvolvimento somente no notebook: `MQTT_BIND_ADDRESS=127.0.0.1 docker compose -f deploy/compose.yaml up -d`.
 Para leitores físicos, configure **no leitor** o IP LAN do computador que executa
 o broker, substituindo `localhost`. Clientes em outro computador também usam esse
 IP em `MQTT_HOST`. O ingestor no próprio notebook pode continuar com localhost.
@@ -106,10 +106,10 @@ As [regras oficiais](https://docs.hivemq.com/hivemq-cloud/authn-authz.html)
 orientam a criação de permissões customizadas e o comportamento do cache.
 
 ```bash
-cp .env.cloud.example .env.cloud
-cp .env.cloud.example .env.cloud.reader-01
-cp .env.cloud.example .env.cloud.reader-02
-chmod 600 .env.cloud .env.cloud.reader-01 .env.cloud.reader-02
+cp config/environments/.env.cloud.example config/environments/.env.cloud
+cp config/environments/.env.cloud.example config/environments/.env.cloud.reader-01
+cp config/environments/.env.cloud.example config/environments/.env.cloud.reader-02
+chmod 600 config/environments/.env.cloud config/environments/.env.cloud.reader-01 config/environments/.env.cloud.reader-02
 # Editar os três arquivos fora do Git: endpoint, credencial individual,
 # Client ID e MQTT_TOPIC conforme a tabela acima.
 ```
@@ -117,12 +117,12 @@ chmod 600 .env.cloud .env.cloud.reader-01 .env.cloud.reader-02
 Ingestor, em seu terminal:
 
 ```bash
-set -a; source .env.cloud; set +a
+set -a; source config/environments/.env.cloud; set +a
 # Para os simuladores ez700 dos exemplos abaixo:
 EZ700_TIMESTAMP_FORMAT=epoch_ms python -m rfid_ingestion
 ```
 
-O mesmo comando com `.env.local` seleciona manualmente Mosquitto. Pare a sessão
+O mesmo comando com `config/environments/.env.local` seleciona manualmente Mosquitto. Pare a sessão
 anterior antes de trocar. Falta de Internet deixa cloud com erro; não existe fallback.
 
 ## Contrato e migração
@@ -173,10 +173,10 @@ python -m rfid_ingestion.simulator --reader-id reader-01 --count 20 --interval 0
 Para dois publicadores externos simultâneos (mesma máquina, credenciais distintas):
 
 ```bash
-(set -a; source .env.cloud.reader-01; set +a
+(set -a; source config/environments/.env.cloud.reader-01; set +a
  python -m rfid_ingestion.simulator --reader-id reader-01 --antenna 1 --count 20 --interval 0.2) &
 p1=$!
-(set -a; source .env.cloud.reader-02; set +a
+(set -a; source config/environments/.env.cloud.reader-02; set +a
  python -m rfid_ingestion.simulator --reader-id reader-02 --antenna 2 --count 20 --interval 0.2) &
 p2=$!
 wait "$p1"; wait "$p2"
@@ -219,7 +219,7 @@ temporário); se o executável não estiver instalado, são explicitamente pulad
 Eles validam o transporte TLS local, não o serviço HiveMQ.
 
 Para repetir a verificação com simuladores, configure explicitamente
-`EZ700_TIMESTAMP_FORMAT=epoch_ms` no arquivo de perfil do **ingestor** (`.env.cloud`
+`EZ700_TIMESTAMP_FORMAT=epoch_ms` no arquivo de perfil do **ingestor** (`config/environments/.env.cloud`
 no exemplo). `verification` lê esse arquivo e gera marcador numérico em
 milissegundos para seus publicadores EZ700 sintéticos; não infere formato do
 leitor nem altera Settings automaticamente. Pare qualquer ingestor com o mesmo
@@ -228,8 +228,8 @@ leitores/antenas no banco antes de executar:
 
 ```bash
 python -m rfid_ingestion.verification \
-  --env-file .env.cloud \
-  --publisher-env .env.cloud.reader-01 --publisher-env .env.cloud.reader-02 \
+  --env-file config/environments/.env.cloud \
+  --publisher-env config/environments/.env.cloud.reader-01 --publisher-env config/environments/.env.cloud.reader-02 \
   --count 20 --interval 0.2 --seconds 15 --network rede-casa \
   --security --report data/iss001-hivemq-simuladores.json
 ```

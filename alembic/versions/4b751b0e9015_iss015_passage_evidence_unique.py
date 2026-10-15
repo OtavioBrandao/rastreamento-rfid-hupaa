@@ -9,6 +9,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """Aplica a revisão: iss-015: unicidade das duas leituras que confirmam a passagem."""
     op.create_index(
         "uq_passagem_evidencias",
         "passagens",
@@ -18,4 +19,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Reverte a revisão: iss-015: unicidade das duas leituras que confirmam a passagem."""
     op.drop_index("uq_passagem_evidencias", table_name="passagens")

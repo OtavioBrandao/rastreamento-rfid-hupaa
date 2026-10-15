@@ -60,7 +60,7 @@ def banco(engine):
 def _alembic(url, *argumentos: str) -> subprocess.CompletedProcess:
     ambiente = {**os.environ, "DATABASE_URL": url.render_as_string(hide_password=False)}
     return subprocess.run(
-        [sys.executable, "-m", "alembic", *argumentos],
+        [sys.executable, "-m", "alembic", "-c", "config/alembic.ini", *argumentos],
         cwd=RAIZ,
         env=ambiente,
         capture_output=True,

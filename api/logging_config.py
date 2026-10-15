@@ -20,6 +20,7 @@ NIVEIS_VALIDOS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
 
 
 def nivel_do_ambiente(environ: Mapping[str, str] | None = None) -> str:
+    """Resolve LOG_LEVEL a partir do ambiente com padrão aceito pelo logging."""
     source = os.environ if environ is None else environ
     nivel = source.get(LOG_LEVEL_ENV, "INFO").strip().upper()
     if nivel not in NIVEIS_VALIDOS:
@@ -28,6 +29,7 @@ def nivel_do_ambiente(environ: Mapping[str, str] | None = None) -> str:
 
 
 def configurar_logging_api(environ: Mapping[str, str] | None = None) -> logging.Logger:
+    """Configura o nível dos loggers da API para integração com o servidor ASGI."""
     logger = logging.getLogger("api")
     logger.setLevel(nivel_do_ambiente(environ))
     logger.propagate = True

@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["painel operacional"], depende
 
 
 class Resumo(BaseModel):
+    """Contrato de dados Resumo; valida campos e serializa a resposta da API."""
     registered: int
     disponivel: int
     atencao: int
@@ -26,6 +27,7 @@ class Resumo(BaseModel):
 
 
 class Atividade(BaseModel):
+    """Contrato de dados Atividade; valida campos e serializa a resposta da API."""
     id: int
     equipamento_id: int
     equipamento_nome: str
@@ -36,6 +38,7 @@ class Atividade(BaseModel):
 
 
 class Atividades(BaseModel):
+    """Contrato de dados Atividades; valida campos e serializa a resposta da API."""
     items: list[Atividade]
 
 
@@ -44,6 +47,9 @@ def consultar_resumo(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> Resumo:
+    """Consulta resumo.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return Resumo(**resumo(db, now=recency_context[0], threshold=recency_context[1]))
 
 
@@ -52,4 +58,7 @@ def consultar_atividade(
     limit: int = Query(8, ge=1, le=20),
     db: Session = Depends(get_db),
 ) -> Atividades:
+    """Consulta atividade.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     return Atividades(items=[Atividade(**item) for item in atividade_recente(db, limit=limit)])

@@ -112,7 +112,7 @@ Este documento registra os checkpoints incrementais de implementação da integr
 - **Mensagem:** `test(iss-006): update smoke test fixtures and migration for iss-012`
 - **O que foi concluído:**
   - Atualização do arquivo `tests/fixtures/topology.sql` para preencher `nome_normalizado` em `andares`, `setores` e `zonas` (exigência introduzida na ISS-011).
-  - Execução de `alembic upgrade head` no banco efêmero criado pelo script `tests/reader-connectivity/mqtt/smoke-test.sh` antes de invocar a suíte de testes.
+  - Execução de `alembic -c config/alembic.ini upgrade head` no banco efêmero criado pelo script `tests/reader-connectivity/mqtt/smoke-test.sh` antes de invocar a suíte de testes.
 - **Arquivos significativamente alterados:**
   - `tests/fixtures/topology.sql`
   - `tests/reader-connectivity/mqtt/smoke-test.sh`
@@ -159,11 +159,11 @@ Este documento registra os checkpoints incrementais de implementação da integr
 - **Commit SHA:** `5db3198`
 - **Mensagem:** `docs(iss-006): record final integration validation`
 - **Causa raiz da falha no CI (Root cause):**
-  - O job `tests` no GitHub Actions iniciava um serviço PostgreSQL efêmero (`POSTGRES_DB: ci_db`), porém nunca executava `python -m alembic upgrade head` antes de invocar o `pytest`. Com o banco vazio sem as tabelas criadas, os testes com fixtures de banco falhavam imediatamente no setup com erros como `relation "auditorias" does not exist`.
+  - O job `tests` no GitHub Actions iniciava um serviço PostgreSQL efêmero (`POSTGRES_DB: ci_db`), porém nunca executava `python -m alembic -c config/alembic.ini upgrade head` antes de invocar o `pytest`. Com o banco vazio sem as tabelas criadas, os testes com fixtures de banco falhavam imediatamente no setup com erros como `relation "auditorias" does not exist`.
 - **Esgotamento em cascata do pool de conexões (Cascading connection pool exhaustion):**
   - A fixture `db` em `tests/conftest.py` abria a conexão e iniciava a transação externa antes de executar instruções `DELETE` preparatórias. Quando o DELETE falhava devido à tabela inexistente, a execução era abortada antes do bloco `try/finally` que continha `conexao.close()`. O vazamento de conexões não fechadas no pool (`QueuePool` tamanho 5, overflow 10) rapidamente esgotava a capacidade do pool após algumas falhas de setup, gerando o erro secundário em cascata `QueuePool limit of size 5 overflow 10 reached` para todos os testes subsequentes.
-- **Ajustes de CI (Missing alembic upgrade head):**
-  - O arquivo `.github/workflows/ci.yml` foi atualizado para definir `DATABASE_URL` apontando para o banco de serviço descartável do CI (além de `TEST_DATABASE_URL`), e foi adicionado o passo `Aplicar migrations no banco de testes` executando `python -m alembic upgrade head` imediatamente antes da suíte de testes.
+- **Ajustes de CI (Missing alembic -c config/alembic.ini upgrade head):**
+  - O arquivo `.github/workflows/ci.yml` foi atualizado para definir `DATABASE_URL` apontando para o banco de serviço descartável do CI (além de `TEST_DATABASE_URL`), e foi adicionado o passo `Aplicar migrations no banco de testes` executando `python -m alembic -c config/alembic.ini upgrade head` imediatamente antes da suíte de testes.
 - **Endurecimento de fixtures (Fixture hardening):**
   - A fixture `db` em `tests/conftest.py` foi reestruturada para envolver tanto a limpeza inicial de DELETEs quanto a criação/utilização da sessão em um bloco `try/finally` imediato após abrir a conexão e a transação externa. O bloco `finally` garante que `transacao_externa.rollback()` (se ativa) e `conexao.close()` sejam sempre invocados, mesmo em falhas catastróficas de setup/schema, prevenindo vazamento de conexões no pool.
 - **Sincronização com o modelo final de hardware (Sync with final ISS-012 model):**
@@ -171,10 +171,10 @@ Este documento registra os checkpoints incrementais de implementação da integr
   - Preservou-se a autoridade do modelo de hardware da ISS-012 (`Leitor.reader_id` NOT NULL + UNIQUE, `Antena.ativo`, restrição de porta única apenas entre antenas ativas, e filtro `Antena.ativo.is_(True)` na resolução de topologia em `rfid_ingestion/repository.py`).
   - Alinhou-se o cabeçalho docstring da migration `da436f7c75b3` (`Revises: 6b3e5f7a91c4`) com seu identificador de `down_revision`.
 - **Validação e resultados (Validation results):**
-  - `python -m ruff check --select E4,E7,E9,F,I .`: All checks passed.
+  - `python -m ruff check --config config/ruff.toml --select E4,E7,E9,F,I .`: All checks passed.
   - `python -m alembic heads`: exatamente 1 head (`da436f7c75b3`).
   - `python -m alembic history`: cadeia linear íntegra de `<base>` até `da436f7c75b3`.
-  - `python -m alembic upgrade head` + `python -m alembic check`: `No new upgrade operations detected` (drift zero).
+  - `python -m alembic -c config/alembic.ini upgrade head` + `python -m alembic check`: `No new upgrade operations detected` (drift zero).
   - Testes focados (`tests/test_repository.py`, `tests/test_migrations.py`, `tests/test_mqtt_persistence.py`, `tests/test_migration_iss012.py`): 42 passed em 53.49s.
   - Suíte completa de testes (`python -m pytest -q`): 632 passed, 2 skipped, 2 warnings, 47 subtests passed em 133.55s.
   - Teste de fumaça de infraestrutura (`tests/infrastructure/compose-smoke-test.sh`): [PASSOU] validando o fluxo crítico completo MQTT -> JSONL -> PostgreSQL, descarte idempotente de duplicatas via `ON CONFLICT DO NOTHING`, rejeição e ausência de ACK em falhas de banco, e integridade do reset local.

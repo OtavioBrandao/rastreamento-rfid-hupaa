@@ -32,6 +32,7 @@ def sessao_autenticada(
     db: Session = Depends(get_db),
     agora: datetime = Depends(obter_agora),
 ) -> SessaoAutenticada:
+    """Resolve cookie de sessão e usuário válido; rejeita credencial ausente ou expirada."""
     sessao = resolver_sessao(db, rfid_sessao, agora)
     if sessao is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail=DETALHE_NAO_AUTENTICADO)
@@ -43,7 +44,7 @@ def sessao_autenticada(
 def sessao_liberada(
     sessao: SessaoAutenticada = Depends(sessao_autenticada),
 ) -> SessaoAutenticada:
+    """Exige sessão autenticada que já concluiu a troca obrigatória de senha."""
     if sessao.usuario.deve_trocar_senha:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail=DETALHE_TROCA_OBRIGATORIA)
     return sessao
-

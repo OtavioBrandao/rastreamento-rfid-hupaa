@@ -26,7 +26,7 @@ A validação física com hardware Identix EZ700 na infraestrutura de rede corpo
 3. No notebook, antes de iniciar inventário do leitor, executar:
 
 ```bash
-python -m rfid_ingestion.verification --env-file .env.cloud \
+python -m rfid_ingestion.verification --env-file config/environments/.env.cloud \
   --seconds 60 --expected-reader reader-01 --network laboratorio-cabeada \
   --report data/lab-um-leitor.json
 ```
@@ -35,7 +35,7 @@ python -m rfid_ingestion.verification --env-file .env.cloud \
    Client ID e o tópico para `.../reader-02/readings`:
 
 ```bash
-python -m rfid_ingestion.verification --env-file .env.cloud \
+python -m rfid_ingestion.verification --env-file config/environments/.env.cloud \
   --seconds 120 --expected-reader reader-01 --expected-reader reader-02 \
   --network laboratorio-cabeada --report data/lab-dois-leitores.json
 ```
@@ -67,7 +67,7 @@ Distribuir somente a credencial individual necessária a cada máquina.
 
 ```bash
 source .venv/bin/activate
-python -m rfid_ingestion.verification --env-file .env.cloud \
+python -m rfid_ingestion.verification --env-file config/environments/.env.cloud \
   --seconds 180 --expected-reader reader-01 --expected-reader reader-02 \
   --network rede-A-internet-fixa --report data/iss001-duas-redes.json
 ```
@@ -76,7 +76,7 @@ python -m rfid_ingestion.verification --env-file .env.cloud \
 
 ```bash
 source .venv/bin/activate
-set -a; source .env.cloud.reader-01; set +a
+set -a; source config/environments/.env.cloud.reader-01; set +a
 python -m rfid_ingestion.simulator --reader-id reader-01 \
   --antenna 1 --count 100 --interval 0.5
 ```
@@ -85,7 +85,7 @@ python -m rfid_ingestion.simulator --reader-id reader-01 \
 
 ```bash
 source .venv/bin/activate
-set -a; source .env.cloud.reader-02; set +a
+set -a; source config/environments/.env.cloud.reader-02; set +a
 python -m rfid_ingestion.simulator --reader-id reader-02 \
   --antenna 2 --count 100 --interval 0.5
 ```
@@ -108,7 +108,7 @@ resultados como físicos quando só houve processos Python.
 | Revisão das ACLs e negativa de senha inválida | Referenciar relatório de probes |
 
 As evidências compartilhadas ficam em `docs/experiments/mqtt/` após revisão;
-arquivos brutos ficam em `data/`, ignorados. Não copiar `.env`, senhas, tokens,
+arquivos brutos ficam em `data/`, ignorados. Não copiar `config/environments/.env`, senhas, tokens,
 chaves privadas ou prints de credenciais. Registrar falhas também, sem traceback
 que possa conter valores privados.
 

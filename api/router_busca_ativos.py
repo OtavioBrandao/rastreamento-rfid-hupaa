@@ -33,6 +33,9 @@ def buscar_ativos(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> BuscaAtivosPagina:
+    """Busca ativos.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     if q is not None:
         q = q.strip()
         if not q:
@@ -53,6 +56,9 @@ def obter_ativo(
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> AtivoBusca:
+    """Obtém ativo.
+
+    Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     ativo = obter(db, equipamento_id, now=recency_context[0], threshold=recency_context[1])
     if ativo is None:
         raise HTTPException(404, detail="equipamento inexistente")

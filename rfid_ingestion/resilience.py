@@ -33,6 +33,7 @@ class BackoffPolicy:
     jitter: float
 
     def __post_init__(self) -> None:
+        """Valida as invariantes dos campos após a construção da estrutura."""
         values = (self.initial_delay, self.max_delay, self.multiplier, self.jitter)
         if not all(math.isfinite(value) for value in values):
             raise ValueError("parâmetros de backoff devem ser finitos")
@@ -55,11 +56,13 @@ class Backoff:
         *,
         random_source: Callable[[], float] = random.random,
     ) -> None:
+        """Inicializa Backoff com as dependências e valores recebidos."""
         self.policy = policy
         self.random_source = random_source
         self.attempt = 0
 
     def next_delay(self) -> float:
+        """Calcula o próximo atraso exponencial truncado com jitter e avança a tentativa."""
         base = min(
             self.policy.initial_delay
             * self.policy.multiplier**self.attempt,
@@ -71,6 +74,7 @@ class Backoff:
         return min(self.policy.max_delay, base * factor)
 
     def reset(self) -> None:
+        """Reinicia a contagem de tentativas após recuperação confirmada."""
         self.attempt = 0
 
     def wait(self, stop_event: Event) -> tuple[bool, float]:

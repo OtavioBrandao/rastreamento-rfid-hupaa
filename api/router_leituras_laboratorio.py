@@ -25,6 +25,7 @@ def leituras_laboratorio(
     epc: str | None = Query(None, min_length=1, max_length=32),
     db: Session = Depends(get_db),
 ) -> dict:
+    """Entrega leituras recentes paginadas do laboratório com controle de permissão."""
     if epc is not None:
         try:
             epc = normalizar_epc(epc)

@@ -29,6 +29,7 @@ class SenhaForaDaPolitica(ValueError):
     """Mensagem fixa: nunca inclui a senha recebida."""
 
     def __init__(self) -> None:
+        """Inicializa SenhaForaDaPolitica com as dependências e valores recebidos."""
         super().__init__(
             f"a senha deve ter entre {TAMANHO_MINIMO_SENHA} e {TAMANHO_MAXIMO_SENHA} "
             "caracteres e não pode ser só espaços"
@@ -36,11 +37,13 @@ class SenhaForaDaPolitica(ValueError):
 
 
 def validar_politica(senha: str) -> None:
+    """Exige comprimento entre 8 e 128 caracteres e conteúdo que não seja apenas espaços."""
     if not TAMANHO_MINIMO_SENHA <= len(senha) <= TAMANHO_MAXIMO_SENHA or not senha.strip():
         raise SenhaForaDaPolitica()
 
 
 def gerar_hash(senha: str) -> str:
+    """Calcula o hash Argon2id; a política de senha é validada pelo chamador."""
     return _hasher.hash(senha)
 
 
@@ -61,6 +64,7 @@ def hash_reconhecido(hash_armazenado: str | None) -> bool:
 
 
 def verificar_senha(hash_armazenado: str | None, senha: str) -> bool:
+    """Verifica Argon2id e trata hash inválido sem expor a senha."""
     if hash_reconhecido(hash_armazenado):
         try:
             return _hasher.verify(hash_armazenado, senha)

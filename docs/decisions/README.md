@@ -1,4 +1,4 @@
-# Registros de Decisões Arquiteturais (ADRs) — RFID Hospital MVP
+# Registros de Decisões Arquiteturais (ADRs) — Rastreamento RFID HUPAA
 
 Este diretório documenta as decisões arquiteturais fundamentais tomadas durante o projeto, motivadas por requisitos funcionais, restrições operacionais e lições aprendidas nos experimentos práticos.
 

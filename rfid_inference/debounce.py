@@ -20,6 +20,7 @@ class DebounceReading:
     rssi: float | None = None
 
     def __post_init__(self) -> None:
+        """Valida as invariantes dos campos após a construção da estrutura."""
         if self.observed_at.tzinfo is None:
             raise ValueError("observed_at exige fuso horário")
         object.__setattr__(self, "observed_at", self.observed_at.astimezone(timezone.utc))
@@ -45,6 +46,9 @@ class ConsolidatedObservation:
 
 @dataclass(frozen=True, slots=True)
 class DebounceCounters:
+    """Estrutura Debounce Counters usada por rfid_inference.debounce.
+
+    Campos: readings_received, readings_incorporated, observations_finalized, late_events."""
     readings_received: int = 0
     readings_incorporated: int = 0
     observations_finalized: int = 0
@@ -53,6 +57,9 @@ class DebounceCounters:
 
 @dataclass(frozen=True, slots=True)
 class DebounceResult:
+    """Estrutura Debounce Result usada por rfid_inference.debounce.
+
+    Campos: accepted, incorporated, late, finalized."""
     accepted: bool
     incorporated: bool
     late: bool
@@ -61,6 +68,9 @@ class DebounceResult:
 
 @dataclass(slots=True)
 class _KeyState:
+    """Estrutura _Key State usada por rfid_inference.debounce.
+
+    Campos: readings, max_seen_at, last_received_at_monotonic, finalized_until."""
     readings: list[DebounceReading]
     max_seen_at: datetime
     last_received_at_monotonic: float
@@ -76,6 +86,7 @@ class DebounceProcessor:
     """
 
     def __init__(self, window: timedelta, out_of_order_tolerance: timedelta) -> None:
+        """Inicializa DebounceProcessor com as dependências e valores recebidos."""
         if window <= timedelta(0):
             raise ValueError("window deve ser positiva")
         if out_of_order_tolerance < timedelta(0):
@@ -90,6 +101,7 @@ class DebounceProcessor:
     def from_milliseconds(
         cls, window_ms: int, out_of_order_tolerance_ms: int
     ) -> DebounceProcessor:
+        """Constrói o processador com janela e tolerância expressas em milissegundos."""
         return cls(
             timedelta(milliseconds=window_ms),
             timedelta(milliseconds=out_of_order_tolerance_ms),
@@ -97,6 +109,7 @@ class DebounceProcessor:
 
     @property
     def counters(self) -> DebounceCounters:
+        """Devolve o snapshot atual dos contadores sob proteção do lock do processador."""
         with self._lock:
             return self._counters
 
@@ -191,6 +204,7 @@ class DebounceProcessor:
     def _finalize(
         self, state: _KeyState, groups: list[list[DebounceReading]]
     ) -> tuple[ConsolidatedObservation, ...]:
+        """Consolida grupos, remove leituras finalizadas e avança o limite de event time do estado."""
         observations = tuple(self._observation(group) for group in groups)
         if observations:
             finalized_ids = {item.event_id for group in groups for item in group}
@@ -206,6 +220,7 @@ class DebounceProcessor:
     def _group(
         self, readings: list[DebounceReading]
     ) -> list[list[DebounceReading]]:
+        """Agrupa leituras ordenadas quando o intervalo entre vizinhas não supera a janela."""
         groups: list[list[DebounceReading]] = []
         for reading in readings:
             if not groups or reading.observed_at - groups[-1][-1].observed_at > self.window:
@@ -216,6 +231,7 @@ class DebounceProcessor:
 
     @staticmethod
     def _observation(readings: list[DebounceReading]) -> ConsolidatedObservation:
+        """Resume um grupo em primeira/última evidência, contagem e estatísticas de RSSI conhecido."""
         first = readings[0]
         last = readings[-1]
         rssi_values = [float(item.rssi) for item in readings if item.rssi is not None]
@@ -242,6 +258,7 @@ class DebounceProcessor:
         observations_finalized: int = 0,
         late_events: int = 0,
     ) -> None:
+        """Substitui o snapshot de contadores somando os incrementos informados."""
         current = self._counters
         self._counters = DebounceCounters(
             readings_received=current.readings_received + readings_received,

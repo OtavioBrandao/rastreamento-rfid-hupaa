@@ -72,7 +72,7 @@ Conforme a matriz metodológica descrita em [`docs/experiments/README.md`](../RE
 
 ### 4.1 Linters de Qualidade e Imports
 ```bash
-python -m ruff check --select E4,E7,E9,F,I .
+python -m ruff check --config config/ruff.toml --select E4,E7,E9,F,I .
 ```
 - **Esperado:** Zero erros ou warnings de sintaxe, imports ou formatação.
 - **Obtido:** `All checks passed!`

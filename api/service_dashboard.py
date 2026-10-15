@@ -9,6 +9,7 @@ from db.models import Equipamento, HistoricoMovimentacao, Zona
 
 
 def resumo(db: Session, *, now: datetime, threshold: timedelta) -> dict[str, int]:
+    """Conta equipamentos por estado operacional usando um único contexto de recência."""
     cutoff = now - threshold
     detected = Equipamento.ultima_deteccao_em.is_not(None)
     row = db.execute(select(
@@ -24,6 +25,7 @@ def resumo(db: Session, *, now: datetime, threshold: timedelta) -> dict[str, int
 
 
 def atividade_recente(db: Session, *, limit: int) -> list[dict]:
+    """Consulta os últimos movimentos globais com limite e identidade do equipamento."""
     origem = aliased(Zona)
     destino = aliased(Zona)
     rows = db.execute(

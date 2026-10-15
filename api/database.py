@@ -12,6 +12,7 @@ ambiente configurado (coleta de teste, `--help`, geração de OpenAPI).
 
 from collections.abc import Iterator
 from functools import lru_cache
+from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
@@ -23,8 +24,9 @@ from db.url import get_database_url
 
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
-    # Mesmo `.env` da raiz que o alembic/env.py carrega.
-    load_dotenv()
+    # Mesmo `config/environments/.env` que o alembic/env.py carrega.
+    """Cria e reutiliza o engine sob demanda, carregando o perfil genérico sem sobrescrever o ambiente."""
+    load_dotenv(Path(__file__).resolve().parents[1] / "config/environments/.env")
     # pool_pre_ping: o Neon (e qualquer pooler) derruba conexão ociosa; sem
     # isso a primeira request depois de um período parado morre com
     # "server closed the connection unexpectedly".
@@ -33,6 +35,7 @@ def get_engine() -> Engine:
 
 @lru_cache(maxsize=1)
 def get_sessionmaker() -> sessionmaker:
+    """Devolve a fábrica de sessões vinculada ao engine compartilhado da API."""
     return sessionmaker(bind=get_engine(), autocommit=False, autoflush=False)
 
 
@@ -40,6 +43,7 @@ def get_sessionmaker() -> sessionmaker:
 # `SessionLocal()` continua funcionando como em qualquer projeto FastAPI —
 # só que resolvendo o engine na primeira chamada, não no import.
 def SessionLocal() -> Session:  # noqa: N802 - nome convencional do ecossistema
+    """Abre uma sessão SQLAlchemy; o chamador é responsável por fechá-la."""
     return get_sessionmaker()()
 
 
