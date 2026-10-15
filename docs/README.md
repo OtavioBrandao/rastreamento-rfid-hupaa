@@ -9,7 +9,6 @@ Universitário Professor Alberto Antunes (HUPAA/UFAL).
 - [Operação, requisitos, perfis e quatro modos de execução](operations/execution.md)
 - [Launcher de laboratório e simulador visual](lab_test_launcher.md)
 - [Validações e testes reproduzíveis](operations/validation.md)
-- [Notas da candidata v0.1.0-rc.1](releases/v0.1.0-rc.1.md)
 
 ## Compreender o software
 
@@ -28,7 +27,7 @@ use o guia de operação acima; relatórios antigos registram o contexto do ensa
 | Problema/tema | Detalhamento |
 |---|---|
 | Tabelas trocando posição a cada leitura | [Prioridade por grupos e ordenação estável](implementations/ordenacao-estavel-tabelas.md) |
-| Documentação antiga e arquivos dispersos | [Preparação do Marco 2 e organização do repositório](implementations/preparacao-marco-2.md) |
+| Documentação antiga e arquivos dispersos | [Organização e documentação técnica do repositório](implementations/organizacao-documentacao.md) |
 | Recepção MQTT local e externa | [Ingestão e perfis de transporte](implementations/iss-001-mqtt-ingestion.md) |
 | Eventos duplicados e confirmação de mensagens | [Persistência idempotente](implementations/iss-006-raw-readings-persistence.md) |
 | Interrupções de broker e banco | [Recuperação do ingestor](implementations/iss-007-ingestor-resilience.md) |
@@ -49,12 +48,12 @@ use o guia de operação acima; relatórios antigos registram o contexto do ensa
 | Acesso e responsabilização | [Autenticação](implementations/iss-026-usuarios-autenticacao.md), [permissões](implementations/iss-027-perfis-rbac.md) e [auditoria](implementations/iss-028-auditoria.md) |
 | Demonstração sem hardware | [Simulador visual](implementations/simulador-visual-laboratorio.md) |
 
-## Evidências e entrega acadêmica
+## Evidências de funcionamento
 
+- [Galeria do pipeline: dashboard, mapa EASY, leituras e histórico](experiments/galeria-pipeline.md)
 - [Matriz de experimentos e evidências históricas](experiments/README.md)
-- [Apoio ao Marco 2: requisitos, roteiro de demonstração e ficha de medição](milestones/marco-2.md)
 - [Registros de implementações](implementations/)
 
 Simulação, teste de integração e validação física são níveis distintos de
-evidência. O relatório do Marco 2 deve identificar a origem de cada resultado,
+evidência. O registro de cada ensaio deve identificar a origem do resultado,
 o commit utilizado e as medições efetivamente realizadas.

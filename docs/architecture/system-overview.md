@@ -187,4 +187,3 @@ As tabelas usam [grupos e ordem estável](../implementations/ordenacao-estavel-t
 - [Guia de módulos e contratos transacionais](../reference/code-guide.md)
 - [Modelo de dados](data-model.md) e [diagrama ER](er-diagrama.mermaid)
 - [Decisões arquiteturais](../decisions/README.md)
-- [Evidências e limites do Marco 2](../milestones/marco-2.md)

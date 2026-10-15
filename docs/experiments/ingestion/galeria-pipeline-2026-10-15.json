@@ -1,0 +1,42 @@
+{
+  "capturado_em_utc": "2026-10-15T22:26:57.447455+00:00",
+  "origem": "Dados sintéticos publicados via tools.lab_launcher.synthetic.Publicador; sem leitor físico e sem janela Flet.",
+  "ambiente": "PostgreSQL 16 e Mosquitto em Docker Compose isolado; API FastAPI e frontend React reais.",
+  "equipamentos": 4,
+  "leituras_persistidas_no_momento_da_consulta": 840,
+  "passagens": [
+    {
+      "direcao": "a_para_b",
+      "direcao_status": "confirmed"
+    },
+    {
+      "direcao": "a_para_b",
+      "direcao_status": "confirmed"
+    },
+    {
+      "direcao": "b_para_a",
+      "direcao_status": "confirmed"
+    }
+  ],
+  "movimentacoes": 3,
+  "zonas": [
+    {
+      "nome": "Bomba de infusão 01",
+      "zona": "Zona B"
+    },
+    {
+      "nome": "Cadeira de rodas 03",
+      "zona": "Zona A"
+    },
+    {
+      "nome": "Monitor multiparâmetro 02",
+      "zona": "Zona B"
+    },
+    {
+      "nome": "Ventilador pulmonar 04",
+      "zona": null
+    }
+  ],
+  "capturas": "Browser desktop 1440 x 1000; capturas de página inteira para preservar conteúdo.",
+  "observacao": "Leituras continuaram durante as capturas, por isso os contadores e horários diferem entre imagens. Alcance, RF e rede hospitalar não foram validados."
+}
