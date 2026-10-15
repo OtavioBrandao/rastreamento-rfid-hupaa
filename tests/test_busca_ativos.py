@@ -12,9 +12,12 @@ from api.router_equipamento import get_recency_context
 from api.service_busca_ativos import buscar
 from db.models import (
     Andar,
+    Antena,
     AssociacaoTagEquipamento,
     Equipamento,
     HistoricoMovimentacao,
+    Leitor,
+    LeituraBruta,
     Setor,
     Tag,
     TipoEquipamento,
@@ -72,6 +75,62 @@ def catalog(db):
 
 def search(db, **filters):
     return buscar(db, now=NOW, threshold=THRESHOLD, **filters)
+
+
+def test_prioridade_global_antes_de_paginar_e_sem_alterar_zona(db, catalog):
+    ids = catalog["ids"]
+    reader = Leitor(reader_id="prioridade", identificador_serial="prioridade",
+                    fabricante="Simulador", modelo="Teste")
+    db.add(reader)
+    db.flush()
+    antenna = Antena(leitor_id=reader.id, porta_numero=1,
+                    zona_associada_id=catalog["a"], funcao="indefinido")
+    db.add(antenna)
+    db.flush()
+    # O item em atenção (B) e o item sem zona (C) estão sendo lidos agora.
+    # Uma leitura de tag antiga de F não pode promover o equipamento.
+    for index, seconds in ((1, 1), (2, 2), (5, 0)):
+        tag = Tag(epc=f"E200{index:020X}")
+        db.add(tag)
+        db.flush()
+        db.add(AssociacaoTagEquipamento(
+            equipamento_id=ids[index], tag_id=tag.id,
+            inicio=NOW - timedelta(days=1),
+            fim=NOW - timedelta(hours=1) if index == 5 else None,
+        ))
+        db.add(LeituraBruta(
+            event_id=f"sha256:{index:064x}", epc=tag.epc, antena_id=antenna.id,
+            lido_em=NOW - timedelta(seconds=seconds),
+        ))
+    db.flush()
+
+    expected = [ids[1], ids[2], ids[5], ids[4], ids[0], ids[3]]
+    pages = [search(db, sort="prioridade", page=page, page_size=2) for page in (1, 2, 3)]
+    assert [item.id for page in pages for item in page.items] == expected
+    assert all(page.total == 6 for page in pages)
+    assert pages[0].items[0].status == "atencao"
+    assert pages[0].items[0].ultima_zona.id == catalog["b"]
+    assert pages[0].items[1].status == "nunca_detectado"
+    assert pages[0].items[1].ultima_zona is None
+
+    # Passados 30 s, sem nova leitura, em trânsito volta a preceder atenção.
+    expired = buscar(db, now=NOW + timedelta(seconds=31), threshold=THRESHOLD,
+                     sort="prioridade")
+    assert [item.id for item in expired.items] == [
+        ids[5], ids[4], ids[0], ids[1], ids[2], ids[3],
+    ]
+    # O contrato padrão por nome é preservado para os outros consumidores.
+    assert [item.nome for item in search(db).items] == sorted(item.nome for item in expired.items)
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_recency_context] = lambda: (NOW, THRESHOLD)
+    try:
+        with TestClient(app) as client:
+            response = client.get("/api/ativos?sort=prioridade&page_size=2")
+            assert response.status_code == 200
+            assert [item["id"] for item in response.json()["items"]] == expected[:2]
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_dashboard_resumo_e_atividade_limitada(db, catalog):

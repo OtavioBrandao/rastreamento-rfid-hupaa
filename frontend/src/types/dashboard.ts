@@ -88,7 +88,7 @@ export interface AssetFilters {
   zona?: number
   page?: number
   page_size?: number
-  sort?: 'nome' | '-nome' | 'ultima_deteccao_em' | '-ultima_deteccao_em'
+  sort?: 'nome' | '-nome' | 'ultima_deteccao_em' | '-ultima_deteccao_em' | 'prioridade'
 }
 
 export interface FilterOption { id: number; nome: string }

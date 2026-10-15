@@ -19,10 +19,12 @@ let sessionUser: Usuario
 let permissions: string[]
 let failureStatus: number
 let writeFailure: number
+let auditItems: Auditoria[]
 
 beforeEach(() => {
   window.history.replaceState(null, '', '/')
   calls = []; users = [{ ...admin }, { ...operator }]; sessionUser = { ...admin }
+  auditItems = [audit]
   permissions = ['usuarios:administrar', 'auditoria:consultar', 'equipamentos:consultar']; failureStatus = 0; writeFailure = 0
   vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit = {}) => {
     const url = new URL(String(input), 'http://localhost')
@@ -52,7 +54,7 @@ beforeEach(() => {
     if (url.pathname.startsWith('/auditorias')) {
       if (failureStatus) return json(null, failureStatus)
       if (url.pathname === '/auditorias/7') return json(audit)
-      return json(pagination([audit], Number(url.searchParams.get('page')) || 1))
+      return json(pagination(auditItems, Number(url.searchParams.get('page')) || 1))
     }
     return json({ items: [], total: 0, page: 1, page_size: 20, registered: 0, disponivel: 0, atencao: 0, fora_de_servico: 0, nunca_detectado: 0 })
   }))
@@ -160,6 +162,34 @@ describe('administração de usuários', () => {
 })
 
 describe('consulta da auditoria', () => {
+  it('abre o detalhe em modal mesmo com 50 linhas e mantém filtros ao fechar', async () => {
+    auditItems = Array.from({ length: 50 }, (_, index) => ({ ...audit, id: index + 1 }))
+    render(<LiveProvider><AuditPage/><Refresh/></LiveProvider>)
+    await screen.findByRole('button', { name: 'Ver registro #7' })
+    change('Entidade', 'equipamentos'); click('Aplicar filtros')
+    await waitFor(() => expect(calls.at(-1)!.url.searchParams.get('entidade')).toBe('equipamentos'))
+    screen.getByRole('button', { name: 'Ver registro #7' }).focus()
+    click('Ver registro #7')
+    const dialog = await screen.findByRole('dialog', { name: 'Registro #7' })
+    expect(dialog).toHaveAttribute('open')
+    await within(dialog).findByRole('heading', { name: 'Antes' })
+    fireEvent.click(within(dialog).getByRole('heading', { name: 'Depois' }))
+    expect(dialog).toBeInTheDocument()
+    click('Atualizar consulta')
+    await waitFor(() => expect(calls.filter((call) => call.url.pathname === '/auditorias/7')).toHaveLength(2))
+    expect(dialog).toHaveAttribute('open')
+    click('Fechar registro')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ver registro #7' })).toHaveFocus()
+    expect(screen.getByLabelText('Entidade', { exact: true })).toHaveValue('equipamentos')
+    click('Ver registro #7')
+    fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    click('Ver registro #7')
+    fireEvent.click(screen.getByRole('dialog'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('envia filtros combinados, fuso de Maceió e paginação para a API', async () => {
     render(<LiveProvider><AuditPage/></LiveProvider>); await screen.findByRole('button', { name: 'Ver registro #7' })
     change('Entidade', 'equipamentos'); change('ID da entidade', '12'); change('Ação', 'correcao_manual'); change('Origem', 'usuario'); change('ID do autor', '1'); change('Correlação', 'request-7')

@@ -17,7 +17,7 @@ _PERMISSAO = exigir_por_metodo(
     consultar=Permissao.EQUIPAMENTOS_CONSULTAR, alterar=Permissao.EQUIPAMENTOS_ALTERAR
 )
 router = APIRouter(prefix="/api/ativos", tags=["consulta de ativos"], dependencies=[Depends(_PERMISSAO)])
-Sort = Literal["nome", "-nome", "ultima_deteccao_em", "-ultima_deteccao_em"]
+Sort = Literal["nome", "-nome", "ultima_deteccao_em", "-ultima_deteccao_em", "prioridade"]
 
 
 @router.get("", response_model=BuscaAtivosPagina, summary="Buscar ativos por filtros cumulativos")
