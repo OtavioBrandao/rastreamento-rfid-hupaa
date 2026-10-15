@@ -2131,6 +2131,9 @@ button.admin-primary { background:var(--blue); color:white; border-color:var(--b
 .admin-diff section { min-width:0; }
 .admin-diff pre { padding:16px; border:1px solid var(--line); border-radius:8px; background:var(--canvas); white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.6; }
 .admin-correlation { overflow-wrap:anywhere; }
+.audit-dialog.admin-editor { width:min(960px,calc(100% - 32px)); max-height:calc(100dvh - 32px); margin:auto; padding:0; border:1px solid var(--line); color:var(--slate); overflow-y:auto; }
+.audit-dialog::backdrop { background:#0f282d80; }
+.audit-dialog-content { padding:24px; }
 @media (max-width:600px) {
   .admin-editor { padding:16px; }
   .admin-form-grid,.admin-diff { grid-template-columns:1fr; }

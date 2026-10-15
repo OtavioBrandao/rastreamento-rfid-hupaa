@@ -5,17 +5,19 @@ A última leitura bruta é exposta à parte (`ultima_leitura`) como presença.
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, false, func, or_
+from sqlalchemy import and_, case, false, func, or_, select, true
 from sqlalchemy.orm import Session, contains_eager
 
 from api.schemas_busca_ativos import AtivoBusca, BuscaAtivosPagina, LeituraRecente, ZonaBusca
 from api.service_leituras import ultimas_leituras
 from api.timestamps import em_utc
-from db.models import AssociacaoTagEquipamento, Equipamento, Setor, Tag, Zona
+from db.models import AssociacaoTagEquipamento, Equipamento, LeituraBruta, Setor, Tag, Zona
 from rfid_location.recency import classify_recency
 
 PAGE_SIZE_DEFAULT = 20
 PAGE_SIZE_MAX = 100
+# Mesmo intervalo da badge "Lida agora" no frontend; não muda a recência da zona.
+PRESENCE_FRESH_WINDOW = timedelta(seconds=30)
 
 
 def _escape_like(value: str) -> str:
@@ -96,6 +98,30 @@ def buscar(
         "-ultima_deteccao_em": (Equipamento.ultima_deteccao_em.desc().nullslast(),
                                 Equipamento.id.asc()),
     }
+    if sort == "prioridade":
+        # Busca indexada pela tag ativa; ordenar antes do LIMIT mantém a prioridade
+        # entre páginas, sem promover leituras de EPCs desvinculados.
+        last_read = (
+            select(LeituraBruta.lido_em)
+            .where(LeituraBruta.epc == Tag.epc)
+            .order_by(LeituraBruta.lido_em.desc()).limit(1)
+            .correlate(Tag).lateral("leitura_prioridade")
+        )
+        query = query.outerjoin(last_read, true())
+        fresh = last_read.c.lido_em >= now - PRESENCE_FRESH_WINDOW
+        priority = case(
+            (fresh, 0),
+            (status_predicates["disponivel"], 1),
+            (status_predicates["atencao"], 2),
+            (status_predicates["nunca_detectado"], 3),
+            else_=4,
+        )
+        ordering["prioridade"] = (
+            priority.asc(),
+            case((fresh, last_read.c.lido_em)).desc().nullslast(),
+            Equipamento.ultima_deteccao_em.desc().nullslast(),
+            Equipamento.nome.asc(), Equipamento.id.asc(),
+        )
     rows = query.order_by(*ordering[sort]).limit(page_size).offset((page - 1) * page_size).all()
     leituras = ultimas_leituras(db, (epc for _, epc in rows if epc))
     items = []
