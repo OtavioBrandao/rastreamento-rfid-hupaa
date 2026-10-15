@@ -7,6 +7,7 @@ Universitário Professor Alberto Antunes (HUPAA/UFAL).
 
 - [Apresentação, objetivos e início rápido](../README.md)
 - [Operação, requisitos, perfis e quatro modos de execução](operations/execution.md)
+- [Piloto no HUPAA: planta, leitores, antenas, portais e cadastro das tags](operations/implantacao-hupaa.md)
 - [Launcher de laboratório e simulador visual](lab_test_launcher.md)
 - [Validações e testes reproduzíveis](operations/validation.md)
 

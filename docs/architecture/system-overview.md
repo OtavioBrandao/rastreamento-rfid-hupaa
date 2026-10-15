@@ -183,6 +183,11 @@ As tabelas usam [grupos e ordem estável](../implementations/ordenacao-estavel-t
 
 ## Organização e documentação complementar
 
+O [guia de mapeamento no HUPAA](../operations/implantacao-hupaa.md) relaciona
+zonas da planta, leitores/portas, topologia temporal de portais e vínculo das
+tags com equipamentos. As posições físicas e a cobertura permanecem dependentes
+do levantamento e dos ensaios no setor escolhido.
+
 - [Operação e perfis](../operations/execution.md)
 - [Guia de módulos e contratos transacionais](../reference/code-guide.md)
 - [Modelo de dados](data-model.md) e [diagrama ER](er-diagrama.mermaid)

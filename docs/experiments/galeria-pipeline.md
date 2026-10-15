@@ -58,6 +58,20 @@ são agregados e ilustrativos; não representam coordenadas físicas dos ativos.
 
 ![Planta EASY com presença nas zonas e tabela de detectados](../assets/screenshots/mapa-easy-simulacao.jpg)
 
+## Planta de referência do HUPAA
+
+Uma captura complementar mostra a planta esquemática do segundo pavimento,
+com as referências `zona-1`, `zona-2` e `zona-3` ligadas a três zonas provisórias
+em uma base sintética isolada. Nenhum equipamento do ensaio EASY foi movido
+artificialmente para o hospital. A planta não representa hardware instalado.
+
+![Planta de referência do HU com três zonas provisórias](../assets/screenshots/mapa-hupaa-referencia.jpg)
+
+O [registro sanitizado desta captura](ingestion/mapa-hupaa-2026-10-15.json)
+identifica o cenário. O [guia de implantação do piloto](../operations/implantacao-hupaa.md)
+explica como cadastrar leitores e portas, associar antenas aos lados dos portais,
+vincular EPCs aos equipamentos e relacionar a topologia com a planta.
+
 ## Leituras por antena
 
 A janela de uma hora mostra as leituras de ambos os lados das travessias,
