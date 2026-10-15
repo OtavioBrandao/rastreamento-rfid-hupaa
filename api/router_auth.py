@@ -17,6 +17,7 @@ from api import service_auth
 from api.config_auth import ConfiguracaoAuth, obter_agora, obter_configuracao_auth
 from api.database import get_db
 from api.dependencias_auth import NOME_COOKIE, sessao_autenticada
+from api.permissoes import lista_de_permissoes
 from api.schemas_auth import LoginEntrada, SessaoResposta, TrocarSenhaEntrada, UsuarioResposta
 from api.senhas import SenhaForaDaPolitica
 from api.timestamps import em_utc
@@ -44,7 +45,9 @@ def usuario_para_resposta(usuario: Usuario) -> UsuarioResposta:
 
 def _sessao_para_resposta(sessao: service_auth.SessaoAutenticada) -> SessaoResposta:
     return SessaoResposta(
-        usuario=usuario_para_resposta(sessao.usuario), sessao_expira_em=em_utc(sessao.expira_em)
+        usuario=usuario_para_resposta(sessao.usuario),
+        sessao_expira_em=em_utc(sessao.expira_em),
+        permissoes=lista_de_permissoes(sessao.usuario.perfil.nome),
     )
 
 

@@ -1,5 +1,5 @@
 """
-Aplicação FastAPI do MVP (ISS-008, ISS-009, ISS-010, ISS-011, ISS-012, ISS-026).
+Aplicação FastAPI do MVP (ISS-008, ISS-009, ISS-010, ISS-011, ISS-012, ISS-026, ISS-027).
 
 Sobe com:
     uvicorn api.main:app --reload
@@ -63,8 +63,9 @@ app.include_router(router_localizacao)
 app.include_router(router_hardware)
 # topologia logica de portais (ISS-013) apos hardware e localizacao
 app.include_router(router_topologia_portal)
-# ISS-026: autenticação e administração de usuários. As rotas acima seguem
-# públicas; autorização por perfil nelas é a ISS-027.
+# ISS-026: autenticação e administração de usuários. Desde a ISS-027 toda rota
+# acima exige sessão e permissão (`api/permissoes.py`, aplicada no APIRouter de
+# cada módulo). Públicas: só GET /health, POST /auth/login e POST /auth/logout.
 app.include_router(router_auth)
 app.include_router(router_usuarios)
 
