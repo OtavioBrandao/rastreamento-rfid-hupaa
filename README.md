@@ -139,6 +139,9 @@ flowchart LR
     READER -->|MQTT QoS 1| BROKER[Broker Mosquitto local ou MQTT externo]
     BROKER --> ING[Ingestor Python / Paho]
     ING --> RAW[(PostgreSQL: leituras brutas)]
+    READER -. Heartbeat opcional validado .-> BROKER
+    ING --> STATUS[Último contato / estado dos leitores e portais]
+    STATUS --> RAW
     ING --> LOG[Auditoria JSONL local]
     RAW --> ACK[Persistência confirmada / PUBACK]
     ACK --> BROKER
@@ -171,6 +174,34 @@ flowchart LR
 ```
 
 O simulador gera tags de 96 bits, cadastra os equipamentos e publica leituras conforme a posição ilustrativa dos itens. A partir do broker, percorre o mesmo pipeline usado no ensaio com leitor. Alcance, RSSI e período de leitura do simulador são parâmetros de demonstração, sem equivalência metrológica com o hardware. [Fluxo e limites do simulador](docs/architecture/system-overview.md#arquitetura-com-simulador).
+
+## Inventário e monitoramento
+
+O inventário e os mapas abrem com os cadastros ativos. No dashboard, marque
+**Mostrar cadastros inativos** para consultar os anteriores. Inativar um cadastro
+preserva EPC, leituras e histórico. [Detalhes do recorte operacional](docs/implementations/inventario-cadastros-inativos.md).
+
+### Status dos leitores e portais
+
+A tela **Status dos leitores**, disponível aos perfis operacional e administrador,
+mostra online, degradado, offline e nunca conectado, com último contato e motivo.
+Portais agregam os componentes ativos e indicam falhas parciais. A API recalcula
+o timeout em cada consulta, inclusive se o ingestor parar.
+
+Configure os mesmos limites nos processos da API e do ingestor:
+
+```dotenv
+RFID_READER_DEGRADED_SECONDS=30
+RFID_READER_OFFLINE_SECONDS=90
+MQTT_HEARTBEAT_TOPIC=
+```
+
+Uma leitura válida não retida renova o contato. Para acompanhar um leitor sem
+tags, habilite um tópico de heartbeat e uma fonte compatível, com ACL própria.
+Esse contrato é opcional do software e precisa ser validado no leitor físico.
+[Configuração e ensaio de heartbeat independente](docs/implementations/iss-024-status-leitores.md#configuração).
+
+![Painel com contatos por leitura e heartbeat independente, com dados sintéticos](docs/assets/screenshots/status-leitores-simulacao.jpg)
 
 ## Tecnologias e organização
 

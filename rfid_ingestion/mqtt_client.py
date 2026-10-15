@@ -25,6 +25,7 @@ from .config import Settings
 from .connection import create_client
 from .parsing import build_event
 from .persistence import JsonlEventStore
+from .reader_status import ReaderMonitor, StatusPolicy, contacts, heartbeat_event
 from .repository import PersistenceError, PersistenceResult, RawReadingRepository
 from .resilience import (
     Backoff,
@@ -67,11 +68,13 @@ class MqttReceiver:
         observation_handler: Callable[[ConsolidatedObservation], None] | None = None,
         observation_tick_handler: Callable[[float], None] | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
+        reader_monitor: ReaderMonitor | None = None,
     ) -> None:
         """Inicializa MqttReceiver com as dependências e valores recebidos."""
         self.settings = settings
         self.store = store
         self.repository = repository
+        self.reader_monitor = reader_monitor
         self.debouncer = debouncer or DebounceProcessor.from_milliseconds(
             settings.rfid_debounce_window_ms,
             settings.rfid_out_of_order_tolerance_ms,
@@ -254,9 +257,10 @@ class MqttReceiver:
         )
         # Reassinar é idempotente e restaura o filtro mesmo se o broker perdeu
         # seu estado; não dependemos apenas do sinal session_present.
-        result, _message_id = client.subscribe(
-            self.settings.mqtt_topic, qos=self.settings.mqtt_qos
-        )
+        topics = ([(self.settings.mqtt_topic, self.settings.mqtt_qos),
+                   (self.settings.mqtt_heartbeat_topic, self.settings.mqtt_qos)]
+                  if self.settings.mqtt_heartbeat_topic else self.settings.mqtt_topic)
+        result, _message_id = client.subscribe(topics, qos=self.settings.mqtt_qos)
         if result != mqtt.MQTT_ERR_SUCCESS:
             self._fail("envio de assinatura")
 
@@ -318,13 +322,16 @@ class MqttReceiver:
         ):
             return
         try:
-            event = build_event(
-                topic=message.topic,
-                qos=message.qos,
-                retain=message.retain,
-                payload=message.payload,
-                settings=self.settings,
-            )
+            if self.settings.mqtt_heartbeat_topic and mqtt.topic_matches_sub(
+                    self.settings.mqtt_heartbeat_topic, message.topic):
+                event = heartbeat_event(message.topic, message.payload, message.retain,
+                                        self.reader_monitor.policy if self.reader_monitor else
+                                        StatusPolicy.from_env())
+            else:
+                event = build_event(
+                    topic=message.topic, qos=message.qos, retain=message.retain,
+                    payload=message.payload, settings=self.settings,
+                )
             self.store.append(event)
         except Exception:
             self._fail("persistência JSONL")
@@ -380,37 +387,28 @@ class MqttReceiver:
         sessao = self._sessao
         envelopes = [event for _message, event, _chegada in pendentes]
         try:
+            readings = [event for event in envelopes if event.get("event_type") != "reader_heartbeat"]
             # Na classe: repositórios de teste (Mock) não têm persist_many real.
             em_lote = hasattr(type(self.repository), "persist_many")
             resultados = (
-                self.repository.persist_many(envelopes)
+                (self.repository.persist_many(readings) if readings else [])
                 if em_lote
                 else [
                     self.repository.persist(event)
                     if event["canonical_event"]
                     else PersistenceResult("rejected", reason="invalid_input")
-                    for event in envelopes
+                    for event in readings
                 ]
             )
+            reading_results = iter(resultados)
+            resultados = [PersistenceResult("inserted" if event.get("heartbeat") else "rejected",
+                                            reason=event.get("reason"))
+                          if event.get("event_type") == "reader_heartbeat" else next(reading_results)
+                          for event in envelopes]
+            if self.reader_monitor is not None:
+                self.reader_monitor.observe(contacts(envelopes))
         except PersistenceError as error:
-            if error.category == FailureCategory.TEMPORARY_DATABASE:
-                self.ready.clear()
-                self.database_unavailable.set()
-                self._recovering = True
-                self._db_recovery_started_at = time.monotonic()
-                _log(
-                    logging.ERROR,
-                    "database_unavailable",
-                    failure_category=FailureCategory.TEMPORARY_DATABASE,
-                )
-                # Sem PUBACK. A sessão persistente mantém o trabalho pendente
-                # no broker enquanto a aplicação espera o banco voltar.
-                self._desconectar()
-            else:
-                self._fail(
-                    "persistência PostgreSQL",
-                    FailureCategory.PERMANENT_CONFIGURATION,
-                )
+            self._falha_banco(error)
             for _message, _event, chegada in pendentes:
                 self._concluir(chegada)
             return
@@ -430,10 +428,26 @@ class MqttReceiver:
         for (message, _event, _chegada), _result in lote:
             self._ack(message, sessao)
         for (_message, event, chegada), result in lote:
-            if self._inferencia is not None:
+            if event.get("event_type") == "reader_heartbeat":
+                _log(logging.INFO if event.get("heartbeat") else logging.WARNING,
+                     "reader_heartbeat_processed", status=result.status, reason=result.reason)
+                self._concluir(chegada)
+            elif self._inferencia is not None:
                 self._fila_inferencia.put((event, result, chegada))
             else:
                 self._registrar_resultado(event, result, chegada)
+
+    def _falha_banco(self, error: PersistenceError) -> None:
+        """Suspende ACK e solicita recuperação também quando o monitor perde o banco."""
+        if error.category == FailureCategory.TEMPORARY_DATABASE:
+            self.ready.clear()
+            self.database_unavailable.set()
+            self._recovering = True
+            self._db_recovery_started_at = time.monotonic()
+            _log(logging.ERROR, "database_unavailable", failure_category=error.category)
+            self._desconectar()
+        else:
+            self._fail("persistência PostgreSQL", FailureCategory.PERMANENT_CONFIGURATION)
 
     @staticmethod
     def _resultado(event: dict[str, Any], result: PersistenceResult) -> dict[str, Any]:
@@ -667,6 +681,11 @@ class MqttReceiver:
     def _processar(self) -> None:
         """Thread de gravação: lotes e ACK, sem bloquear a rede nem esperar a inferência."""
         while not self.shutdown.is_set() and not self.failed.is_set():
+            if self.reader_monitor is not None and not self.database_unavailable.is_set():
+                try:
+                    self.reader_monitor.sweep()
+                except PersistenceError as error:
+                    self._falha_banco(error)
             try:
                 primeiro = self._fila.get(timeout=self.PROCESS_POLL_SECONDS)
             except queue.Empty:

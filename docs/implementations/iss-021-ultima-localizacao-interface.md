@@ -2,7 +2,7 @@
 
 ## Issue e importância para o MVP
 
-A [issue #23](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/23)
+A [issue #23](https://github.com/OtavioBrandao/rastreamento-rfid-hupaa/issues/23)
 implementa RF-017, requisito Must. Uma zona sem andar e setor é ambígua para
 quem consulta o inventário. Um horário alterado pelo fuso do navegador ou pelo
 tempo de processamento da pipeline compromete a confiança na última detecção.

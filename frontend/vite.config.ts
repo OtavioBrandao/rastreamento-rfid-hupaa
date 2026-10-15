@@ -14,6 +14,7 @@ export default defineConfig({
     '/tipos-equipamento': api,
     '/localizacoes': api,
     '/portais': api,
+    '/leitores': api,
     '/equipamentos': api,
     // Sessão e administração usam a mesma origem e o cookie HttpOnly.
     '/auth': api,

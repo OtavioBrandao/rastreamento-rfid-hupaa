@@ -18,6 +18,7 @@ from .config import Settings
 from .logging_config import configure_logging
 from .mqtt_client import MqttReceiver
 from .persistence import JsonlEventStore
+from .reader_status import ReaderMonitor, StatusPolicy
 from .repository import RawReadingRepository
 
 
@@ -25,6 +26,7 @@ def main() -> int:
     """Executa a entrada de linha de comando de rfid_ingestion.__main__; devolve o código de saída quando aplicável."""
     try:
         settings = Settings.from_env()
+        status_policy = StatusPolicy.from_env()
     except ValueError as error:
         configure_logging("ERROR")
         logging.getLogger(__name__).error("Configuração inválida: %s", error)
@@ -76,6 +78,7 @@ def main() -> int:
             debouncer=debouncer,
             observation_handler=passage_service.handle_observation,
             observation_tick_handler=inference_tick,
+            reader_monitor=ReaderMonitor(engine, status_policy),
         )
         # Mesmo relógio do debounce: a inferência pode estar atrás da rede.
         passage_service.monotonic_clock = receiver.relogio_inferencia

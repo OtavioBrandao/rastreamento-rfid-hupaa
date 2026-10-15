@@ -60,7 +60,8 @@ button,a {
 }
 .app-shell {
   min-height:100vh;
-  display:flex
+  display:flex;
+  background:linear-gradient(to right,var(--slate) 242px,transparent 242px)
 }
 .app-sidebar {
   width:242px;
@@ -1516,7 +1517,8 @@ button,a {
 }
 @media(max-width:980px) {
   .app-shell {
-    display:block
+    display:block;
+    background:none
   }
   .app-sidebar {
     position:relative;
@@ -2157,3 +2159,18 @@ button.admin-primary { background:var(--blue); color:white; border-color:var(--b
 }
 
 .session-password { color:var(--blue); font-size:.8rem; white-space:nowrap; }
+
+/* Monitoramento da comunicação: estados distintos e texto além da cor. */
+.hardware-status { display:inline-block; padding:5px 10px; border-radius:20px; font-size:.75rem; font-weight:750; white-space:nowrap }
+.hardware-online { color:#176b40; background:#e4f5eb }
+.hardware-degradado { color:#875007; background:#fff3da }
+.hardware-offline { color:#a72630; background:#fde9eb }
+.hardware-nunca_conectado { color:#536579; background:#eaf0f5 }
+.hardware-policy { color:var(--muted); font-size:.8rem; line-height:1.7; margin:18px 0 }
+.hardware-portals { margin-top:24px }
+.hardware-card-online { border-top:3px solid #2d985b }
+.hardware-card-degradado { border-top:3px solid #d28b19 }
+.hardware-card-offline { border-top:3px solid #cc3c4b }
+.hardware-card-nunca_conectado { border-top:3px solid #718297 }
+
+.inventory-options { margin:14px 0 24px; font-size:.8rem; color:var(--muted) }

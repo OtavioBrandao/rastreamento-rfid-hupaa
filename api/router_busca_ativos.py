@@ -30,6 +30,7 @@ def buscar_ativos(
     page: int = Query(1, ge=1),
     page_size: int = Query(PAGE_SIZE_DEFAULT, ge=1, le=PAGE_SIZE_MAX),
     sort: Sort = Query("nome"),
+    somente_ativos: bool = Query(False),
     db: Session = Depends(get_db),
     recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
 ) -> BuscaAtivosPagina:
@@ -47,7 +48,7 @@ def buscar_ativos(
             raise HTTPException(422, detail=str(error)) from error
     return buscar(db, now=recency_context[0], threshold=recency_context[1], q=q,
                   tipo=tipo, epc=epc, status=status, zona=zona, page=page,
-                  page_size=page_size, sort=sort)
+                  page_size=page_size, sort=sort, somente_ativos=somente_ativos)
 
 
 @router.get("/{equipamento_id}", response_model=AtivoBusca, summary="Consultar um ativo pelo ID")

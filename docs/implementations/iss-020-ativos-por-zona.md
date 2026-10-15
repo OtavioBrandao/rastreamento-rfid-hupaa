@@ -2,7 +2,7 @@
 
 ## Issue e importância para o MVP
 
-A [Issue #22](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/22)
+A [Issue #22](https://github.com/OtavioBrandao/rastreamento-rfid-hupaa/issues/22)
 (RF-015) permite à equipe consultar os equipamentos associados a uma zona. No
 MVP, **"disponível em uma zona" significa ter essa zona como última localização
 confiável materializada pela ISS-017**. A informação é aproximada por zona: não

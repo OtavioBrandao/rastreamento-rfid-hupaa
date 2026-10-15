@@ -50,6 +50,8 @@ externo `alembic`. Testes e scripts shell são descritos no guia de validação.
 | `rfid_ingestion/parsing.py`, `normalization.py`, `topics.py` | Envelope seguro, adapters, contrato canônico e tópicos |
 | `rfid_ingestion/connection.py`, `mqtt_client.py` | Paho, TLS, sessões, threads, ACKs e recuperação |
 | `rfid_ingestion/repository.py`, `persistence.py` | Leituras idempotentes no PostgreSQL e auditoria JSONL |
+| `rfid_ingestion/reader_status.py`, `api/router_status_hardware.py` | Contato monotônico, heartbeat opcional, estados temporais e agregação segura de portais |
+| `tools/reader_heartbeat.py` | Publicador independente para ensaio do contrato de heartbeat |
 | `rfid_ingestion/resilience.py`, `health.py` | Taxonomia de falha, backoff e healthcheck |
 | `rfid_ingestion/simulator.py`, `verification.py` | Publicador CLI e verificação de transporte |
 | `rfid_inference/debounce.py` | Consolidação por EPC/antena, tolerância de event time e observações |

@@ -6,13 +6,14 @@ import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { MapPage } from './pages/MapPage'
 import { ReadingsPage } from './pages/ReadingsPage'
+import { ReaderStatusPage } from './pages/ReaderStatusPage'
 import { UsersPage } from './pages/UsersPage'
 import { AuditPage } from './pages/AuditPage'
 import { getSession, logout, onSessionEnded, pode, type Session } from './services/auth'
 import type { EquipmentItem } from './types/dashboard'
 import { LiveProvider } from './services/live'
 
-export type Page = 'dashboard' | 'map' | 'readings' | 'users' | 'audit' | 'password'
+export type Page = 'dashboard' | 'map' | 'readings' | 'reader-status' | 'users' | 'audit' | 'password'
 
 const SESSION_EXPIRED = 'Sua sessão expirou. Entre novamente.'
 const SERVER_UNAVAILABLE = 'Não foi possível contactar o servidor. Tente entrar novamente em instantes.'
@@ -25,6 +26,7 @@ type AuthState =
 function currentPage(): Page {
   if (window.location.hash === '#/mapa') return 'map'
   if (window.location.hash === '#/leituras') return 'readings'
+  if (window.location.hash === '#/status-leitores') return 'reader-status'
   if (window.location.hash === '#/usuarios') return 'users'
   if (window.location.hash === '#/auditoria') return 'audit'
   if (window.location.hash === '#/senha') return 'password'
@@ -70,7 +72,8 @@ function Panel({ session, onLogout, onSessionChanged }: { session: Session; onLo
   const canCorrect = pode(session, 'equipamentos:corrigir')
   const canAdministerUsers = pode(session, 'usuarios:administrar')
   const canReadAudit = pode(session, 'auditoria:consultar')
-  const denied = (page === 'users' && !canAdministerUsers) || (page === 'audit' && !canReadAudit)
+  const canReadHardware = pode(session, 'hardware:consultar')
+  const denied = (page === 'users' && !canAdministerUsers) || (page === 'audit' && !canReadAudit) || (page === 'reader-status' && !canReadHardware)
   useEffect(() => {
     const onHashChange = () => setPage(currentPage())
     window.addEventListener('hashchange', onHashChange)
@@ -79,8 +82,8 @@ function Panel({ session, onLogout, onSessionChanged }: { session: Session; onLo
   if (page === 'password') return <ChangePasswordPage session={session} onLogout={onLogout}
     onCancel={() => { window.location.hash = '#/'; setPage('dashboard') }}
     onChanged={() => { window.location.hash = '#/'; setPage('dashboard'); onSessionChanged() }}/>
-  return <AppShell page={page} user={session.usuario} onLogout={onLogout} canAdministerUsers={canAdministerUsers} canReadAudit={canReadAudit}>
-    {denied ? <div className="state-panel" role="alert"><h1>Acesso restrito</h1><p>Você não tem permissão para acessar esta página.</p><a href="#/">Voltar ao dashboard</a></div> : page === 'users' ? <UsersPage currentUserId={session.usuario.id} onSessionChanged={onSessionChanged}/> : page === 'audit' ? <AuditPage/> : page === 'map' ? <MapPage onSelect={setSelected} /> : page === 'readings' ? <ReadingsPage /> : <DashboardPage onSelect={setSelected} />}
+  return <AppShell page={page} user={session.usuario} onLogout={onLogout} canAdministerUsers={canAdministerUsers} canReadAudit={canReadAudit} canReadHardware={canReadHardware}>
+    {denied ? <div className="state-panel" role="alert"><h1>Acesso restrito</h1><p>Você não tem permissão para acessar esta página.</p><a href="#/">Voltar ao dashboard</a></div> : page === 'users' ? <UsersPage currentUserId={session.usuario.id} onSessionChanged={onSessionChanged}/> : page === 'reader-status' ? <ReaderStatusPage/> : page === 'audit' ? <AuditPage/> : page === 'map' ? <MapPage onSelect={setSelected} /> : page === 'readings' ? <ReadingsPage /> : <DashboardPage onSelect={setSelected} />}
     <EquipmentDrawer item={page === 'dashboard' || page === 'map' ? selected : null} onClose={() => setSelected(null)} canCorrect={canCorrect}/>
   </AppShell>
 }

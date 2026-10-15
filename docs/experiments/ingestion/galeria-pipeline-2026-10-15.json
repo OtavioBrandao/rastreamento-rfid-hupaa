@@ -1,9 +1,9 @@
 {
-  "capturado_em_utc": "2026-10-15T22:26:57.447455+00:00",
+  "capturado_em_utc": "2026-10-15T23:25:40.974795+00:00",
   "origem": "Dados sintéticos publicados via tools.lab_launcher.synthetic.Publicador; sem leitor físico e sem janela Flet.",
   "ambiente": "PostgreSQL 16 e Mosquitto em Docker Compose isolado; API FastAPI e frontend React reais.",
   "equipamentos": 4,
-  "leituras_persistidas_no_momento_da_consulta": 840,
+  "leituras_persistidas_no_momento_da_consulta": 3735,
   "passagens": [
     {
       "direcao": "a_para_b",
@@ -37,6 +37,61 @@
       "zona": null
     }
   ],
-  "capturas": "Browser desktop 1440 x 1000; capturas de página inteira para preservar conteúdo.",
-  "observacao": "Leituras continuaram durante as capturas, por isso os contadores e horários diferem entre imagens. Alcance, RF e rede hospitalar não foram validados."
+  "status_antes_do_ensaio_heartbeat": {
+    "consultado_em": "2026-10-15T23:25:41.008697Z",
+    "degradado_apos_segundos": 30.0,
+    "offline_apos_segundos": 90.0,
+    "leitores": [
+      {
+        "id": 1,
+        "reader_id": "reader-01",
+        "modelo": "EZ700",
+        "ativo": true,
+        "status": "online",
+        "motivo": "contato_recente",
+        "ultimo_contato_em": "2026-10-15T23:25:40.730000Z",
+        "ultimo_heartbeat_em": null,
+        "origem_ultimo_contato": "leitura",
+        "segundos_sem_contato": 0.278697
+      },
+      {
+        "id": 2,
+        "reader_id": "reader-reserva",
+        "modelo": "Simulador de reserva",
+        "ativo": true,
+        "status": "nunca_conectado",
+        "motivo": "sem_contato_observado",
+        "ultimo_contato_em": null,
+        "ultimo_heartbeat_em": null,
+        "origem_ultimo_contato": null,
+        "segundos_sem_contato": null
+      }
+    ],
+    "portais": [
+      {
+        "id": 1,
+        "nome": "Portal de teste RFID",
+        "ativo": true,
+        "status": "online",
+        "motivo": "todos_leitores_online",
+        "leitores_ids": [
+          1
+        ],
+        "ultimo_contato_em": "2026-10-15T23:25:40.730000Z",
+        "lados_configurados": [
+          "a",
+          "b"
+        ]
+      }
+    ]
+  },
+  "capturas": "Desktop de 1440 x 1000; enquadramentos do topo, esquema e inventário/rodapé. Barra azul verificada no final de página maior que o viewport.",
+  "observacao": "Dados fictícios. Leituras continuam entre capturas; RF e rede hospitalar não foram validados.",
+  "ensaio_heartbeat_sem_tags": {
+    "reader_id": "reader-reserva",
+    "status": "online",
+    "origem": "heartbeat",
+    "leituras_do_leitor": 0,
+    "ultimo_heartbeat_em": "2026-10-15T23:25:41.024985+00:00"
+  }
 }

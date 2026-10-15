@@ -10,10 +10,10 @@ Esta revisão não executou merge nem publicou novas avaliações no GitHub.
 
 | PR | Head revisado | Parecer | Frontend existente |
 |---|---|---|---|
-| [#72 — ISS-026](https://github.com/OtavioBrandao/rfid-hospital-mvp/pull/72) | `af1cc2e` | Apto; integrar junto da proteção da ISS-027 antes de disponibilizar a aplicação | Administração de usuários ausente |
-| [#73 — ISS-027](https://github.com/OtavioBrandao/rfid-hospital-mvp/pull/73) | `acc4707` | Apto após #72; objeção anterior resolvida | Login, troca obrigatória de senha, sessão e perfil |
-| [#75 — ISS-028](https://github.com/OtavioBrandao/rfid-hospital-mvp/pull/75) | `b6cf1b0` | Apto após #73 | Consulta da auditoria ausente |
-| [#77 — ISS-025](https://github.com/OtavioBrandao/rfid-hospital-mvp/pull/77) | `66d442a` | Apto após #75; objeção anterior resolvida | Correção manual de cadastro e localização, com revisão e conflito |
+| [#72 — ISS-026](https://github.com/OtavioBrandao/rastreamento-rfid-hupaa/pull/72) | `af1cc2e` | Apto; integrar junto da proteção da ISS-027 antes de disponibilizar a aplicação | Administração de usuários ausente |
+| [#73 — ISS-027](https://github.com/OtavioBrandao/rastreamento-rfid-hupaa/pull/73) | `acc4707` | Apto após #72; objeção anterior resolvida | Login, troca obrigatória de senha, sessão e perfil |
+| [#75 — ISS-028](https://github.com/OtavioBrandao/rastreamento-rfid-hupaa/pull/75) | `b6cf1b0` | Apto após #73 | Consulta da auditoria ausente |
+| [#77 — ISS-025](https://github.com/OtavioBrandao/rastreamento-rfid-hupaa/pull/77) | `66d442a` | Apto após #75; objeção anterior resolvida | Correção manual de cadastro e localização, com revisão e conflito |
 
 Ordem: **#72 → #73 → #75 → #77 → complemento de frontend**.
 Os quatro PRs estavam `MERGEABLE`/`CLEAN` e com CI verde na consulta.

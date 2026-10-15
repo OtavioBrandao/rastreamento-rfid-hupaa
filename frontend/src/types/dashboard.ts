@@ -81,6 +81,7 @@ export interface AssetPage {
 }
 
 export interface AssetFilters {
+  somente_ativos?: boolean
   q?: string
   tipo?: number
   epc?: string

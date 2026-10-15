@@ -2,7 +2,7 @@
 
 ## Issue e importância para o MVP
 
-A ISS-019 ([issue #21](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/21)) implementa o RF-014: a equipe deve localizar equipamentos por nome,
+A ISS-019 ([issue #21](https://github.com/OtavioBrandao/rastreamento-rfid-hupaa/issues/21)) implementa o RF-014: a equipe deve localizar equipamentos por nome,
 patrimônio, tipo, EPC, status e última zona conhecida. A consulta junta o cadastro
 das ISS-008/009/010/011 à projeção da ISS-017, sem inferir posição a partir de
 uma leitura isolada. O estado temporal reutiliza integralmente a regra provisória

@@ -22,7 +22,7 @@ loopback:18884; `verification` recebeu 4/4 mensagens com o perfil epoch_ms
 explícito. `bash -n` dos três templates e `git diff --check` aprovados. Nenhum
 novo teste cloud ou físico foi executado; o broker temporário foi removido.
 
-O [registro posterior da equipe na ISS-001](https://github.com/OtavioBrandao/rfid-hospital-mvp/issues/1#issuecomment-5553433705)
+O [registro posterior da equipe na ISS-001](https://github.com/OtavioBrandao/rastreamento-rfid-hupaa/issues/1#issuecomment-5553433705)
 confirma HiveMQ/TLS/ACL e duas redes com simuladores, e a issue está encerrada.
 As pendências físicas continuam separadas desses resultados; os testes locais
 registrados neste documento não são a evidência de aceite do HiveMQ.

@@ -113,7 +113,10 @@ Um portal agrega antenas via `antenas.portal_id` (associação direta — **as a
 | endereco_rede | varchar | NULL (IP/hotspot, ex.: DR-pad) |
 | parametros_ingestao | jsonb | NULL (ISS-012 — metadado de ingestão **estritamente não-secreto**. **Allowlist fechada** de chaves, validada no schema da API: `protocolo`, `adapter`, `formato_timestamp`, `topico`, `qos` — qualquer outra chave é 422, e o valor de cada uma tem forma validada. Senha/credencial de broker fica fora do banco, em env/secret manager) |
 | status | varchar | NOT NULL, default `offline` (conectividade ao vivo — gerida pela ingestão/heartbeat) |
-| ultimo_heartbeat_em | timestamptz | NULL (idem) |
+| ultimo_heartbeat_em | timestamptz | NULL; instante do último heartbeat aceito |
+| ultimo_contato_em | timestamptz | NULL; contato monotônico por leitura ou heartbeat válido |
+| origem_ultimo_contato | varchar(16) | NULL, `leitura` ou `heartbeat` |
+| saude_reportada | varchar(16) | NULL, `online` ou `degradado`; só heartbeat altera |
 | ativo | boolean | NOT NULL, default `true` (ISS-012 — cadastro/ciclo de vida, **separado de `status`**) |
 | created_at / updated_at | timestamptz | NOT NULL, default now() (ISS-012) |
 
@@ -352,3 +355,6 @@ Uma leitura de EPC não cadastrado (sem nenhuma linha em `associacoes_tag_equipa
 
 ## 6. O que isso desbloqueia
 Esta modelagem alimenta diretamente **ISS-002c** (migrations) e orienta a implementação de **ISS-008 a ISS-018** (cadastro base + inferência de passagem).
+
+O estado atual dos leitores é calculado pelos endpoints de status; a coluna
+`status` guarda a última projeção do ingestor. [Regras e limites](../implementations/iss-024-status-leitores.md).

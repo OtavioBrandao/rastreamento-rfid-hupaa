@@ -7,14 +7,14 @@ import { detectionLabel } from '../components/DashboardParts'
 
 export function DashboardPage({ onSelect }: { onSelect: (item: EquipmentItem) => void }) {
   const [draft, setDraft] = useState({ q: '', epc: '' })
-  const [filters, setFilters] = useState<AssetFilters>({ page: 1, page_size: 20, sort: 'prioridade' })
+  const [filters, setFilters] = useState<AssetFilters>({ page: 1, page_size: 20, sort: 'prioridade', somente_ativos: true })
   const assets = useLiveQuery(`assets:${JSON.stringify(filters)}`, (signal) => getAssets(filters, signal))
   const options = useLiveQuery('filters', async (signal) => {
     const [types, zones] = await Promise.all([getTypes(signal), getZones(signal)])
     return { types, zones }
   })
-  const summaryQuery = useLiveQuery('summary', getOverviewSummary)
-  const activityQuery = useLiveQuery('activity', getRecentActivity)
+  const summaryQuery = useLiveQuery(`summary:${filters.somente_ativos}`, (signal) => getOverviewSummary(signal, filters.somente_ativos))
+  const activityQuery = useLiveQuery(`activity:${filters.somente_ativos}`, (signal) => getRecentActivity(signal, filters.somente_ativos))
   const data = assets.data
   const types = options.data?.types ?? []
   const zones = options.data?.zones ?? []
@@ -36,10 +36,11 @@ export function DashboardPage({ onSelect }: { onSelect: (item: EquipmentItem) =>
       <label>Nome ou patrimônio<input type="search" maxLength={120} value={draft.q} onChange={(e) => setDraft({ ...draft, q: e.target.value })}/></label>
       <label>EPC<input type="search" maxLength={32} value={draft.epc} onChange={(e) => setDraft({ ...draft, epc: e.target.value })} placeholder="EPC exato"/></label>
       <label>Tipo<select value={filters.tipo ?? ''} onChange={(e) => changeFilters({ ...filters, tipo: e.target.value ? Number(e.target.value) : undefined, page: 1 })}><option value="">Todos</option>{types.map((type) => <option key={type.id} value={type.id}>{type.nome}</option>)}</select></label>
-      <label>Status<select value={filters.status ?? ''} onChange={(e) => changeFilters({ ...filters, status: (e.target.value || undefined) as AssetStatus | undefined, page: 1 })}><option value="">Todos</option><option value="disponivel">Em trânsito</option><option value="atencao">Atenção necessária</option><option value="fora_de_servico">Fora de serviço</option><option value="nunca_detectado">Sem zona confirmada</option></select></label>
+      <label>Status<select value={filters.status ?? ''} onChange={(e) => changeFilters({ ...filters, status: (e.target.value || undefined) as AssetStatus | undefined, somente_ativos: e.target.value === 'fora_de_servico' ? false : filters.somente_ativos, page: 1 })}><option value="">Todos</option><option value="disponivel">Em trânsito</option><option value="atencao">Atenção necessária</option><option value="fora_de_servico">Fora de serviço</option><option value="nunca_detectado">Sem zona confirmada</option></select></label>
       <label>Zona<select value={filters.zona ?? ''} onChange={(e) => changeFilters({ ...filters, zona: e.target.value ? Number(e.target.value) : undefined, page: 1 })}><option value="">Todas</option>{zones.map((zone) => <option key={zone.id} value={zone.id}>{zone.nome}</option>)}</select></label>
       <button type="submit">Buscar</button>
     </form>
+    <label className="checkbox-label inventory-options"><input type="checkbox" checked={!filters.somente_ativos} onChange={(event) => changeFilters({ ...filters, somente_ativos: !event.target.checked, status: !event.target.checked && filters.status === 'fora_de_servico' ? undefined : filters.status, page: 1 })}/> Mostrar cadastros inativos (ensaios arquivados)</label>
     {filterError && <p role="alert">Não foi possível carregar as opções de tipo e zona. Tentando novamente automaticamente.</p>}
     {summaryPhase === 'error' && <p role="alert">Não foi possível carregar os indicadores. Tentando novamente automaticamente.</p>}
     {phase === 'loading' && <div className="panel table-skeleton" role="status" aria-label="Carregando equipamentos"><span/><span/><span/></div>}

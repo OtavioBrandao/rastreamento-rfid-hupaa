@@ -60,6 +60,7 @@ def buscar(
     page: int = 1,
     page_size: int = PAGE_SIZE_DEFAULT,
     sort: str = "nome",
+    somente_ativos: bool = False,
 ) -> BuscaAtivosPagina:
     # Os vínculos ativos são únicos por equipamento e tag no PostgreSQL.
     """Consulta ativos filtrados, conta o total e ordena antes de paginar.
@@ -86,6 +87,8 @@ def buscar(
             .joinedload(Setor.andar),
         )
     )
+    if somente_ativos:
+        query = query.filter(Equipamento.status == "ativo")
     if q is not None:
         pattern = f"%{_escape_like(q)}%"
         query = query.filter(or_(
