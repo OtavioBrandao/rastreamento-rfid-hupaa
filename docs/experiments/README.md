@@ -24,9 +24,12 @@ Para garantir honestidade técnica e precisão metodológica na apresentação a
 
 ## 2. Matriz de Evidências Disponíveis
 
-- [Validação da candidata para o Marco 2](../operations/validation.md): testes
+- [Galeria do pipeline com dados sintéticos](galeria-pipeline.md): capturas de
+  dashboard, planta EASY, leituras por antena e histórico automático; inclui
+  registro SQL sanitizado e roteiro de demonstração.
+- [Validação do software](../operations/validation.md): testes
   automatizados, build, documentação e limites de reprodução em 15/10/2026.
-- [Ensaio sintético local da candidata](ingestion/marco2-candidata-2026-10-15.json):
+- [Ensaio sintético local da candidata](ingestion/pipeline-local-2026-10-15.json):
   publicador do simulador → Compose reorganizado → 12 leituras → passagem A→B
   confirmada → histórico e Zona B. Sem validação RF ou novo ensaio com leitor.
 

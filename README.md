@@ -4,6 +4,23 @@ MVP experimental para rastrear equipamentos móveis do **Hospital Universitário
 
 O objetivo é reduzir o tempo de procura por equipamentos e apoiar a gestão do parque hospitalar. A planta representa zonas e portais; os marcadores têm posição ilustrativa. Uma leitura recente indica presença na antena. A localização muda após uma passagem com direção confirmada ou uma correção manual auditada.
 
+## Demonstração do funcionamento
+
+Capturas reais da aplicação com **dados sintéticos**, em um ambiente local
+isolado. O publicador do simulador percorreu MQTT → ingestor → PostgreSQL →
+passagem/direção → histórico/última zona → API → interface.
+
+![Dashboard com quatro equipamentos fictícios, três passagens confirmadas e leituras recentes](docs/assets/screenshots/dashboard-simulacao.jpg)
+
+| Planta EASY e equipamentos por zona | Leituras por tag e antena |
+|---|---|
+| ![Mapa EASY com uma tag na Zona A e duas na Zona B](docs/assets/screenshots/mapa-easy-simulacao.jpg) | ![Contagem de leituras por equipamento e por antena](docs/assets/screenshots/leituras-simulacao.jpg) |
+
+O ensaio confirmou duas passagens A→B e uma B→A. Um quarto equipamento ficou
+sem leitura, permitindo comparar presença, zona confirmada e ausência de detecção.
+[Veja a galeria completa, o histórico e a evidência do pipeline](docs/experiments/galeria-pipeline.md).
+As imagens não representam ensaio RF nem dados de operação do hospital.
+
 ## Executar o projeto
 
 Requisitos: **Python 3.12**, **Node.js 22**, Docker com Compose v2 e ambiente gráfico para o simulador Flet. O desenvolvimento contempla Ubuntu 24.04 e Windows 11 com Docker Desktop/WSL2. Execute os comandos na raiz do repositório.
@@ -16,6 +33,55 @@ source .venv/bin/activate
 python -m pip install -r requirements/lab.txt
 npm --prefix frontend ci
 ```
+
+### Configurar os arquivos de ambiente
+
+Os arquivos `.example` são modelos versionados. Copie os perfis necessários e
+edite **as cópias**, mantendo credenciais fora do Git. No Ubuntu:
+
+```bash
+cp config/environments/.env.local.example config/environments/.env.local
+# Somente para broker/banco externos (opções 3 e 4)
+cp config/environments/.env.cloud.example config/environments/.env.cloud
+# Somente para o simulador externo (opção 4)
+cp config/environments/.env.cloud.reader-01.example config/environments/.env.cloud.reader-01
+```
+
+No PowerShell, substitua `cp` por `Copy-Item`. Não sobrescreva um perfil já
+preenchido; abra-o e ajuste apenas os campos necessários.
+
+| Perfil | O que configurar |
+|---|---|
+| `.env.local` | Os padrões atendem ao laboratório local. Ajuste `POSTGRES_PORT` e `MQTT_LOCAL_PORT` se as portas estiverem ocupadas. Para leitor físico, permita acesso à porta do broker pela LAN. |
+| `.env.cloud` | `MQTT_HOST` sem `mqtts://` nem porta, usuário/senha de **assinatura**, `MQTT_CLIENT_ID` único, `MQTT_TOPIC`, `DATABASE_URL` e `APP_DATABASE_URL`. Mantenha TLS habilitado. |
+| `.env.cloud.reader-01` | Mesmo broker, credencial separada com permissão de **publicação** e tópico exato autorizado para o leitor simulado. |
+
+Exemplo de campos externos, com valores fictícios:
+
+```dotenv
+MQTT_HOST=seu-cluster.hivemq.cloud
+MQTT_PORT=8883
+MQTT_TLS_ENABLED=true
+MQTT_USERNAME=usuario-do-ingestor
+MQTT_PASSWORD=preencha-apenas-no-arquivo-local
+MQTT_CLIENT_ID=hupaa-ingestor-seu-identificador
+MQTT_TOPIC=easy/dev/hupaa/+/+/readings
+DATABASE_URL=postgresql+psycopg2://usuario:senha@servidor/banco?sslmode=require
+APP_DATABASE_URL=postgresql+psycopg2://usuario:senha@servidor-pooler/banco?sslmode=require
+```
+
+`DATABASE_URL` atende API, migrations e cadastros iniciais; `APP_DATABASE_URL`
+atende o ingestor. Devem apontar para o **mesmo banco lógico**. Use o endpoint
+direto para migrations quando o provedor exigir; o ingestor pode usar o pooler.
+Codifique caracteres especiais da senha na URL (`@` vira `%40`, por exemplo).
+Não copie o exemplo fictício sobre um perfil local funcional.
+
+No modo local o launcher deriva as URLs dos campos `POSTGRES_*`. Se executar
+API/administração separadamente após alterar porta, usuário, senha ou banco,
+atualize também as URLs no perfil. `TEST_DATABASE_URL` é exclusiva de um banco
+descartável: os testes apagam dados. Não use o banco da demonstração para a suíte.
+O [guia de configuração](docs/operations/execution.md) detalha portas, transporte,
+permissões MQTT e execução por componente.
 
 ### Modo de simulação
 
@@ -144,5 +210,3 @@ Para mais detalhes, **acesse a [documentação no repositório](docs/README.md)*
 - [Laboratório e simulador visual](docs/lab_test_launcher.md)
 - [Experimentos e evidências](docs/experiments/README.md)
 - [Decisões de arquitetura](docs/decisions/README.md)
-- [Material de apoio ao Marco 2](docs/milestones/marco-2.md)
-- [Notas da versão candidata](docs/releases/v0.1.0-rc.1.md)

@@ -9,3 +9,4 @@
 - Toda issue implementada deve deixar um `.md` em `docs/` explicando o que é a issue, sua importância para o MVP e o que foi feito para resolvê-la.
 - Os scripts shell têm como alvo o Ubuntu 24.04 e devem usar finais de linha LF.
 - Não configure o notebook como hotspot; ele atua somente como broker e receptor MQTT.
+- Documentos pessoais e notas internas de versão devem permanecer em `data/private-docs/`, ignorado pelo Git, sem links na documentação pública.

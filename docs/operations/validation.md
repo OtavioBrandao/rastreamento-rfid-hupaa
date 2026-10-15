@@ -92,7 +92,7 @@ dependências do cliente HTTP e avisos SQLAlchemy da comparação de migrations
 downgrade e reaplicação no banco descartável.
 
 O ensaio ponta a ponta usou o publicador do simulador sem abrir a janela Flet,
-o Compose em portas isoladas e a topologia semeada. O [registro JSON sanitizado](../experiments/ingestion/marco2-candidata-2026-10-15.json)
+o Compose em portas isoladas e a topologia semeada. O [registro JSON sanitizado](../experiments/ingestion/pipeline-local-2026-10-15.json)
 documenta origem e resultados. Não mede latência, alcance ou taxa de acerto RF.
 
 A distribuição Ubuntu do WSL tem integração Docker desativada. Por isso os smoke
