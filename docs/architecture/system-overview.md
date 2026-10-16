@@ -153,6 +153,7 @@ foi recebida. Debounce mantém estado por `(EPC, antena)`; passagem, por `(EPC, 
 |---|---|---|
 | `RFID_DEBOUNCE_WINDOW_MS` | 250 ms | Intervalo de consolidação |
 | `RFID_OUT_OF_ORDER_TOLERANCE_MS` | 1000 ms | Tolerância à reordenação |
+| `RFID_DEBOUNCE_MAX_OBSERVATION_MS` | 500 ms | Duração máxima de uma observação contínua; 0 desativa |
 | `RFID_PASSAGE_MAX_INTERVAL_MS` | 3000 ms | Intervalo máximo entre lados |
 | `RFID_PASSAGE_REFRACTORY_MS` | 1000 ms | Supressão logo após travessia |
 | `RFID_PASSAGE_OVERLAP_GRACE_MS` | 300 ms | Tolerância à sobreposição |

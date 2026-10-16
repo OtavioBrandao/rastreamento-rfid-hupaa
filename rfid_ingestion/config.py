@@ -25,6 +25,8 @@ DEFAULT_RETRY_MULTIPLIER = 2.0
 DEFAULT_RETRY_JITTER = 0.2
 DEFAULT_RFID_DEBOUNCE_WINDOW_MS = 250
 DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS = 1000
+# Tag parada no alcance gera observações parciais; 0 desativa o limite.
+DEFAULT_RFID_DEBOUNCE_MAX_OBSERVATION_MS = 500
 DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS = 3000
 # Calibrados com o ensaio físico de 05/10/2026 (vai e vem contínuo no portal EASY).
 DEFAULT_RFID_PASSAGE_REFRACTORY_MS = 1000
@@ -102,6 +104,7 @@ class Settings:
   db_retry_jitter: float = DEFAULT_RETRY_JITTER
   rfid_debounce_window_ms: int = DEFAULT_RFID_DEBOUNCE_WINDOW_MS
   rfid_out_of_order_tolerance_ms: int = DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS
+  rfid_debounce_max_observation_ms: int = DEFAULT_RFID_DEBOUNCE_MAX_OBSERVATION_MS
   rfid_passage_max_interval_ms: int = DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS
   rfid_passage_refractory_ms: int = DEFAULT_RFID_PASSAGE_REFRACTORY_MS
   rfid_passage_overlap_grace_ms: int = DEFAULT_RFID_PASSAGE_OVERLAP_GRACE_MS
@@ -184,6 +187,11 @@ class Settings:
               "RFID_OUT_OF_ORDER_TOLERANCE_MS",
               DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS,
           ),
+          rfid_debounce_max_observation_ms=_integer_value(
+              source,
+              "RFID_DEBOUNCE_MAX_OBSERVATION_MS",
+              DEFAULT_RFID_DEBOUNCE_MAX_OBSERVATION_MS,
+          ),
           rfid_passage_max_interval_ms=_integer_value(
               source, "RFID_PASSAGE_MAX_INTERVAL_MS", DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS
           ),
@@ -232,6 +240,13 @@ class Settings:
       ):
           raise ValueError(
               "RFID_OUT_OF_ORDER_TOLERANCE_MS deve ser inteiro não negativo"
+          )
+      if (
+          type(self.rfid_debounce_max_observation_ms) is not int
+          or self.rfid_debounce_max_observation_ms < 0
+      ):
+          raise ValueError(
+              "RFID_DEBOUNCE_MAX_OBSERVATION_MS deve ser inteiro não negativo"
           )
       if self.mqtt_mode not in ("local", "cloud"):
           raise ValueError("MQTT_MODE deve ser local ou cloud")

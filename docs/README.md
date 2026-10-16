@@ -42,6 +42,7 @@ use o guia de operação acima; relatórios antigos registram o contexto do ensa
 | Configuração de lados e zonas no tempo | [Topologia lógica versionada](implementations/iss-013-topologia-logica-portais.md) |
 | Leituras repetidas e passagens | [Debounce](implementations/iss-014-debounce-leituras.md), [passagem](implementations/iss-015-deteccao-passagem.md) e [direção](implementations/iss-016-inferencia-direcao.md) |
 | Retorno entre antenas e sobreposição | [Passagens em vai e vem](implementations/hotfix-passagem-vai-e-vem.md) |
+| Troca entre antenas atrasada ou perdida | [Transições atrasadas no simulador](implementations/hotfix-transicoes-atrasadas.md) |
 | Histórico e última zona | [Movimentações](implementations/iss-018-historico-movimentacoes.md) e [projeção temporal](implementations/iss-017-ultima-localizacao.md) |
 | Presença sem passagem confirmada | [Leituras e presença](implementations/hotfix-leituras-presenca.md) |
 | Busca e ativos por zona | [Busca operacional](implementations/iss-019-busca-ativos.md) e [ativos por zona](implementations/iss-020-ativos-por-zona.md) |

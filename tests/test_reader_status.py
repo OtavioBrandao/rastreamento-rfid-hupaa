@@ -22,7 +22,7 @@ from rfid_ingestion.reader_status import (
     contacts,
     heartbeat_event,
 )
-from rfid_ingestion.repository import PersistenceError
+from rfid_ingestion.repository import PersistenceError, PersistenceResult
 
 NOW = datetime(2026, 10, 15, 12, tzinfo=timezone.utc)
 TOPIC = "easy/dev/hupaa/portal-01/reader-01/heartbeat"
@@ -217,3 +217,43 @@ def test_heartbeat_ack_after_status_commit_without_reading_repository(tmp_path, 
             assert receiver.database_unavailable.is_set()
         else:
             client.ack.assert_called_once_with(4, 1)
+
+
+def test_reading_contacts_are_deferred_and_do_not_hold_ack(tmp_path):
+    with patch('rfid_ingestion.mqtt_client.create_client') as factory:
+        client = factory.return_value
+        client.ack.return_value = 0
+        monitor = Mock(policy=StatusPolicy())
+        class Repository:
+            def persist_many(self, envelopes):
+                return [PersistenceResult('duplicate') for _ in envelopes]
+
+        receiver = MqttReceiver(Settings(), Mock(), Repository(), reader_monitor=monitor)
+        event = {"event_type": "rfid_reading", "canonical_event": {"event_id": "e1"},
+                 "reader_id": "reader-01", "retain": False,
+                 "received_at_utc": NOW.isoformat()}
+        receiver._inferencia = Mock()  # inferência fica na fila da outra thread
+        receiver._fila.put((receiver._sessao, Mock(mid=7, qos=1), event, 0.0))
+        receiver._flush_pending()
+        monitor.observe.assert_not_called()
+        deferred, = monitor.defer.call_args.args
+        assert deferred == [{"reader_id": "reader-01", "seen": NOW, "source": "leitura"}]
+        client.ack.assert_called_once_with(7, 1)
+
+
+def test_deferred_contacts_are_written_by_sweep_and_kept_on_failure():
+    clock = [NOW]
+    monitor = ReaderMonitor(Mock(), StatusPolicy(), clock=lambda: clock[0])
+    monitor.defer([{"reader_id": "reader-01", "seen": NOW, "source": "leitura"},
+                   {"reader_id": "reader-01", "seen": NOW + timedelta(seconds=1),
+                    "source": "leitura"}])
+    with patch.object(monitor, '_persist', side_effect=PersistenceError('falha')):
+        with pytest.raises(PersistenceError):
+            monitor.sweep()
+    with patch.object(monitor, '_persist') as persist:
+        monitor.sweep()
+        persist.assert_called_once_with(
+            [{"reader_id": "reader-01", "seen": NOW + timedelta(seconds=1), "source": "leitura"}])
+        clock[0] += timedelta(milliseconds=500)
+        monitor.sweep()  # antes de 1 s: não grava de novo
+        persist.assert_called_once()
