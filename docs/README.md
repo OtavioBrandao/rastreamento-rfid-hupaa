@@ -19,6 +19,11 @@ Universitário Professor Alberto Antunes (HUPAA/UFAL).
 - [Guia dos módulos, contratos e geração pydoc](reference/code-guide.md)
 - [Decisões arquiteturais](decisions/README.md)
 
+## Documentar uma mudança
+
+- [Onde registrar cada tipo de mudança e o que conferir antes do PR](como-documentar.md)
+- Modelos: [registro de issue](templates/registro-issue.md) e [ADR](templates/adr.md)
+
 ## Problemas e soluções
 
 Cada registro em `implementations/` explica o problema, sua importância para o MVP,
