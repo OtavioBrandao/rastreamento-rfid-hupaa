@@ -54,7 +54,8 @@ def main() -> int:
         origin_hold = timedelta(milliseconds=settings.rfid_passage_origin_hold_ms)
         passage_service = PassageInferenceService(
             PassageDetector(
-                timedelta(milliseconds=settings.rfid_passage_max_interval_ms),
+                timedelta(milliseconds=settings.rfid_passage_max_interval_ms)
+                if settings.rfid_passage_max_interval_ms else None,
                 # Silêncio até a próxima observação: a da antena de destino
                 # chega até uma observação máxima depois da primeira leitura.
                 silence_grace=timedelta(milliseconds=(

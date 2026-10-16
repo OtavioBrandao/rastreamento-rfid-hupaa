@@ -27,7 +27,8 @@ DEFAULT_RFID_DEBOUNCE_WINDOW_MS = 250
 DEFAULT_RFID_OUT_OF_ORDER_TOLERANCE_MS = 1000
 # Tag parada no alcance gera observações parciais; 0 desativa o limite.
 DEFAULT_RFID_DEBOUNCE_MAX_OBSERVATION_MS = 500
-DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS = 3000
+# 0: sem limite entre os lados; toda travessia com os dois lados lidos vira passagem.
+DEFAULT_RFID_PASSAGE_MAX_INTERVAL_MS = 0
 # Calibrados com o ensaio físico de 05/10/2026 (vai e vem contínuo no portal EASY).
 DEFAULT_RFID_PASSAGE_REFRACTORY_MS = 1000
 DEFAULT_RFID_PASSAGE_OVERLAP_GRACE_MS = 300
@@ -226,8 +227,8 @@ class Settings:
           raise ValueError("RFID_READER_ADAPTERS deve mapear reader_id para nome de adapter")
       if type(self.rfid_debounce_window_ms) is not int or self.rfid_debounce_window_ms < 1:
           raise ValueError("RFID_DEBOUNCE_WINDOW_MS deve ser inteiro positivo")
-      if type(self.rfid_passage_max_interval_ms) is not int or self.rfid_passage_max_interval_ms < 1:
-          raise ValueError("RFID_PASSAGE_MAX_INTERVAL_MS deve ser inteiro positivo")
+      if type(self.rfid_passage_max_interval_ms) is not int or self.rfid_passage_max_interval_ms < 0:
+          raise ValueError("RFID_PASSAGE_MAX_INTERVAL_MS deve ser inteiro não negativo")
       for name in ("refractory", "overlap_grace", "origin_hold"):
           value = getattr(self, f"rfid_passage_{name}_ms")
           if type(value) is not int or value < 0:

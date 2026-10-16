@@ -277,3 +277,37 @@ def test_mapeamento_em_cache_evita_consulta_por_observacao(pg_engine, mapped_por
     assert len(consultas) == 2
     assert repo.resolve(_observation(999999, 1)) is None
     assert len(consultas) == 3
+
+
+def test_previous_observation_restores_last_side_and_direction_after_restart(
+        pg_engine, mapped_portal):
+    from rfid_inference.direction_repository import DirectionRepository
+    from rfid_inference.direction_service import DirectionInferenceService
+
+    portal, antenna_a, antenna_b, zone_a, zone_b = mapped_portal
+    with pg_engine.begin() as connection:
+        ids = [connection.execute(LeituraBruta.__table__.insert().values(
+            event_id=f"sha256:{event:064x}", antena_id=antenna, epc="EPC-INTEGRACAO",
+            lido_em=T0 + timedelta(seconds=second)).returning(LeituraBruta.id)).scalar_one()
+            for event, antenna, second in ((1, antenna_a, 0), (2, antenna_a, 0.01),
+                                           (3, antenna_b, 0.03))]
+    repo = PassageRepository(pg_engine)
+    destination = repo.resolve(ConsolidatedObservation(
+        "EPC-INTEGRACAO", antenna_b, T0 + timedelta(seconds=0.03),
+        T0 + timedelta(seconds=0.03), 1, ids[2], ids[2], "e3", "e3", None, None, None))
+    previous = repo.previous_observation(destination)
+    assert (previous.side, previous.last_reading_id) == ("a", ids[1])
+
+    # Ingestor recém-iniciado: o lado A vem do banco e a passagem sai mesmo
+    # com evidências a 20 ms (mesmo leitor: ordem de chegada).
+    direction = DirectionInferenceService(DirectionRepository(pg_engine), 100)
+    service = PassageInferenceService(PassageDetector(None), repo, monotonic_clock=lambda: 0,
+                                      passage_persisted=direction.process_pending)
+    service.handle_observation(ConsolidatedObservation(
+        "EPC-INTEGRACAO", antenna_b, T0 + timedelta(seconds=0.03),
+        T0 + timedelta(seconds=0.03), 1, ids[2], ids[2], f"sha256:{3:064x}",
+        f"sha256:{3:064x}", None, None, None))
+    with pg_engine.connect() as connection:
+        row = connection.execute(select(Passagem.direcao_status, Passagem.direcao,
+                                        Passagem.direcao_regra, Passagem.zona_destino_id)).one()
+    assert tuple(row) == ("confirmed", "a_para_b", "arrival_order_v1", zone_b)

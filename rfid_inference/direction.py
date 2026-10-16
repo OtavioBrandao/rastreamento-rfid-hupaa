@@ -10,13 +10,15 @@ from datetime import datetime, timedelta
 class DirectionEvidence:
     """Estrutura Direction Evidence usada por rfid_inference.direction.
 
-    Campos: antenna_id, reading_id, observed_at, epc, reading_antenna_id, mappings."""
+    Campos: antenna_id, reading_id, observed_at, epc, reading_antenna_id, mappings, reader_id."""
     antenna_id: int | None
     reading_id: int | None
     observed_at: datetime | None
     epc: str | None
     reading_antenna_id: int | None
     mappings: tuple[DirectionMapping, ...] = ()
+    # Leitor físico da antena; mesmo leitor implica ordem de chegada confiável.
+    reader_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +74,13 @@ class DirectionInferenceResult:
 
 
 def infer_direction(context: DirectionContext, ambiguity: timedelta) -> DirectionInferenceResult:
-    """Exige topologia única e coerente; empate temporal é sempre ambíguo."""
+    """Exige topologia única e coerente; desempata proximidade pela ordem de chegada.
+
+    Com o horário de recebimento, leituras entregues na mesma rajada QoS 1
+    ficam a poucos milissegundos umas das outras, mas a ordem de publicação de
+    um mesmo leitor é preservada pelo MQTT e pela sequência de gravação. Nesse
+    caso a ordem dos IDs decide; leitores diferentes continuam ambíguos.
+    """
     if ambiguity < timedelta(0):
         raise ValueError("tolerância de ambiguidade deve ser não negativa")
     first, second = context.first, context.second
@@ -123,5 +131,9 @@ def infer_direction(context: DirectionContext, ambiguity: timedelta) -> Directio
     if first.observed_at > second.observed_at:
         return result("unknown", "evidence_order_invalid")
     if second.observed_at - first.observed_at <= ambiguity:
+        same_reader = first.reader_id is not None and first.reader_id == second.reader_id
+        assert first.reading_id is not None and second.reading_id is not None
+        if same_reader and first.reading_id < second.reading_id:
+            return result("confirmed", "arrival_order_v1", f"{first_side}_para_{second_side}")
         return result("ambiguous", "temporal_proximity_v1")
     return result("confirmed", "temporal_side_order_v1", f"{first_side}_para_{second_side}")

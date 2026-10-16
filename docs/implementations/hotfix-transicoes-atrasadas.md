@@ -106,11 +106,54 @@ partia a observação. Corrigir só a primeira tornaria a segunda mais frequente
     evidências de 457 a 930 ms, nenhuma `ambiguous`. A passagem foi confirmada
     ~2–3 s após a entrada no destino e a zona gravada ~4 s depois.
 
+## Segunda etapa: nenhuma transição sem detecção
+
+Requisito do MVP: se a tag foi lida num lado do portal e depois no outro, a
+transição **tem** de virar passagem com direção confirmada. Mesmo após a
+primeira etapa, ainda havia três caminhos de perda:
+
+| Caso | Antes | Agora |
+|---|---|---|
+| Troca rápida: últimas leituras de A e primeiras de B na mesma rajada (~30 ms) | `ambiguous`, sem zona | `confirmed`, regra `arrival_order_v1` |
+| Troca lenta: mais de 3 s entre sair de A e entrar em B, ou item levado ao destino sem passar pelo alcance da outra antena | candidato expirava, sem passagem | passagem confirmada |
+| Ingestor reiniciado com a tag de um lado | primeira observação do outro lado sem par | último lado recuperado do banco |
+
+- **Ordem de chegada** (`rfid_inference/direction.py`,
+  `direction_repository.py`):
+  - o horário das leituras com contador é o de recebimento, e numa rajada QoS 1
+    leituras de antenas diferentes chegam a poucos milissegundos;
+  - a ordem de publicação de um mesmo leitor é preservada pelo MQTT e pela
+    sequência de gravação (IDs crescentes);
+  - dentro de `RFID_DIRECTION_AMBIGUITY_MS`, evidências do **mesmo leitor**
+    passam a ser ordenadas pelo ID da leitura (`arrival_order_v1`). Leitores
+    diferentes continuam `ambiguous`.
+- **Sem limite entre os lados** (`rfid_inference/passage.py`):
+  `RFID_PASSAGE_MAX_INTERVAL_MS` aceita `0`, agora o padrão, e o detector
+  não expira o último lado de cada tag. Um valor positivo restaura o
+  comportamento anterior da ISS-015.
+- **Estado recuperado após reinício** (`passage_repository.previous_observation`,
+  `passage_service`): na primeira observação de um EPC sem estado em
+  memória, a última leitura dele no mesmo portal vira o candidato de origem.
+- Continuam valendo:
+  - a proteção contra reflexão (origem ainda lendo a tag durante o destino);
+  - o período refratário de 1 s logo após uma passagem. Com as observações
+    parciais, a tag que permanece no outro lado gera nova passagem assim que o
+    refratário termina.
+
+Validação: testes de direção (mesmo leitor a 0, 29 e 100 ms confirma; leitores
+diferentes seguem ambíguos), detector sem limite (travessia após 2 min,
+estado mantido por 1 h), restauração no serviço e integração com PostgreSQL
+(reinício + evidências a 20 ms ⇒ `confirmed`, `arrival_order_v1`, zona de
+destino). Suíte completa: 1368 aprovados, 2 pulados.
+
 ## Limites
 
-- Com banco externo, ainda há rajadas a cada ~0,5 s (lote e PUBACK). Uma
-  travessia mais rápida que isso pode continuar `ambiguous`, como já descrito
-  no hotfix de gravação em lotes.
+- Com banco externo, ainda há rajadas a cada ~0,5 s (lote e PUBACK). A
+  direção é resolvida pela ordem de chegada; só antenas de leitores
+  diferentes no mesmo portal continuam sujeitas a `ambiguous`.
+- Sem limite de tempo, uma leitura espúria da antena do outro lado (fora da
+  janela de reflexão) gera passagem. Isso precisa de validação física com o
+  EZ700 antes de uso no hospital.
 - Entre passagem confirmada e zona gravada ficam ~4 s de consultas de direção e
   projeção no banco remoto. Não foi alterado aqui.
 - O contato de leitura do leitor é gravado com até ~1 s de atraso. Os limites

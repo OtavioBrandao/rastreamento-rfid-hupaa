@@ -135,3 +135,24 @@ def test_service_recovers_pending_and_is_idempotent():
     assert service.process(7) is None
     assert service.counters.passages_processed == 1
     assert service.counters.directions_confirmed == 1
+
+
+@pytest.mark.parametrize("delta", [0, 29, 100])
+def test_close_evidence_from_same_reader_is_ordered_by_arrival(delta):
+    base = context(delta_ms=delta)
+    same_reader = replace(base, first=replace(base.first, reader_id=1),
+                          second=replace(base.second, reader_id=1))
+    result = infer_direction(same_reader, timedelta(milliseconds=100))
+    assert result.status == "confirmed"
+    assert result.direction == "a_para_b"
+    assert (result.origin_zone_id, result.destination_zone_id) == (1, 2)
+    assert result.rule == "arrival_order_v1"
+
+
+def test_close_evidence_from_different_readers_stays_ambiguous():
+    base = context(delta_ms=30)
+    result = infer_direction(
+        replace(base, first=replace(base.first, reader_id=1),
+                second=replace(base.second, reader_id=2)),
+        timedelta(milliseconds=100))
+    assert result.status == "ambiguous"
