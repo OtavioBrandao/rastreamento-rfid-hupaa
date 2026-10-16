@@ -111,12 +111,14 @@ def test_persisted_direction_and_retry(pg_engine, portal_setup, first, second, d
     assert service.counters.passages_processed == 1
 
 
-@pytest.mark.parametrize("delta,status", [(0, "ambiguous"), (50, "ambiguous"),
-                                          (100, "ambiguous"), (101, "confirmed")])
-def test_temporal_boundary_in_database(pg_engine, portal_setup, delta, status):
+# Mesmo leitor: dentro da tolerância, a ordem de chegada (IDs) confirma a direção.
+@pytest.mark.parametrize("delta,status,rule", [
+    (0, "confirmed", "arrival_order_v1"), (50, "confirmed", "arrival_order_v1"),
+    (100, "confirmed", "arrival_order_v1"), (101, "confirmed", "temporal_side_order_v1")])
+def test_temporal_boundary_in_database(pg_engine, portal_setup, delta, status, rule):
     passage_id = insert_passage(pg_engine, portal_setup, delta_ms=delta)
     result = DirectionInferenceService(DirectionRepository(pg_engine), 100).process(passage_id)
-    assert result.status == status
+    assert (result.status, result.rule) == (status, rule)
     with pg_engine.connect() as connection:
         passage = connection.execute(select(Passagem.__table__).where(
             Passagem.id == passage_id
@@ -252,7 +254,7 @@ def _message(mid, antenna, at):
 
 @pytest.mark.parametrize("second_time,status", [
     ("2026-09-22T12:00:01.000Z", "confirmed"),
-    ("2026-09-22T12:00:00.050Z", "ambiguous"),
+    ("2026-09-22T12:00:00.050Z", "confirmed"),  # mesma rajada: ordem de chegada
 ])
 def test_full_pipeline_projects_only_confirmed_passages(
     pg_engine, portal_setup, tmp_path, second_time, status,

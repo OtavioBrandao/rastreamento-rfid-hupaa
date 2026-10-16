@@ -66,6 +66,10 @@ válidas mas ordem física incerta. `unknown` significa evidências ou topologia
 insuficientes/inconsistentes. Ambos gravam `direcao=indeterminada` e zonas
 `NULL`; uma passagem física da ISS-015 continua registrada.
 
+Desde o [hotfix de transições](hotfix-transicoes-atrasadas.md), evidências do
+mesmo leitor dentro da tolerância são ordenadas pelo ID da leitura (ordem de
+chegada) e confirmadas com a regra `arrival_order_v1`.
+
 ## Persistência, idempotência e recuperação
 
 A migration `9d0116a01600` adiciona `zona_origem_id` e `zona_destino_id`

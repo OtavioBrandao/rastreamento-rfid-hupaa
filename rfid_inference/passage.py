@@ -109,15 +109,20 @@ class PassageDetector:
     lendo a tag durante a observação de destino (após a tolerância de
     sobreposição). Nesse caso a tag não saiu da origem: é reflexão/sobreposição
     de antenas e a passagem é descartada.
+
+    ``max_interval=None`` não limita o tempo entre os lados: a tag vista num lado
+    e depois no outro atravessou o portal, mesmo que devagar ou fora do alcance
+    da antena de destino. O estado de cada EPC/portal é mantido e não expira.
     """
 
-    def __init__(self, max_interval: timedelta, *, silence_grace: timedelta = timedelta(0),
+    def __init__(self, max_interval: timedelta | None, *,
+                 silence_grace: timedelta = timedelta(0),
                  refractory: timedelta = timedelta(0),
                  origin_active: Callable[[PortalObservation, PortalObservation], bool]
                  | None = None):
         """Inicializa PassageDetector com as dependências e valores recebidos."""
-        if (max_interval <= timedelta(0) or silence_grace < timedelta(0)
-                or refractory < timedelta(0)):
+        if ((max_interval is not None and max_interval <= timedelta(0))
+                or silence_grace < timedelta(0) or refractory < timedelta(0)):
             raise ValueError("intervalos inválidos")
         self.max_interval = max_interval
         self.silence_grace = silence_grace
@@ -166,7 +171,7 @@ class PassageDetector:
         if candidate is not None:
             first, second = sorted((candidate, observation), key=_order)
             gap = max(timedelta(0), second.first_seen_at - first.last_seen_at)
-            if gap > self.max_interval:
+            if self.max_interval is not None and gap > self.max_interval:
                 self.counters.candidates_expired += 1
                 _event("rfid_passage_candidate_expired", *key)
                 state.candidate = observation
@@ -228,12 +233,24 @@ class PassageDetector:
             self.counters.passages_confirmed += 1
             _event("rfid_passage_confirmed", *key)
 
+    def knows(self, epc: str, portal_id: int) -> bool:
+        """Indica se há estado em memória para o EPC/portal."""
+        return (epc, portal_id) in self.states
+
+    def seed(self, observation: PortalObservation) -> None:
+        """Restaura a última evidência conhecida (ex.: após reinício) como candidato."""
+        key = observation.epc, observation.portal_id
+        if key not in self.states:
+            self.states[key] = _State(candidate=observation)
+
     def pending(self) -> tuple[DetectedPassage, ...]:
         """Devolve propostas que ainda aguardam confirmação de persistência."""
         return tuple(state.proposed for state in self.states.values() if state.proposed)
 
     def advance_time(self, now_monotonic: float) -> None:
         """Expira estados de observação conforme o relógio monotônico e as janelas configuradas."""
+        if self.max_interval is None:
+            return  # sem limite: o último lado de cada tag nunca expira
         silence = (self.max_interval + self.silence_grace).total_seconds()
         for key, state in tuple(self.states.items()):
             if state.proposed is not None:

@@ -48,7 +48,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.db_retry_jitter, 0.2)
         self.assertEqual(settings.rfid_debounce_window_ms, 250)
         self.assertEqual(settings.rfid_out_of_order_tolerance_ms, 1000)
-        self.assertEqual(settings.rfid_passage_max_interval_ms, 3000)
+        self.assertEqual(settings.rfid_passage_max_interval_ms, 0)
         self.assertEqual(settings.rfid_direction_ambiguity_ms, 100)
 
     def test_all_settings_can_come_from_environment(self) -> None:
@@ -118,7 +118,6 @@ class SettingsTests(unittest.TestCase):
             {"RFID_DEBOUNCE_WINDOW_MS": "1.5"},
             {"RFID_OUT_OF_ORDER_TOLERANCE_MS": "-1"},
             {"RFID_OUT_OF_ORDER_TOLERANCE_MS": "late"},
-            {"RFID_PASSAGE_MAX_INTERVAL_MS": "0"},
             {"RFID_PASSAGE_MAX_INTERVAL_MS": "-1"},
             {"RFID_PASSAGE_MAX_INTERVAL_MS": "late"},
             {"RFID_PASSAGE_MAX_INTERVAL_MS": "1.5"},

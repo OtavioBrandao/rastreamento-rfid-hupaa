@@ -64,11 +64,29 @@ class PassageInferenceService:
                    reason="ambiguous_or_missing")
             return
         self.retry_pending()
+        if not self.detector.knows(resolved.epc, resolved.portal_id):
+            self._restore(resolved)
         proposal = self.detector.add(
             resolved, received_at_monotonic=self.monotonic_clock()
         )
         if proposal is not None:
             self._persist(proposal)
+
+    def _restore(self, observation) -> None:
+        """Recupera do banco o último lado em que a tag foi lida neste portal."""
+        previous = getattr(self.repository, "previous_observation", None)
+        if previous is None:
+            return
+        try:
+            found = previous(observation)
+        except Exception:
+            _event(logging.ERROR, "rfid_passage_restore_failed",
+                   epc=observation.epc, portal_id=observation.portal_id)
+            return
+        if found is not None:
+            self.detector.seed(found)
+            _event(logging.INFO, "rfid_passage_state_restored",
+                   epc=observation.epc, portal_id=observation.portal_id, side=found.side)
 
     def _persist(self, passage: DetectedPassage) -> None:
         """Persiste a passagem antes de confirmá-la no detector e disparar a inferência de direção."""

@@ -254,3 +254,34 @@ def test_tag_staying_at_destination_confirms_passage_without_leaving(dwell_secon
     detected_at, origin, destination = passages[0]
     assert (origin, destination) == ("a", "b")
     assert detected_at - 2.6 < 2.5
+
+
+def test_unbounded_interval_confirms_slow_crossing_and_keeps_state():
+    detector = PassageDetector(None)
+    detector.add(observation("a", 0), received_at_monotonic=0)
+    detector.advance_time(3600)
+    assert detector.knows("X", 1)
+    passage = detector.add(observation("b", 120), received_at_monotonic=3600)
+    assert (passage.first_side, passage.second_side) == ("a", "b")
+
+
+def test_service_restores_last_side_after_restart():
+    class Repository:
+        persisted = []
+
+        def resolve(self, item):
+            return item
+
+        def previous_observation(self, item):
+            return observation("a", 0)
+
+        def persist(self, passage):
+            self.persisted.append(passage)
+            return True
+
+    repository = Repository()
+    service = PassageInferenceService(PassageDetector(None), repository,
+                                      monotonic_clock=lambda: 0)
+    service.handle_observation(observation("b", 600))
+    passage, = repository.persisted
+    assert (passage.first_side, passage.second_side) == ("a", "b")
