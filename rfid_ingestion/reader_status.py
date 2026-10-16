@@ -14,6 +14,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from threading import Lock
 from typing import Callable
 
 from sqlalchemy import select
@@ -130,7 +131,11 @@ def contacts(envelopes: list[dict]) -> list[dict]:
 class ReaderMonitor:
     """Persiste contatos e transições sem criar leituras nem movimentações.
 
-    Uma instância pertence à thread de persistência. O sweep avança estados
+    Heartbeats são gravados por ``observe``, antes do PUBACK. Contatos de
+    leitura entram por ``defer`` e são gravados pelo sweep (no máximo uma vez
+    por segundo): com banco remoto, a transação do monitor custa ~0,5 s e, a
+    cada lote, segurava o PUBACK, fazendo o broker entregar as leituras em
+    rajadas com quase o mesmo horário de recebimento. O sweep avança estados
     mesmo sem tráfego; o cálculo da API independe de esse worker estar ativo.
     Locks em ordem de PK evitam regressão com lotes e receptores concorrentes.
     """
@@ -143,6 +148,9 @@ class ReaderMonitor:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.next_sweep: datetime | None = None
         self.transitions = 0
+        # Contato de leitura mais recente por leitor, ainda não gravado.
+        self._adiados: dict[str, dict] = {}
+        self._adiados_lock = Lock()
 
     def observe(self, observations: list[dict]) -> None:
         """Grava contatos monotônicos de leitores ativos conhecidos, antes do PUBACK.
@@ -155,12 +163,30 @@ class ReaderMonitor:
             return
         self._persist(observations)
 
+    def defer(self, observations: list[dict]) -> None:
+        """Guarda contatos de leitura para o próximo sweep, sem acessar o banco.
+
+        Só o contato mais recente de cada leitor importa para o status."""
+        with self._adiados_lock:
+            for contact in observations:
+                atual = self._adiados.get(contact["reader_id"])
+                if atual is None or contact["seen"] > atual["seen"]:
+                    self._adiados[contact["reader_id"]] = contact
+
     def sweep(self) -> None:
-        """Reavalia silêncio uma vez por segundo; falhas de banco seguem recuperação MQTT."""
+        """Grava contatos adiados e reavalia silêncio uma vez por segundo.
+
+        Falhas de banco seguem a recuperação MQTT; os contatos voltam ao buffer."""
         now = self.clock()
         if self.next_sweep is not None and now < self.next_sweep:
             return
-        self._persist([])
+        with self._adiados_lock:
+            adiados, self._adiados = list(self._adiados.values()), {}
+        try:
+            self._persist(adiados)
+        except Exception:
+            self.defer(adiados)
+            raise
         self.next_sweep = now + timedelta(seconds=1)
 
     def _persist(self, observations: list[dict]) -> None:

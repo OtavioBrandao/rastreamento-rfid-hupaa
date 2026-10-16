@@ -40,6 +40,7 @@ def main() -> int:
         debouncer = DebounceProcessor.from_milliseconds(
             settings.rfid_debounce_window_ms,
             settings.rfid_out_of_order_tolerance_ms,
+            settings.rfid_debounce_max_observation_ms,
         )
         location_service = LocationProjectionService(engine)
         direction_service = DirectionInferenceService(
@@ -54,9 +55,12 @@ def main() -> int:
         passage_service = PassageInferenceService(
             PassageDetector(
                 timedelta(milliseconds=settings.rfid_passage_max_interval_ms),
+                # Silêncio até a próxima observação: a da antena de destino
+                # chega até uma observação máxima depois da primeira leitura.
                 silence_grace=timedelta(milliseconds=(
                     settings.rfid_debounce_window_ms
                     + settings.rfid_out_of_order_tolerance_ms
+                    + settings.rfid_debounce_max_observation_ms
                 )),
                 refractory=timedelta(milliseconds=settings.rfid_passage_refractory_ms),
                 origin_active=lambda origin, destination: passage_repository.origin_active(

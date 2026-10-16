@@ -83,28 +83,39 @@ class DebounceProcessor:
     Leituras com intervalo menor ou igual à janela pertencem à mesma
     observação. A tolerância mantém um buffer ordenável; eventos anteriores ao
     watermark são tardios e não alteram resultados já finalizados.
+
+    ``max_observation`` limita a duração de uma observação que segue recebendo
+    leituras: a parte já estável (até o watermark) é finalizada e a seguinte
+    continua como nova observação. Sem isso, uma tag parada no alcance da
+    antena de destino só gerava observação ao sair dele, atrasando a passagem
+    ou deixando o candidato de origem expirar.
     """
 
-    def __init__(self, window: timedelta, out_of_order_tolerance: timedelta) -> None:
+    def __init__(self, window: timedelta, out_of_order_tolerance: timedelta,
+                 max_observation: timedelta | None = None) -> None:
         """Inicializa DebounceProcessor com as dependências e valores recebidos."""
         if window <= timedelta(0):
             raise ValueError("window deve ser positiva")
         if out_of_order_tolerance < timedelta(0):
             raise ValueError("out_of_order_tolerance não pode ser negativa")
+        if max_observation is not None and max_observation <= timedelta(0):
+            raise ValueError("max_observation deve ser positiva")
         self.window = window
         self.out_of_order_tolerance = out_of_order_tolerance
+        self.max_observation = max_observation
         self._states: dict[tuple[str, int], _KeyState] = {}
         self._counters = DebounceCounters()
         self._lock = Lock()
 
     @classmethod
     def from_milliseconds(
-        cls, window_ms: int, out_of_order_tolerance_ms: int
+        cls, window_ms: int, out_of_order_tolerance_ms: int, max_observation_ms: int = 0
     ) -> DebounceProcessor:
-        """Constrói o processador com janela e tolerância expressas em milissegundos."""
+        """Constrói o processador em milissegundos; ``max_observation_ms`` 0 desativa o limite."""
         return cls(
             timedelta(milliseconds=window_ms),
             timedelta(milliseconds=out_of_order_tolerance_ms),
+            timedelta(milliseconds=max_observation_ms) if max_observation_ms else None,
         )
 
     @property
@@ -155,6 +166,14 @@ class DebounceProcessor:
                 finalized_groups.append(group)
 
             finalized = self._finalize(state, finalized_groups)
+            open_groups = groups[len(finalized_groups):]
+            if (
+                self.max_observation is not None
+                and open_groups
+                and watermark - open_groups[0][0].observed_at >= self.max_observation
+            ):
+                stable = [item for item in open_groups[0] if item.observed_at <= watermark]
+                finalized += self._finalize(state, [stable], continuing=True)
             return DebounceResult(True, incorporated, False, finalized)
 
     def advance_time(self, now_monotonic: float) -> tuple[ConsolidatedObservation, ...]:
@@ -202,17 +221,23 @@ class DebounceProcessor:
             return tuple(finalized)
 
     def _finalize(
-        self, state: _KeyState, groups: list[list[DebounceReading]]
+        self, state: _KeyState, groups: list[list[DebounceReading]], *,
+        continuing: bool = False,
     ) -> tuple[ConsolidatedObservation, ...]:
-        """Consolida grupos, remove leituras finalizadas e avança o limite de event time do estado."""
+        """Consolida grupos, remove leituras finalizadas e avança o limite de event time do estado.
+
+        ``continuing`` corta uma observação ainda ativa: o limite fica na última
+        leitura finalizada, para a continuação seguinte não ser tratada como tardia.
+        """
         observations = tuple(self._observation(group) for group in groups)
         if observations:
             finalized_ids = {item.event_id for group in groups for item in group}
             state.readings = [
                 item for item in state.readings if item.event_id not in finalized_ids
             ]
+            margin = timedelta(0) if continuing else self.window
             state.finalized_until = max(
-                observation.last_seen_at + self.window for observation in observations
+                observation.last_seen_at + margin for observation in observations
             )
             self._increment(observations_finalized=len(observations))
         return observations

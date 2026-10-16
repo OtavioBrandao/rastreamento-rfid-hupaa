@@ -78,6 +78,11 @@ loop MQTT, inclusive quando não chega nenhuma mensagem (cadência nominal de
 até 200 ms enquanto conectado). Não é necessária uma nova leitura da mesma
 antena. No limite exato de `janela + tolerância`, o grupo ainda aguarda.
 
+Uma tag parada no alcance nunca fica em silêncio. Por isso,
+`RFID_DEBOUNCE_MAX_OBSERVATION_MS` (padrão 500 ms) finaliza a parte
+estável de uma observação contínua e mantém o restante como nova
+observação. Veja [Transições atrasadas](hotfix-transicoes-atrasadas.md).
+
 Esses dois relógios têm funções distintas: `observed_at`/`lido_em` determina
 quais leituras se agrupam e a ordem das referências; o relógio monotônico mede
 apenas o tempo de silêncio operacional desde a recepção. `recebido_em` não entra
