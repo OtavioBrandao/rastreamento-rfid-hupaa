@@ -19,6 +19,9 @@ def carregar(modo: str, arquivo: Path | None, interativo: bool,
              transporte: str = "tls") -> tuple[Path, dict[str, str]]:
     """Carrega o perfil; ``transporte="plain"`` usa MQTT sem TLS no broker externo.
 
+    ``transporte="bridge"`` mantém o ingestor em TLS como ``tls``; só o leitor
+    publica sem TLS na bridge local (ver ``tools.lab_launcher.bridge``).
+
     No modo plain, ``MQTT_PLAIN_HOST``/``MQTT_PLAIN_PORT`` (e, se houver,
     ``MQTT_PLAIN_USERNAME``/``MQTT_PLAIN_PASSWORD``) substituem o broker TLS;
     o banco externo continua o mesmo.
@@ -34,8 +37,8 @@ def carregar(modo: str, arquivo: Path | None, interativo: bool,
             "MQTT_TOPIC", "DATABASE_URL", "APP_DATABASE_URL", "COMPOSE_PROJECT_NAME",
             "MQTT_PLAIN_HOST", "MQTT_PLAIN_PORT", "MQTT_PLAIN_USERNAME", "MQTT_PLAIN_PASSWORD",
         }})
-    if transporte not in ("tls", "plain"):
-        raise ValueError("transporte MQTT deve ser tls ou plain")
+    if transporte not in ("tls", "plain", "bridge"):
+        raise ValueError("transporte MQTT deve ser tls, plain ou bridge")
     if modo == "managed":
         obrigatorios = (("MQTT_PLAIN_HOST", "MQTT_CLIENT_ID", "DATABASE_URL", "APP_DATABASE_URL")
                         if transporte == "plain" else

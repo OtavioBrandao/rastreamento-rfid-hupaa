@@ -82,9 +82,12 @@ class ComposeConfigurationTests(unittest.TestCase):
         config = self.compose_config("managed", "config/environments/.env.cloud.example")
         services = config["services"]
 
-        self.assertEqual(set(services), {"migrate-managed", "ingestor-managed"})
+        self.assertEqual(set(services), {"migrate-managed", "mqtt-bridge", "ingestor-managed"})
         self.assertNotIn("postgres", services)
         self.assertNotIn("mosquitto", services)
+        # A bridge é opcional (somente --mqtt-transport bridge); o ingestor não depende dela.
+        self.assertNotIn("mqtt-bridge", services["ingestor-managed"]["depends_on"])
+        self.assertEqual(services["mqtt-bridge"]["environment"]["BRIDGE_REMOTE_PORT"], "8883")
         self.assertEqual(
             services["ingestor-managed"]["depends_on"]["migrate-managed"]["condition"],
             "service_completed_successfully",

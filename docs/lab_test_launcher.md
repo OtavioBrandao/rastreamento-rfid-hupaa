@@ -31,6 +31,9 @@ cadastrar e o nome do equipamento de cada uma (`--tag EPC=Nome` sem menu). No
 broker externo (opções 3 e 4), pergunta também o transporte: `mqtts` (TLS, 8883)
 ou `mqtt` sem TLS (1883, `--mqtt-transport plain`). Veja o
 [hotfix de tags físicas e MQTT sem TLS](implementations/hotfix-lab-tags-fisicas-mqtt-sem-tls.md).
+Com o leitor físico há também `--mqtt-transport bridge`: o EZ700 publica sem TLS
+num Mosquitto do notebook, que repassa as leituras ao HiveMQ Cloud com TLS. Veja a
+[bridge MQTT local para o HiveMQ Cloud](implementations/hotfix-bridge-mqtt-hivemq.md).
 
 Nos testes sintéticos (opções 1 e 4), depois do ingestor saudável o launcher abre
 o **simulador visual** (`python -m tools.lab_simulator`), uma janela Flet com a
