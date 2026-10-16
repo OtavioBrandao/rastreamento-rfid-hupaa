@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import or_, select, update
 from sqlalchemy.engine import Engine
 
-from db.models import LeituraBruta, MapeamentoAntenaPortal, Passagem, Portal
+from db.models import Antena, LeituraBruta, MapeamentoAntenaPortal, Passagem, Portal
 
 from .direction import (
     DirectionContext,
@@ -75,7 +75,9 @@ class DirectionRepository:
             def evidence(antenna_id: int | None, reading_id: int | None) -> DirectionEvidence:
                 """Carrega a leitura e seus mapeamentos temporais para compor a evidência de direção."""
                 reading = connection.execute(
-                    select(LeituraBruta.antena_id, LeituraBruta.epc, LeituraBruta.lido_em)
+                    select(LeituraBruta.antena_id, LeituraBruta.epc, LeituraBruta.lido_em,
+                           Antena.leitor_id)
+                    .join(Antena, Antena.id == LeituraBruta.antena_id)
                     .where(LeituraBruta.id == reading_id)
                 ).one_or_none() if reading_id is not None else None
                 mappings: tuple[DirectionMapping, ...] = ()
@@ -102,6 +104,7 @@ class DirectionRepository:
                     epc=reading.epc if reading else None,
                     reading_antenna_id=reading.antena_id if reading else None,
                     mappings=mappings,
+                    reader_id=reading.leitor_id if reading else None,
                 )
 
             first = evidence(row.antena_origem_id, row.leitura_origem_id)

@@ -234,3 +234,34 @@ def test_invalid_constructor_values_are_rejected(window, tolerance) -> None:
 def test_reading_timestamp_requires_timezone() -> None:
     with pytest.raises(ValueError, match="fuso"):
         DebounceReading("event", 1, "EPC", 1, datetime(2026, 1, 1))
+
+
+def test_continuous_reading_is_split_by_max_observation_without_late_events() -> None:
+    debounce = DebounceProcessor.from_milliseconds(250, 1000, 500)
+    instants = range(0, 5000, 200)
+    finalized = []
+    for value in instants:
+        finalized.extend(debounce.add(reading(value)).finalized)
+
+    # A tag segue no alcance: partes estáveis saem antes de qualquer silêncio.
+    assert len(finalized) >= 3
+    assert finalized[0].last_seen_at <= BASE + timedelta(milliseconds=1600)
+    remaining = debounce.flush()
+    assert debounce.counters.late_events == 0
+    observations = [*finalized, *remaining]
+    assert sum(item.reading_count for item in observations) == len(instants)
+    for previous, following in zip(observations, observations[1:]):
+        assert previous.last_seen_at < following.first_seen_at
+
+
+def test_max_observation_zero_keeps_single_observation() -> None:
+    debounce = DebounceProcessor.from_milliseconds(250, 1000, 0)
+    for value in range(0, 5000, 200):
+        assert debounce.add(reading(value)).finalized == ()
+    observation, = debounce.flush()
+    assert observation.reading_count == 25
+
+
+def test_invalid_max_observation_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        DebounceProcessor(timedelta(milliseconds=250), timedelta(0), timedelta(0))

@@ -85,6 +85,38 @@ class PassageRepository:
             last_event_id=observation.last_event_id,
         )
 
+    def previous_observation(self, observation: PortalObservation
+                             ) -> PortalObservation | None:
+        """Última leitura do EPC no mesmo portal antes da observação, como evidência.
+
+        Usada quando o detector não tem estado (ingestor reiniciado): sem ela, a
+        primeira observação depois do reinício não teria com quem formar passagem.
+        """
+        mapping = MapeamentoAntenaPortal
+        with self.engine.connect() as connection:
+            row = connection.execute(
+                select(LeituraBruta.id, LeituraBruta.event_id, LeituraBruta.antena_id,
+                       LeituraBruta.lido_em, mapping.id.label("mapping_id"), mapping.lado,
+                       mapping.zona_id)
+                .join(mapping, (mapping.antena_id == LeituraBruta.antena_id)
+                      & (mapping.portal_id == observation.portal_id)
+                      & (mapping.inicio <= LeituraBruta.lido_em)
+                      & ((mapping.fim.is_(None)) | (mapping.fim > LeituraBruta.lido_em)))
+                .where(LeituraBruta.epc == observation.epc,
+                       LeituraBruta.lido_em < observation.first_seen_at)
+                .order_by(LeituraBruta.lido_em.desc(), LeituraBruta.id.desc())
+                .limit(1)
+            ).one_or_none()
+        if row is None:
+            return None
+        return PortalObservation(
+            epc=observation.epc, portal_id=observation.portal_id, antenna_id=row.antena_id,
+            side=row.lado, zone_id=row.zona_id, mapping_id=row.mapping_id,
+            first_seen_at=row.lido_em, last_seen_at=row.lido_em,
+            first_reading_id=row.id, last_reading_id=row.id,
+            first_event_id=row.event_id, last_event_id=row.event_id,
+        )
+
     def origin_active(self, origin: PortalObservation, destination: PortalObservation, *,
                       grace: timedelta, hold: timedelta) -> bool:
         """A antena de origem leu a tag durante o destino (após a sobreposição)?

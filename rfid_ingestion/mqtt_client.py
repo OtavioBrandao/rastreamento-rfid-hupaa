@@ -78,6 +78,7 @@ class MqttReceiver:
         self.debouncer = debouncer or DebounceProcessor.from_milliseconds(
             settings.rfid_debounce_window_ms,
             settings.rfid_out_of_order_tolerance_ms,
+            settings.rfid_debounce_max_observation_ms,
         )
         self.observation_handler = observation_handler
         self.observation_tick_handler = observation_tick_handler
@@ -109,6 +110,7 @@ class MqttReceiver:
             queue.Queue()
         )
         self._inferencia: Thread | None = None
+        self._monitor: Thread | None = None
         # Chegadas ainda sem inferência, em ordem. O relógio da inferência não
         # passa da mais antiga: com a inferência atrasada pelo banco, o debounce
         # e o detector não tratam como silêncio leituras que já chegaram.
@@ -406,7 +408,13 @@ class MqttReceiver:
                           if event.get("event_type") == "reader_heartbeat" else next(reading_results)
                           for event in envelopes]
             if self.reader_monitor is not None:
-                self.reader_monitor.observe(contacts(envelopes))
+                # Heartbeat gravado antes do PUBACK; contato de leitura fica para
+                # o sweep, fora da janela QoS 1 (ver ReaderMonitor).
+                vistos = contacts(envelopes)
+                heartbeats = [c for c in vistos if c["source"] == "heartbeat"]
+                if heartbeats:
+                    self.reader_monitor.observe(heartbeats)
+                self.reader_monitor.defer([c for c in vistos if c["source"] != "heartbeat"])
         except PersistenceError as error:
             self._falha_banco(error)
             for _message, _event, chegada in pendentes:
@@ -671,6 +679,7 @@ class MqttReceiver:
     def _processar_uma_vez(self, primeiro=None) -> None:
         """Processa pendências e avança debounce e serviços de inferência no mesmo relógio."""
         self._flush_pending(primeiro)
+        self._varrer_leitores()
         self._poll_debounce()
         if self.observation_tick_handler is not None:
             try:
@@ -678,14 +687,24 @@ class MqttReceiver:
             except Exception:
                 _log(logging.ERROR, "rfid_observation_tick_failed")
 
+    def _varrer_leitores(self) -> None:
+        """Grava contatos adiados e reavalia status dos leitores (o sweep limita a 1/s)."""
+        if self.reader_monitor is None or self.database_unavailable.is_set():
+            return
+        try:
+            self.reader_monitor.sweep()
+        except PersistenceError as error:
+            self._falha_banco(error)
+
+    def _monitorar(self) -> None:
+        """Thread do monitor de leitores: a transação dele não atrasa lote nem PUBACK."""
+        while not self.shutdown.is_set() and not self.failed.is_set():
+            self._varrer_leitores()
+            self.shutdown.wait(self.PROCESS_POLL_SECONDS)
+
     def _processar(self) -> None:
         """Thread de gravação: lotes e ACK, sem bloquear a rede nem esperar a inferência."""
         while not self.shutdown.is_set() and not self.failed.is_set():
-            if self.reader_monitor is not None and not self.database_unavailable.is_set():
-                try:
-                    self.reader_monitor.sweep()
-                except PersistenceError as error:
-                    self._falha_banco(error)
             try:
                 primeiro = self._fila.get(timeout=self.PROCESS_POLL_SECONDS)
             except queue.Empty:
@@ -894,6 +913,12 @@ class MqttReceiver:
         )
         self._processor.start()
         self._inferencia.start()
+        if self.reader_monitor is not None:
+            self._monitor = Thread(
+                target=self._monitorar,
+                name=f"rfid-reader-monitor-{self.settings.mqtt_client_id}",
+            )
+            self._monitor.start()
         self._worker = Thread(
             target=self._supervise,
             name=f"mqtt-supervisor-{self.settings.mqtt_client_id}",
@@ -928,7 +953,7 @@ class MqttReceiver:
     def stop(self) -> None:
         """Solicita parada, aguarda workers e finaliza o debounce pendente."""
         self.request_shutdown()
-        for thread in (self._worker, self._processor, self._inferencia):
+        for thread in (self._worker, self._processor, self._inferencia, self._monitor):
             if thread is not None and thread is not current_thread():
                 thread.join()
         self.flush_debounce()

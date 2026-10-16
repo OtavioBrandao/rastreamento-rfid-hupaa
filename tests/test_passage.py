@@ -211,3 +211,77 @@ def test_service_retries_failed_persistence_without_losing_raw_ack_boundary():
 def test_invalid_window(interval):
     with pytest.raises(ValueError):
         PassageDetector(interval)
+
+
+@pytest.mark.parametrize("dwell_seconds", [3, 10, 30])
+def test_tag_staying_at_destination_confirms_passage_without_leaving(dwell_seconds):
+    from rfid_inference.debounce import DebounceProcessor, DebounceReading
+
+    debounce = DebounceProcessor.from_milliseconds(250, 1000, 500)
+    detector = PassageDetector(WINDOW, silence_grace=timedelta(milliseconds=1750),
+                               refractory=timedelta(seconds=1))
+    readings = [(seconds / 10, 1) for seconds in range(0, 20, 2)]
+    readings += [(2.6 + seconds / 10, 2) for seconds in range(0, dwell_seconds * 10, 2)]
+    passages = []
+
+    def deliver(observations, now):
+        for item in observations:
+            side = "a" if item.antenna_id == 1 else "b"
+            proposal = detector.add(PortalObservation(
+                item.epc, 1, item.antenna_id, side, 1 if side == "a" else 2, item.antenna_id,
+                item.first_seen_at, item.last_seen_at, item.first_reading_id,
+                item.last_reading_id, item.first_event_id, item.last_event_id,
+            ), received_at_monotonic=now)
+            if proposal is not None:
+                detector.mark_persisted(proposal, duplicate=False)
+                passages.append((now, proposal.first_side, proposal.second_side))
+
+    index = 0
+    for tick in range(int((2.6 + dwell_seconds) * 20)):
+        now = tick / 20
+        while index < len(readings) and readings[index][0] <= now:
+            instant, antenna = readings[index]
+            index += 1
+            result = debounce.add(DebounceReading(
+                f"e{index}", index, "X", antenna, T0 + timedelta(seconds=instant)),
+                received_at_monotonic=now)
+            deliver(result.finalized, now)
+        deliver(debounce.advance_time(now), now)
+        detector.advance_time(now)
+
+    # A tag continua em B: a passagem sai em ~2 s, sem esperar a saída do alcance.
+    assert len(passages) == 1
+    detected_at, origin, destination = passages[0]
+    assert (origin, destination) == ("a", "b")
+    assert detected_at - 2.6 < 2.5
+
+
+def test_unbounded_interval_confirms_slow_crossing_and_keeps_state():
+    detector = PassageDetector(None)
+    detector.add(observation("a", 0), received_at_monotonic=0)
+    detector.advance_time(3600)
+    assert detector.knows("X", 1)
+    passage = detector.add(observation("b", 120), received_at_monotonic=3600)
+    assert (passage.first_side, passage.second_side) == ("a", "b")
+
+
+def test_service_restores_last_side_after_restart():
+    class Repository:
+        persisted = []
+
+        def resolve(self, item):
+            return item
+
+        def previous_observation(self, item):
+            return observation("a", 0)
+
+        def persist(self, passage):
+            self.persisted.append(passage)
+            return True
+
+    repository = Repository()
+    service = PassageInferenceService(PassageDetector(None), repository,
+                                      monotonic_clock=lambda: 0)
+    service.handle_observation(observation("b", 600))
+    passage, = repository.persisted
+    assert (passage.first_side, passage.second_side) == ("a", "b")
