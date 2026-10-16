@@ -135,6 +135,41 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-}
 
+  mqtt-bridge:
+    image: eclipse-mosquitto:2.1.2-alpine
+    profiles: ["managed"]
+    entrypoint: ["/bin/sh", "/bridge/mosquitto-bridge.sh"]
+    environment:
+      BRIDGE_REMOTE_HOST: ${BRIDGE_REMOTE_HOST:-}
+      BRIDGE_REMOTE_PORT: ${BRIDGE_REMOTE_PORT:-8883}
+      BRIDGE_REMOTE_USERNAME: ${BRIDGE_REMOTE_USERNAME:-}
+      BRIDGE_REMOTE_PASSWORD: ${BRIDGE_REMOTE_PASSWORD:-}
+      BRIDGE_REMOTE_CLIENT_ID: ${BRIDGE_REMOTE_CLIENT_ID:-}
+      BRIDGE_TOPIC: ${BRIDGE_TOPIC:-}
+    ports:
+      - "${MQTT_BIND_ADDRESS:-0.0.0.0}:${MQTT_LOCAL_PORT:-1883}:1883"
+    volumes:
+      - ../docker/mosquitto-bridge.sh:/bridge/mosquitto-bridge.sh:ro
+    networks:
+      - rfid-dev
+    healthcheck:
+      test:
+        - CMD
+        - mosquitto_sub
+        - -h
+        - 127.0.0.1
+        - -t
+        - $$SYS/broker/version
+        - -C
+        - "1"
+        - -W
+        - "3"
+      interval: 5s
+      timeout: 4s
+      retries: 10
+      start_period: 5s
+    restart: "no"
+
   ingestor-managed:
     <<: *python-service
     profiles: ["managed"]

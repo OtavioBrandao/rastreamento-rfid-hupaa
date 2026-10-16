@@ -136,7 +136,7 @@ Sem argumentos, `python scripts/dev.py` apresenta o menu completo:
 | 3 | Leitor físico | MQTT e PostgreSQL externos | `config/environments/.env.cloud` |
 | 4 | Simulador visual | MQTT e PostgreSQL externos | `config/environments/.env.cloud` + perfil do publicador |
 
-Para 3 e 4, copie e preencha o exemplo correspondente em `config/environments/`. A opção 4 exige credencial de publicação separada da assinatura do ingestor. TLS é o padrão externo; MQTT sem TLS exige escolha explícita de laboratório. `python scripts/dev.py --sem-teste` executa apenas API e frontend no banco externo já preparado.
+Para 3 e 4, copie e preencha o exemplo correspondente em `config/environments/`. A opção 4 exige credencial de publicação separada da assinatura do ingestor. TLS é o padrão externo; MQTT sem TLS exige escolha explícita de laboratório. Como o EZ700 não conecta com `mqtts`, a opção 3 aceita `--mqtt-transport bridge`: o leitor publica sem TLS no notebook e uma [bridge](docs/implementations/hotfix-bridge-mqtt-hivemq.md) repassa as leituras ao HiveMQ Cloud com TLS. `python scripts/dev.py --sem-teste` executa apenas API e frontend no banco externo já preparado.
 
 Os perfis reais são ignorados pelo Git. Exemplos versionados não devem receber credenciais. [Configuração, portas e comandos por componente](docs/operations/execution.md).
 

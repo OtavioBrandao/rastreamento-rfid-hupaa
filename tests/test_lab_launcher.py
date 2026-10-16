@@ -21,7 +21,7 @@ from db.models import (
     Zona,
 )
 from rfid_ingestion.config import Settings
-from tools.lab_launcher import cli, docker_env, session, tags, terminals, watch
+from tools.lab_launcher import bridge, cli, docker_env, session, tags, terminals, watch
 from tools.lab_launcher.config import carregar
 from tools.lab_launcher.seed import TIPO_SINTETICO, epcs_por_nome, semear, semear_equipamentos
 
@@ -418,6 +418,9 @@ def test_transporte_plain_usa_broker_sem_tls_e_mantem_banco_externo(monkeypatch,
 
     _, tls = carregar("managed", arquivo, False)
     assert (tls["MQTT_HOST"], tls["MQTT_TLS_ENABLED"]) == ("cluster.s1.eu.hivemq.cloud", "true")
+    _, via_bridge = carregar("managed", arquivo, False, "bridge")
+    assert (via_bridge["MQTT_HOST"], via_bridge["MQTT_TLS_ENABLED"]) == (
+        "cluster.s1.eu.hivemq.cloud", "true")
     with pytest.raises(ValueError, match="somente TLS"):
         cli._avisar_transporte_plain(dict(valores, MQTT_HOST="c.s1.eu.hivemq.cloud"), False)
 
@@ -429,6 +432,43 @@ def test_transporte_e_tags_respeitam_o_modo(monkeypatch):
     monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: "2")
     assert cli._transporte_escolhido(None, "managed", True) == "plain"
     assert cli._transporte_escolhido(None, "managed", False) == "tls"
+    monkeypatch.setattr(cli.typer, "prompt", lambda *args, **kwargs: "3")
+    assert cli._transporte_escolhido(None, "managed", True) == "bridge"
+    with pytest.raises(ValueError, match="broker externo"):
+        cli._transporte_escolhido("bridge", "local", False)
+
+
+def test_bridge_usa_credencial_do_leitor_e_topico_exato(tmp_path):
+    topico = "easy/dev/hupaa/portal-01/reader-01/readings"
+    valores = {"MQTT_HOST": "cluster.s1.eu.hivemq.cloud", "MQTT_PORT": "8883",
+               "MQTT_USERNAME": "ingestor"}
+    arquivo = tmp_path / ".env.cloud.reader-01"
+    arquivo.write_text(f"MQTT_USERNAME=leitor\nMQTT_PASSWORD=segredo\nMQTT_TOPIC={topico}\n",
+                       encoding="utf-8")
+    perfil = bridge.perfil_bridge("reader-01", topico, valores, arquivo)
+    assert perfil == {
+        "BRIDGE_REMOTE_HOST": "cluster.s1.eu.hivemq.cloud", "BRIDGE_REMOTE_PORT": "8883",
+        "BRIDGE_REMOTE_USERNAME": "leitor", "BRIDGE_REMOTE_PASSWORD": "segredo",
+        "BRIDGE_REMOTE_CLIENT_ID": "easy-bridge-reader-01", "BRIDGE_TOPIC": topico,
+    }
+    with pytest.raises(ValueError, match="usa easy/dev/hupaa/portal-02"):
+        bridge.perfil_bridge("reader-01", "easy/dev/hupaa/portal-02/reader-01/readings",
+                             valores, arquivo)
+    with pytest.raises(ValueError, match="separada do ingestor"):
+        bridge.perfil_bridge("reader-01", topico, dict(valores, MQTT_USERNAME="leitor"),
+                             arquivo)
+    with pytest.raises(ValueError, match="credencial MQTT do leitor"):
+        bridge.perfil_bridge("reader-01", topico, valores, tmp_path / "ausente")
+
+
+def test_bridge_exige_leitor_fisico(monkeypatch, capsys):
+    monkeypatch.setattr(cli.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda nome: object())
+    monkeypatch.setattr(cli, "compose", lambda *a, **k: pytest.fail("não deve subir serviços"))
+    with pytest.raises(cli.typer.Exit):
+        cli.start(env="managed", source="synthetic", no_terminals=True,
+                  mqtt_transport="bridge")
+    assert "leitor físico" in capsys.readouterr().err
 
 
 def test_simulador_sem_flet_falha_antes_de_subir_servicos(monkeypatch, capsys):

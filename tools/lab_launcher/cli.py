@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from rfid_ingestion.topics import reading_topic
 
+from . import bridge
 from .config import ROOT, carregar
 from .docker_env import (
     _limpar_saida,
@@ -73,7 +74,7 @@ def _cenario(env: str | None, source: str | None) -> tuple[str, str]:
 
 
 def _transporte_escolhido(valor: str | None, modo: str, interativo: bool) -> str:
-    """Resolve a escolha explícita entre MQTT com TLS e transporte de laboratório sem TLS."""
+    """Resolve a escolha entre MQTT com TLS, sem TLS (laboratório) e bridge local com TLS."""
     if modo != "managed":
         if valor not in (None, "tls"):
             raise ValueError("--mqtt-transport só se aplica ao broker externo")
@@ -82,11 +83,13 @@ def _transporte_escolhido(valor: str | None, modo: str, interativo: bool) -> str
         typer.echo("Transporte MQTT do broker externo:")
         typer.echo("1. mqtts com TLS (porta 8883, HiveMQ Cloud)")
         typer.echo("2. mqtt sem TLS (porta 1883, somente para ensaio de laboratório)")
-        valor = {"1": "tls", "2": "plain"}.get(
-            typer.prompt("Escolha o transporte (1-2)", default="1"), "")
+        typer.echo("3. bridge: leitor em mqtt sem TLS no notebook, repassado ao HiveMQ "
+                   "Cloud com TLS (leitor físico)")
+        valor = {"1": "tls", "2": "plain", "3": "bridge"}.get(
+            typer.prompt("Escolha o transporte (1-3)", default="1"), "")
     valor = valor or "tls"
-    if valor not in ("tls", "plain"):
-        raise ValueError("--mqtt-transport deve ser tls ou plain")
+    if valor not in ("tls", "plain", "bridge"):
+        raise ValueError("--mqtt-transport deve ser tls, plain ou bridge")
     return valor
 
 
@@ -220,7 +223,9 @@ def start(
     tag: Annotated[list[str] | None, typer.Option(
         "--tag", help="Leitor físico: EPC=Nome do equipamento (repita por tag)")] = None,
     mqtt_transport: Annotated[str | None, typer.Option(
-        "--mqtt-transport", help="Broker externo: tls (8883) ou plain (1883, laboratório)")] = None,
+        "--mqtt-transport",
+        help="Broker externo: tls (8883), plain (1883, laboratório) ou bridge "
+             "(leitor sem TLS no notebook → HiveMQ Cloud com TLS)")] = None,
 ) -> None:
     """Prepara perfil e portas, sobe infraestrutura/migrations, semeia o domínio e inicia o ensaio.
 
@@ -254,14 +259,22 @@ def start(
             raise ValueError("--fresh só é permitido no banco local")
         etapa = "configuração do ambiente"
         transporte = _transporte_escolhido(mqtt_transport, modo, interativo)
+        if transporte == "bridge" and origem != "physical":
+            raise ValueError("a bridge é para o leitor físico; o simulador publica "
+                             "direto no HiveMQ Cloud com TLS")
         arquivo, valores = carregar(modo, env_file, interativo, transporte)
         if transporte == "plain":
             _avisar_transporte_plain(valores, interativo)
         ambiente = dict(os.environ, **valores)
+        if transporte == "bridge":
+            ambiente.update(bridge.perfil_bridge(
+                reader_id, reading_topic(reader_id, portal=portal_id), valores,
+                publisher_env_file))
         print(f"Configuração carregada de {arquivo.name}")
         if modo == "managed":
             print(f"Broker externo: {valores['MQTT_HOST']}:{valores.get('MQTT_PORT', '8883')} "
-                  f"({'mqtt sem TLS' if transporte == 'plain' else 'mqtts/TLS'}); "
+                  f"({'mqtt sem TLS' if transporte == 'plain' else 'mqtts/TLS'}"
+                  f"{'; leitor via bridge local sem TLS' if transporte == 'bridge' else ''}); "
                   f"tópico {valores.get('MQTT_TOPIC', 'easy/dev/hupaa/+/+/readings')}")
         if timestamp_format and timestamp_format not in ("counter", "rfc3339", "epoch_ms"):
             raise ValueError("--timestamp-format deve ser counter, rfc3339 ou epoch_ms")
@@ -298,6 +311,20 @@ def start(
                 etapa = f"saúde do {servico}"
                 print(f"Aguardando {servico} saudável...")
                 aguardar(arquivo, modo, servico, env=ambiente)
+        if transporte == "bridge":
+            etapa = "verificação da porta MQTT local"
+            porta = int(valores.get("MQTT_LOCAL_PORT", "1883"))
+            print("Verificando a porta MQTT local da bridge...")
+            _preparar_portas({porta: valores.get("MQTT_BIND_ADDRESS", "0.0.0.0")},
+                             projeto, force, interativo)
+            etapa = "inicialização da bridge MQTT"
+            print("Iniciando a bridge MQTT local → HiveMQ Cloud...")
+            started = True
+            compose(arquivo, modo, "up", "-d", bridge.SERVICO, env=ambiente, mostrar=True)
+            aguardar(arquivo, modo, bridge.SERVICO, env=ambiente)
+            etapa = "conexão da bridge ao HiveMQ Cloud"
+            bridge.aguardar_conexao(arquivo, ambiente)
+            print("Bridge conectada ao HiveMQ Cloud")
         migracao = "migrate-local" if modo == "local" else "migrate-managed"
         ingestor = "ingestor-local" if modo == "local" else "ingestor-managed"
         etapa = "build da imagem e migrations"
@@ -349,6 +376,10 @@ def start(
                 for valor, nome in tags_fisicas:
                     print(f"  {valor} → {nome}")
             topico = reading_topic(reader_id, portal=portal_id)
+            if transporte == "bridge":
+                print(f"Configure o leitor: URL mqtt://{bridge.ip_local()}, porta "
+                      f"{valores.get('MQTT_LOCAL_PORT', '1883')}, usuário e senha vazios, "
+                      f"tópico {topico}. A bridge repassa as leituras ao HiveMQ Cloud.")
             print(f"Pronto para leituras do leitor físico em {valores['MQTT_HOST']}:"
                   f"{valores.get('MQTT_PORT')} no tópico {topico}. Use 'stop' ao encerrar.")
         if interativo and not no_terminals:
