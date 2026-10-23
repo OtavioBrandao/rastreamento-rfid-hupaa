@@ -12,8 +12,9 @@ Fluxo:
    externo) e o frontend Vite, em segundo plano, e abre o navegador.
 3. Entrega o terminal ao launcher, que segue com as perguntas dele, sobe o
    backend em Docker, abre os três terminais de observação (MQTT, Ingestor e
-   Banco) e, nas opções 1 e 4, abre o simulador visual (``tools.lab_simulator``)
-   para mover os itens pela planta.
+   Banco). Nas opções 1 e 4 a API sobe com o simulador web habilitado e o
+   navegador abre em ``#/simulador`` (planta EASY ou HUPAA); o controle dos
+   equipamentos fica num link próprio, em outra aba. Não há aplicativo desktop.
 
 Ctrl+C encerra o launcher (que derruba os contêineres) e depois a API e o
 frontend. A saída da API e do frontend vai para ``data/dev/*.log`` para não
@@ -41,10 +42,10 @@ LOGS = ROOT / "data" / "dev"
 WINDOWS = os.name == "nt"
 
 TESTES = {
-    "1": ("local", "synthetic", "Local com simulador visual (dados sintéticos)"),
+    "1": ("local", "synthetic", "Local com simulador web (dados sintéticos)"),
     "2": ("local", "physical", "Local com leitor físico"),
     "3": ("managed", "physical", "Broker e banco externos com leitor físico"),
-    "4": ("managed", "synthetic", "Broker e banco externos com simulador visual (dados sintéticos)"),
+    "4": ("managed", "synthetic", "Broker e banco externos com simulador web (dados sintéticos)"),
 }
 
 
@@ -56,7 +57,27 @@ def python_do_projeto() -> str:
     return sys.executable
 
 
-def servir_api(modo: str, env_file: str | None, host: str, porta: int) -> None:
+def ambiente_simulador(modo: str, valores: dict[str, str]) -> dict[str, str]:
+    """Variáveis do simulador web na API: local usa o Mosquitto do ensaio; externo,
+    a credencial de PUBLICAÇÃO de ``.env.cloud.reader-01`` (nunca a do ingestor)."""
+    extras = {"SIMULADOR_HABILITADO": "true", "APP_ENV": valores.get("APP_ENV") or "development",
+              "SIMULADOR_TOPICO_INGESTOR": valores.get("MQTT_TOPIC") or "easy/dev/hupaa/+/+/readings"}
+    if modo == "managed" and valores.get("MQTT_INSECURE_LAB") != "true":
+        from tools.lab_launcher.cli import _perfil_publicador
+
+        try:
+            perfil = _perfil_publicador(modo, valores, None, False)
+        except ValueError as erro:
+            print(f"Simulador web desabilitado: {erro}", flush=True)
+            return {"SIMULADOR_HABILITADO": "false"}
+        extras.update({f"SIMULADOR_{chave}": valor for chave, valor in perfil.items()
+                       if chave in ("MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_CA_CERT")})
+        extras["SIMULADOR_MQTT_TOPICO_PERMITIDO"] = perfil.get("MQTT_TOPIC", "")
+    return extras
+
+
+def servir_api(modo: str, env_file: str | None, host: str, porta: int,
+               simulador: bool = False) -> None:
     """Roda no Python da .venv: resolve o banco como o launcher e inicia o uvicorn."""
     sys.path.insert(0, str(ROOT))
     import uvicorn
@@ -65,6 +86,8 @@ def servir_api(modo: str, env_file: str | None, host: str, porta: int) -> None:
 
     _, valores = carregar(modo, Path(env_file) if env_file else None, interativo=False)
     os.environ.update(valores)
+    if simulador:
+        os.environ.update(ambiente_simulador(modo, valores))
     uvicorn.run("api.main:app", host=host, port=porta)
 
 
@@ -78,11 +101,6 @@ def escolher_teste(valor: str | None) -> str:
     if valor not in TESTES:
         sys.exit("Escolha um teste de 1 a 4.")
     return valor
-
-
-def flet_disponivel(python: str) -> bool:
-    """Verifica em subprocesso se o Python escolhido consegue importar o Flet."""
-    return subprocess.run([python, "-c", "import flet"], capture_output=True).returncode == 0
 
 
 def porta_ocupada(host: str, porta: int) -> bool:
@@ -151,10 +169,11 @@ def main() -> int:
     parser.add_argument("--front-port", type=int, default=5173)
     parser.add_argument("--sem-navegador", action="store_true", help="não abre o navegador")
     parser.add_argument("--servir-api", choices=("local", "managed"), help=argparse.SUPPRESS)
+    parser.add_argument("--com-simulador", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     if args.servir_api:
-        servir_api(args.servir_api, args.env_file, args.host, args.api_port)
+        servir_api(args.servir_api, args.env_file, args.host, args.api_port, args.com_simulador)
         return 0
 
     for fluxo in (sys.stdout, sys.stderr):
@@ -165,15 +184,13 @@ def main() -> int:
     else:
         modo, origem, descricao = TESTES[escolher_teste(args.teste)]
         print(f"\n> {descricao}")
-        if origem == "synthetic" and not flet_disponivel(python):
-            sys.exit("O simulador visual precisa do Flet. Instale com:\n"
-                     f"  {python} -m pip install -r requirements/lab.txt")
 
     if porta_ocupada(args.host, args.api_port):
         sys.exit(f"A porta {args.api_port} já está em uso. Use --api-port <outra porta>.")
     if porta_ocupada("127.0.0.1", args.front_port):
         sys.exit(f"A porta {args.front_port} (frontend) já está em uso. Use --front-port <outra porta>.")
     front_url = f"http://localhost:{args.front_port}/"
+    abrir_url = front_url + ("#/simulador" if origem == "synthetic" else "")
     npm = shutil.which("npm")
     if npm is None:
         sys.exit("npm não encontrado no PATH. Instale o Node.js.")
@@ -193,6 +210,8 @@ def main() -> int:
                "--host", args.host, "--api-port", str(args.api_port)]
     if args.env_file:
         api_cmd += ["--env-file", args.env_file]
+    if origem == "synthetic":
+        api_cmd.append("--com-simulador")
     processos: list[subprocess.Popen] = []
     launcher: subprocess.Popen | None = None
     try:
@@ -207,10 +226,12 @@ def main() -> int:
                 return 1
         print(f"API: http://{args.host}:{args.api_port}/docs")
         print(f"Frontend: {front_url}")
+        if origem == "synthetic":
+            print(f"Simulador web: {abrir_url}")
         if log_api:
             print(f"Logs da API e do frontend: {LOGS}")
         if not args.sem_navegador:
-            webbrowser.open(front_url)
+            webbrowser.open(abrir_url)
 
         if not com_launcher:
             print("Ctrl+C encerra tudo.", flush=True)

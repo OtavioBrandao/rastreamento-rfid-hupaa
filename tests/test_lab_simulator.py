@@ -1,22 +1,24 @@
-"""Simulador visual: regras de detecção, publicação MQTT e cadastro dos itens."""
+"""Laboratório: publicador sintético, equivalência do simulador web com o Flet e cadastro."""
 
 from __future__ import annotations
 
 import json
 import math
-import random
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import func, select
 
+from api.simulacao.geometria import RSSI_LONGE, RSSI_PERTO, antenas_do_layout, detectar
+from api.simulacao.motor import EstadoSessao
+from api.simulacao.presets import preset
+from api.simulacao.service import PREFIXO_EPC
 from db.models import AssociacaoTagEquipamento, Equipamento, Tag
 from rfid_ingestion.config import Settings
 from rfid_ingestion.parsing import build_event
 from tools.lab_launcher import synthetic
 from tools.lab_launcher.seed import TIPO_SINTETICO, semear, semear_equipamentos
-from tools.lab_simulator import modelo
 
 LOCAL = {"MQTT_HOST": "localhost", "MQTT_PORT": "1883", "MQTT_MODE": "local"}
 
@@ -95,7 +97,7 @@ def test_publicador_indica_falta_de_puback_apos_desconexao(monkeypatch):
     publicador = synthetic.Publicador(LOCAL, "reader-01")
     publicador.conectar()
     with pytest.raises(RuntimeError, match="credencial do publicador tem permissão Publish"):
-        publicador.emitir(modelo.PREFIXO_EPC + "0" * 16, 1, -6000)
+        publicador.emitir(PREFIXO_EPC + "0" * 16, 1, -6000)
 
 
 def test_publicador_falha_quando_puback_demora(monkeypatch):
@@ -104,63 +106,52 @@ def test_publicador_falha_quando_puback_demora(monkeypatch):
     monkeypatch.setattr(synthetic, "create_client", lambda settings: Cliente(confirmado=False))
     publicador = synthetic.Publicador(LOCAL, "reader-01")
     publicador.conectar()
-    publicador.emitir(modelo.PREFIXO_EPC + "0" * 16, 1, -6000)
+    publicador.emitir(PREFIXO_EPC + "0" * 16, 1, -6000)
     assert publicador.pendentes == 1
     relogio.agora += synthetic.LIMITE_PUBACK_S + 1
     with pytest.raises(RuntimeError, match="sem PUBACK"):
         publicador.conferir()
 
 
+# Equivalência com o simulador Flet removido: mesmo preset EASY, mesmo raio
+# (16 na escala de x), mesma proporção 880 x 560 e mesmo período de 0,2 s.
+PRESET_EASY = preset("easy")
+ANTENAS = antenas_do_layout(PRESET_EASY)
+PROPORCAO = PRESET_EASY["proporcao"]
+
+
 def test_alcance_das_antenas_e_rssi_por_distancia():
-    antena_a, antena_b = modelo.ANTENAS
-    assert [(a.porta, valor) for a, valor in modelo.detectar(antena_a.x, antena_a.y)] == [
-        (1, modelo.RSSI_PERTO)]
-    borda = modelo.detectar(antena_b.x + modelo.RAIO, antena_b.y)
-    assert [(a.porta, valor) for a, valor in borda] == [(2, modelo.RSSI_LONGE)]
-    assert modelo.detectar(50, 20) == []
+    antena_a, antena_b = ANTENAS
+    assert (antena_a.x, antena_a.y, antena_a.alcance) == (28, 66, 16)
+    assert [(a.porta, valor) for a, valor in detectar(antena_a.x, antena_a.y, ANTENAS, PROPORCAO)] == [
+        (1, RSSI_PERTO)]
+    borda = detectar(antena_b.x + antena_b.alcance, antena_b.y, ANTENAS, PROPORCAO)
+    assert [(a.porta, valor) for a, valor in borda] == [(2, RSSI_LONGE)]
+    assert detectar(50, 20, ANTENAS, PROPORCAO) == []
     # Alcance circular na tela: o mesmo raio em pixels vale mais unidades em y.
-    raio_y = modelo.RAIO / modelo.PROPORCAO_Y
-    assert [a.porta for a, _ in modelo.detectar(antena_a.x, antena_a.y - raio_y + 0.5)] == [1]
-    assert modelo.detectar(antena_a.x, antena_a.y - raio_y - 0.5) == []
-    assert math.hypot(antena_a.x - antena_b.x, antena_a.y - antena_b.y) > 2 * modelo.RAIO
-
-
-def test_itens_tem_epcs_unicos_e_surgem_fora_do_alcance():
-    rng = random.Random(7)
-    itens = modelo.criar_itens(["Bomba 01", "Monitor", "Cadeira", "Oxímetro"], rng)
-    assert len({item.epc for item in itens}) == 4
-    assert all(len(item.epc) == 24 and item.epc.startswith(modelo.PREFIXO_EPC)
-               for item in itens)
-    assert all(not modelo.detectar(item.x, item.y) for item in itens)
-    outra = modelo.criar_itens(["Bomba 01", "Monitor", "Cadeira", "Oxímetro"],
-                               random.Random(8))
-    assert [(i.x, i.y) for i in itens] != [(i.x, i.y) for i in outra]
-    with pytest.raises(ValueError, match="diferentes"):
-        modelo.criar_itens(["Bomba", "bomba"], rng)
-    with pytest.raises(ValueError, match="nome"):
-        modelo.criar_itens(["Bomba", " "], rng)
-    with pytest.raises(ValueError, match="de 1 a"):
-        modelo.gerar_epcs(modelo.MAX_ITENS + 1, rng)
+    raio_y = antena_a.alcance * PROPORCAO
+    assert [a.porta for a, _ in detectar(antena_a.x, antena_a.y - raio_y + 0.5, ANTENAS, PROPORCAO)] == [1]
+    assert detectar(antena_a.x, antena_a.y - raio_y - 0.5, ANTENAS, PROPORCAO) == []
+    assert math.hypot(antena_a.x - antena_b.x, antena_a.y - antena_b.y) > 2 * antena_a.alcance
 
 
 def test_leituras_seguem_o_periodo_e_a_antena_do_alcance():
-    antena_a, antena_b = modelo.ANTENAS
-    item = modelo.Item("Bomba", modelo.PREFIXO_EPC + "1" * 16, antena_a.x, antena_a.y)
-    assert [(a.porta, v) for _, a, v in modelo.leituras_devidas([item], 10.0)] == [
-        (1, modelo.RSSI_PERTO)]
-    assert modelo.leituras_devidas([item], 10.0 + modelo.PERIODO_LEITURA_S / 2) == []
-    assert len(modelo.leituras_devidas([item], 10.0 + modelo.PERIODO_LEITURA_S)) == 1
-    item.x, item.y = antena_b.x, antena_b.y
-    assert [a.porta for _, a, _ in modelo.leituras_devidas([item], 10.5)] == [2]
-    item.x, item.y = 50, 20
-    assert modelo.leituras_devidas([item], 11.0) == []
-    assert modelo.limitar(-10, 150) == (modelo.MARGEM, 100 - modelo.MARGEM)
+    antena_a, antena_b = ANTENAS
+    item = {"id": "i1", "epc": PREFIXO_EPC + "1" * 16, "x": antena_a.x, "y": antena_a.y}
+    estado = EstadoSessao(1, "x", 1, "sim-l1", PROPORCAO, ANTENAS,
+                          {"sim-easy-01": "easy/dev/hupaa/sim-l1/sim-easy-01/readings"}, [item])
+    assert [(porta, rssi) for _, _, porta, rssi in estado.devidas(10.0, 0.2)] == [(1, RSSI_PERTO)]
+    assert estado.devidas(10.1, 0.2) == []
+    assert len(estado.devidas(10.2, 0.2)) == 1
+    item.update(x=antena_b.x, y=antena_b.y)
+    assert [porta for _, _, porta, _ in estado.devidas(10.5, 0.2)] == [2]
+    item.update(x=50, y=20)
+    assert estado.devidas(11.0, 0.2) == []
 
 
-def test_itens_do_simulador_viram_equipamentos_nomeados(db):
+def test_tags_do_laboratorio_viram_equipamentos_nomeados(db):
     semear(db)
-    itens = modelo.criar_itens(["Bomba de infusão 01", "Monitor 02"], random.Random(3))
-    pares = [(item.epc, item.nome) for item in itens]
+    pares = [(PREFIXO_EPC + "A" * 16, "Bomba de infusão 01"), (PREFIXO_EPC + "B" * 16, "Monitor 02")]
     primeiro = semear_equipamentos(db, pares, TIPO_SINTETICO)
     segundo = semear_equipamentos(db, pares, TIPO_SINTETICO)
     assert all("equipamento criado" in valor for valor in primeiro.values())

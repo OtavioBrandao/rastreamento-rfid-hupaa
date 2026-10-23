@@ -1,9 +1,7 @@
-"""Publica leituras sintéticas no contrato MQTT existente."""
+"""Publica leituras sintéticas no contrato MQTT existente (scripts de galeria e ensaios)."""
 
 from __future__ import annotations
 
-import json
-import secrets
 import time
 from collections import deque
 from threading import Event
@@ -12,46 +10,20 @@ from uuid import uuid4
 import paho.mqtt.client as mqtt
 
 from api.epc import normalizar_epc
+from api.simulacao.publicador import (
+    ASSINATURA_PADRAO,
+    LIMITE_PUBACK_S,
+    _falha_puback,
+    novo_contador,
+    payload,
+    topico_sintetico,
+)
 from rfid_ingestion.config import Settings
 from rfid_ingestion.connection import create_client
-from rfid_ingestion.topics import reading_topic
 
-ASSINATURA_PADRAO = "easy/dev/hupaa/+/+/readings"
-LIMITE_PUBACK_S = 10.0
-
-
-def _falha_puback(topic: str, desconectado: bool) -> str:
-    """Monta diagnóstico de publicação sem PUBACK, distinguindo timeout de desconexão."""
-    if desconectado:
-        return (f"conexão MQTT encerrada antes do PUBACK para {topic}; confira se a "
-                "credencial do publicador tem permissão Publish nesse tópico")
-    return (f"sem PUBACK QoS 1 em {LIMITE_PUBACK_S:g} s para {topic}; confira conexão, "
-            "permissão Publish e tópico da credencial do publicador")
-
-
-def novo_contador(total: int) -> int:
-    """Reserva um intervalo de sete dígitos para identificar este ensaio."""
-    if total < 1 or total >= 9_000_000:
-        raise ValueError("quantidade de mensagens excede o contador sintético de sete dígitos")
-    return 1_000_000 + secrets.randbelow(9_000_000 - total)
-
-
-def topico_sintetico(config: dict[str, str], reader_id: str, portal_id: str) -> str:
-    """Tópico do leitor, no mesmo ambiente/site assinado pelo ingestor."""
-    assinatura_texto = config.get("MQTT_TOPIC", ASSINATURA_PADRAO)
-    assinatura = assinatura_texto.split("/")
-    ambiente = assinatura[1] if len(assinatura) == 6 and assinatura[1] != "+" else "dev"
-    site = assinatura[2] if len(assinatura) == 6 and assinatura[2] != "+" else "hupaa"
-    topic = reading_topic(reader_id, ambiente, site, portal_id)
-    if not mqtt.topic_matches_sub(assinatura_texto, topic):
-        raise ValueError("tópico sintético não corresponde à assinatura do ingestor")
-    return topic
-
-
-def payload(epc: str, porta: int, rssi: int, contador: int) -> str:
-    """JSON compacto na ordem observada no leitor; sem ``readerid`` no corpo."""
-    return json.dumps({"epc": epc, "rssi": rssi, "antenna": porta,
-                       "timestamp": str(contador)}, separators=(",", ":"))
+# Contrato compartilhado com o simulador web (api/simulacao/publicador.py).
+__all__ = ["ASSINATURA_PADRAO", "LIMITE_PUBACK_S", "Publicador", "novo_contador", "payload",
+           "topico_sintetico"]
 
 
 class Publicador:
