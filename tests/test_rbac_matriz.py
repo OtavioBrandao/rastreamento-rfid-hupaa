@@ -34,7 +34,7 @@ from api.main import app
 
 pytestmark = pytest.mark.autenticacao_real
 
-PUBLICAS = {("GET", "/health"), ("POST", "/auth/login"), ("POST", "/auth/logout")}
+PUBLICAS = {("GET", "/health"), ("GET", "/health/ready"), ("POST", "/auth/login"), ("POST", "/auth/logout")}
 QUALQUER_SESSAO = {("GET", "/auth/me"), ("POST", "/auth/trocar-senha")}
 METODOS_DE_CONSULTA = {"GET", "HEAD", "OPTIONS"}
 

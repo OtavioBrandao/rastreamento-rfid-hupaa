@@ -1,0 +1,8 @@
+# Contexto mínimo (allowlist) do build do frontend.
+**
+!frontend/**
+frontend/node_modules
+frontend/dist
+frontend/.vite
+!deploy/production/nginx.conf.template
+!deploy/production/proxy_params.inc

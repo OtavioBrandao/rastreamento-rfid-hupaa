@@ -9,15 +9,19 @@ Sobe com:
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
-from api import __version__
+from api import __version__, seguranca_http
 from api.auditoria import correlacao_da_requisicao, correlation_id_valido
 from api.config_auth import configuracao_auth_do_ambiente
+from api.database import get_db
 from api.logging_config import configurar_logging_api
 from api.router_associacao import router as router_associacao
 from api.router_auditoria import router as router_auditoria
@@ -51,6 +55,7 @@ async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
     """Valida a configuração de autenticação antes de liberar a aplicação ASGI."""
     configuracao_auth_do_ambiente()
     StatusPolicy.from_env()
+    seguranca_http.validar_producao()
     # Simulador web: em produção, pedir para ligá-lo derruba a subida (nunca publica por engano).
     simulador = config_simulador.carregar()
     if simulador.habilitado:
@@ -101,6 +106,9 @@ app.include_router(router_auditoria)
 app.include_router(router_simulacao)
 
 CABECALHO_CORRELACAO = "X-Correlation-ID"
+
+# Cabeçalhos de segurança, verificação de Origin e CORS opcional (deploy).
+seguranca_http.instalar(app)
 
 
 @app.middleware("http")
@@ -183,3 +191,19 @@ def health() -> dict[str, str]:
     endpoint próprio.
     """
     return {"status": "ok"}
+
+
+@app.get("/health/ready", tags=["infra"], summary="Readiness check")
+def ready(response: Response, db: Session = Depends(get_db)) -> dict[str, str]:
+    """
+    Readiness: a API só deve receber tráfego quando alcança o banco. Separado
+    do `/health` (liveness) para o orquestrador não reiniciar um processo
+    saudável durante uma queda do PostgreSQL — só tirá-lo do balanceamento.
+    Nunca devolve detalhes da conexão.
+    """
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        response.status_code = 503
+        return {"status": "indisponivel", "banco": "falha"}
+    return {"status": "ok", "banco": "ok"}

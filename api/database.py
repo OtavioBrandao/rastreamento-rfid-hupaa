@@ -10,7 +10,8 @@ DATABASE_URL — e isso tornaria impossível até importar `api.main` sem
 ambiente configurado (coleta de teste, `--help`, geração de OpenAPI).
 """
 
-from collections.abc import Iterator
+import os
+from collections.abc import Iterator, Mapping
 from functools import lru_cache
 from pathlib import Path
 
@@ -30,7 +31,31 @@ def get_engine() -> Engine:
     # pool_pre_ping: o Neon (e qualquer pooler) derruba conexão ociosa; sem
     # isso a primeira request depois de um período parado morre com
     # "server closed the connection unexpectedly".
-    return create_engine(get_database_url(), pool_pre_ping=True, future=True)
+    return create_engine(get_database_url(), pool_pre_ping=True, future=True, **opcoes_pool())
+
+
+def opcoes_pool(environ: Mapping[str, str] | None = None) -> dict:
+    """Pool ajustável por ambiente (padrões do SQLAlchemy quando ausentes).
+
+    `DB_POOL_SIZE`/`DB_MAX_OVERFLOW` limitam conexões por processo — some os
+    workers ao dimensionar contra o limite do provedor; `DB_POOL_RECYCLE_S`
+    renova conexões antes do corte por ociosidade de poolers gerenciados;
+    `DB_CONNECT_TIMEOUT_S` evita requisições presas com o banco fora do ar.
+    """
+    source = os.environ if environ is None else environ
+    opcoes: dict = {}
+    for nome, chave in (("DB_POOL_SIZE", "pool_size"), ("DB_MAX_OVERFLOW", "max_overflow"),
+                        ("DB_POOL_RECYCLE_S", "pool_recycle"), ("DB_POOL_TIMEOUT_S", "pool_timeout")):
+        valor = (source.get(nome) or "").strip()
+        if valor:
+            numero = int(valor)
+            if numero < (-1 if chave == "pool_recycle" else 0):
+                raise ValueError(f"{nome} inválido")
+            opcoes[chave] = numero
+    timeout = (source.get("DB_CONNECT_TIMEOUT_S") or "").strip()
+    if timeout:
+        opcoes["connect_args"] = {"connect_timeout": int(timeout)}
+    return opcoes
 
 
 @lru_cache(maxsize=1)
