@@ -44,6 +44,8 @@ RECURSO_POR_PREFIXO = [
     # Presença por leitura bruta (página Leituras): mesma permissão das leituras do laboratório.
     ("/api/leituras", "laboratorio"),
     ("/api/ativos", "equipamentos"),
+    # Cadastro pelo dashboard (manual e por EPC detectado): mesmo recurso de equipamentos.
+    ("/api/cadastro", "equipamentos"),
     ("/api/dashboard", "equipamentos"),
     ("/equipamentos", "equipamentos"),
     ("/tipos-equipamento", "equipamentos"),

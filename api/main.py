@@ -23,6 +23,7 @@ from api.router_associacao import router as router_associacao
 from api.router_auditoria import router as router_auditoria
 from api.router_auth import router as router_auth
 from api.router_busca_ativos import router as router_busca_ativos
+from api.router_cadastro import router as router_cadastro
 from api.router_correcoes import router as router_correcoes
 from api.router_dashboard import router as router_dashboard
 from api.router_equipamento import router as router_equipamento
@@ -66,6 +67,8 @@ app.include_router(router_equipamento)
 # ISS-025: correção manual (localização e cadastro), logo depois de equipamentos.
 app.include_router(router_correcoes)
 app.include_router(router_busca_ativos)
+# Cadastro operacional pelo dashboard (manual e por EPC detectado).
+app.include_router(router_cadastro)
 app.include_router(router_dashboard)
 app.include_router(router_leituras_laboratorio)
 app.include_router(router_leituras)
