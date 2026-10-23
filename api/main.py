@@ -31,10 +31,13 @@ from api.router_hardware import router as router_hardware
 from api.router_leituras import router as router_leituras
 from api.router_leituras_laboratorio import router as router_leituras_laboratorio
 from api.router_localizacao import router as router_localizacao
+from api.router_simulacao import router as router_simulacao
 from api.router_status_hardware import router as router_status_hardware
 from api.router_tipos_equipamento import router as router_tipos_equipamento
 from api.router_topologia_portal import router as router_topologia_portal
 from api.router_usuarios import router as router_usuarios
+from api.simulacao import config as config_simulador
+from api.simulacao.motor import iniciar_motor, parar_motor
 from rfid_ingestion.reader_status import StatusPolicy
 
 # Sem isto o uvicorn descarta todo INFO de `api.*` (ver api/logging_config.py).
@@ -48,7 +51,15 @@ async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
     """Valida a configuração de autenticação antes de liberar a aplicação ASGI."""
     configuracao_auth_do_ambiente()
     StatusPolicy.from_env()
-    yield
+    # Simulador web: em produção, pedir para ligá-lo derruba a subida (nunca publica por engano).
+    simulador = config_simulador.carregar()
+    if simulador.habilitado:
+        from api.database import get_engine
+        iniciar_motor(simulador, get_engine())
+    try:
+        yield
+    finally:
+        parar_motor()
 
 
 app = FastAPI(
@@ -86,6 +97,8 @@ app.include_router(router_auth)
 app.include_router(router_usuarios)
 # ISS-028: consulta da trilha de auditoria (só leitura, só administrador).
 app.include_router(router_auditoria)
+# Simulador web (planta, sessões e monitoramento); desligado por padrão.
+app.include_router(router_simulacao)
 
 CABECALHO_CORRELACAO = "X-Correlation-ID"
 

@@ -46,6 +46,8 @@ RECURSO_POR_PREFIXO = [
     ("/api/ativos", "equipamentos"),
     # Cadastro pelo dashboard (manual e por EPC detectado): mesmo recurso de equipamentos.
     ("/api/cadastro", "equipamentos"),
+    # Simulador web: consulta para todos; configurar e mover itens, só administrador.
+    ("/api/simulacao", "simulacao"),
     ("/api/dashboard", "equipamentos"),
     ("/equipamentos", "equipamentos"),
     ("/tipos-equipamento", "equipamentos"),
@@ -64,13 +66,13 @@ RECURSO_POR_PREFIXO = [
 
 PERMISSOES_OPERACIONAL = [
     "equipamentos:consultar", "hardware:consultar", "laboratorio:consultar",
-    "localizacao:consultar",
+    "localizacao:consultar", "simulacao:consultar",
 ]
 PERMISSOES_ADMINISTRADOR = sorted([
     "equipamentos:consultar", "equipamentos:alterar", "localizacao:consultar",
     "localizacao:alterar", "hardware:consultar", "hardware:alterar",
     "laboratorio:consultar", "usuarios:administrar", "auditoria:consultar",
-    "equipamentos:corrigir",
+    "equipamentos:corrigir", "simulacao:consultar", "simulacao:alterar",
 ])
 
 

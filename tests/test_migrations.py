@@ -15,7 +15,7 @@ def test_empty_upgrade_repeat_downgrade_reupgrade(pg_empty_schema):
     command.upgrade(config, "head")
     command.check(config)
     inspector = inspect(pg_empty_schema)
-    assert len(inspector.get_table_names()) == 19
+    assert len(inspector.get_table_names()) == 21
     columns = {c["name"]: c for c in inspector.get_columns("leituras_brutas")}
     assert columns["event_id"]["type"].length == 71
     assert not columns["event_id"]["nullable"]
@@ -28,7 +28,7 @@ def test_empty_upgrade_repeat_downgrade_reupgrade(pg_empty_schema):
         for index in inspector.get_indexes("passagens")
     )
     with pg_empty_schema.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "c024a1b2c3d4"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "s040a1b2c3d4"
 
 
 def test_existing_reader_receives_serial_as_initial_reader_id(pg_empty_schema):
