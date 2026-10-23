@@ -268,8 +268,9 @@ def adicionar_item(db: Session, codigo: str, *, nome: str, tipo: str | None, epc
             valor = _epc_valido(epc, itens)
         elif gerar_epc:
             valor = _gerar_epc({item["epc"] for item in itens if item["epc"]})
-        px = _limitar(x if x is not None else 4 + (len(itens) % 10) * 3)
-        py = _limitar(y if y is not None else 92)
+        # Sem posição informada: fila na borda inferior, longe das antenas do preset.
+        px = _limitar(x if x is not None else 8 + (len(itens) % 6) * 16)
+        py = _limitar(y if y is not None else 94 - (len(itens) // 6 % 4) * 5)
         itens.append({"id": f"it-{secrets.token_hex(4)}", "nome": nome.strip()[:80],
                       "tipo": (tipo or "").strip()[:60] or None, "epc": valor,
                       "x": px, "y": py, "x0": px, "y0": py})
