@@ -1,5 +1,9 @@
 # Simulador visual do laboratório
 
+> **Substituído em 23/10/2026** pelo [simulador web unificado](simulador-web.md)
+> (EASY e HUPAA no navegador). `tools/lab_simulator` e o Flet foram removidos
+> depois de validada a equivalência; este registro fica como histórico.
+
 ## O que é
 
 As opções sintéticas do launcher (1: local; 4: broker e banco externos)

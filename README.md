@@ -33,7 +33,7 @@ os equipamentos do ensaio EASY continuam em suas próprias zonas.
 
 ## Executar o projeto
 
-Requisitos: **Python 3.12**, **Node.js 22**, Docker com Compose v2 e ambiente gráfico para o simulador Flet. O desenvolvimento contempla Ubuntu 24.04 e Windows 11 com Docker Desktop/WSL2. Execute os comandos na raiz do repositório.
+Requisitos: **Python 3.12**, **Node.js 22**, Docker com Compose v2 e um navegador. O desenvolvimento contempla Ubuntu 24.04 e Windows 11 com Docker Desktop/WSL2. Execute os comandos na raiz do repositório.
 
 ```bash
 python -m venv .venv
@@ -93,13 +93,21 @@ descartável: os testes apagam dados. Não use o banco da demonstração para a 
 O [guia de configuração](docs/operations/execution.md) detalha portas, transporte,
 permissões MQTT e execução por componente.
 
-### Modo de simulação
+### Modo de simulação (simulador web)
 
 ```bash
 python scripts/dev.py --teste 1
 ```
 
-O launcher prepara PostgreSQL e Mosquitto locais, aplica migrations, cadastra a topologia EASY e inicia o ingestor. A API e o frontend abrem junto com a janela do simulador. Defina os nomes dos equipamentos e arraste os itens entre as antenas A e B. Saia do alcance de uma antena e entre no da outra dentro da janela de passagem para observar a mudança de zona.
+O launcher prepara PostgreSQL e Mosquitto locais, aplica migrations, cadastra a topologia EASY e inicia o ingestor. A API sobe com o **simulador web** habilitado e o navegador abre em [localhost:5173/#/simulador](http://localhost:5173/#/simulador). Não há aplicativo desktop: tudo acontece no navegador.
+
+1. Escolha **Laboratório EASY** (duas salas, um portal, duas antenas) ou **Hospital HUPAA** (planta de referência, leitores EZ700 e DR Max virtuais).
+2. Crie o layout padrão e, no HUPAA, posicione leitores, antenas, portais e zonas no editor; salve.
+3. Clique em **Iniciar simulação**: o link de controle abre em outra aba.
+4. Na aba de controle, adicione equipamentos (etiquetado não cadastrado, com EPC de um equipamento cadastrado ou sem etiqueta) e arraste-os pelas áreas de leitura.
+5. Volte ao painel: **Monitoramento do pipeline**, **Leituras**, **Cadastro** e o dashboard mostram leituras, EPCs desconhecidos, passagens e a última zona — calculados pelo mesmo ingestor e motor de inferência dos leitores físicos.
+
+Uma leitura isolada não muda a zona: atravesse um portal (saia do alcance de um lado e entre no do outro). [Guia do simulador web](docs/implementations/simulador-web.md).
 
 O perfil `config/environments/.env.local` é criado a partir do exemplo quando ainda não existe. Para acessar as telas, crie o administrador inicial em outro terminal **depois de o launcher concluir as migrations**:
 
@@ -108,6 +116,16 @@ python -m api.criar_admin --env-file config/environments/.env.local --nome "Admi
 ```
 
 A senha é solicitada no terminal. Frontend: [localhost:5173](http://localhost:5173/). API/OpenAPI: [127.0.0.1:8010/docs](http://127.0.0.1:8010/docs). `Ctrl+C` encerra a sessão; a exclusão de volumes locais exige escolha explícita.
+
+### Cadastro de equipamentos pelo dashboard
+
+A página **Cadastro** substitui o cadastro pelo terminal:
+
+- **Cadastrar por leitura RFID**: aproxime o equipamento etiquetado de uma antena; o EPC aparece como *Não cadastrada* com leitor, antena e horário; selecione, informe nome e tipo e confirme a associação.
+- **Cadastro manual**: digite o EPC (validado) ou deixe em branco para cadastrar sem tag.
+- **Equipamentos e tags**: associe uma tag depois a quem ainda não tem.
+
+Nomes podem se repetir (cada equipamento é um registro). Cadastrar não define localização. Só administradores cadastram; a regra é verificada na API. [Detalhes](docs/implementations/cadastro-equipamentos-web.md).
 
 ### Modo com dados do leitor
 
@@ -131,12 +149,12 @@ Sem argumentos, `python scripts/dev.py` apresenta o menu completo:
 
 | Opção | Fonte de dados | Broker e banco | Perfil |
 |---|---|---|---|
-| 1 | Simulador visual | Mosquitto + PostgreSQL locais | `config/environments/.env.local` |
+| 1 | Simulador web | Mosquitto + PostgreSQL locais | `config/environments/.env.local` |
 | 2 | Leitor físico | Mosquitto + PostgreSQL locais | `config/environments/.env.local` |
 | 3 | Leitor físico | MQTT e PostgreSQL externos | `config/environments/.env.cloud` |
-| 4 | Simulador visual | MQTT e PostgreSQL externos | `config/environments/.env.cloud` + perfil do publicador |
+| 4 | Simulador web | MQTT e PostgreSQL externos | `config/environments/.env.cloud` + perfil do publicador |
 
-Para 3 e 4, copie e preencha o exemplo correspondente em `config/environments/`. A opção 4 exige credencial de publicação separada da assinatura do ingestor. TLS é o padrão externo; MQTT sem TLS exige escolha explícita de laboratório. `python scripts/dev.py --sem-teste` executa apenas API e frontend no banco externo já preparado.
+Para 3 e 4, copie e preencha o exemplo correspondente em `config/environments/`. A opção 4 exige credencial de publicação separada da assinatura do ingestor, com permissão nos tópicos dos leitores virtuais (`easy/dev/hupaa/+/+/readings`). TLS é o padrão externo; MQTT sem TLS exige escolha explícita de laboratório. `python scripts/dev.py --sem-teste` executa apenas API e frontend no banco externo já preparado.
 
 Os perfis reais são ignorados pelo Git. Exemplos versionados não devem receber credenciais. [Configuração, portas e comandos por componente](docs/operations/execution.md).
 
@@ -194,8 +212,8 @@ Os ícones da planta usam posições configuradas, sem cálculo de coordenadas p
 
 ```mermaid
 flowchart LR
-    USER[Operador arrasta equipamentos] --> FLET[Simulador visual Flet / planta EASY]
-    FLET --> PUB[Publicador MQTT / EPCs sintéticos]
+    USER[Operador arrasta equipamentos<br/>aba de controle no navegador] --> API0[API / sessão do simulador]
+    API0 --> PUB[Motor do simulador / leitores virtuais sim-*]
     PUB --> BROKER[Mosquitto local ou MQTT externo]
     BROKER --> ING[Mesmo ingestor e adapter do ensaio]
     ING --> DB[(PostgreSQL)]
@@ -206,7 +224,17 @@ flowchart LR
     API --> UI[React / mapa EASY / leituras]
 ```
 
-O simulador gera tags de 96 bits, cadastra os equipamentos e publica leituras conforme a posição ilustrativa dos itens. A partir do broker, percorre o mesmo pipeline usado no ensaio com leitor. Alcance, RSSI e período de leitura do simulador são parâmetros de demonstração, sem equivalência metrológica com o hardware. [Fluxo e limites do simulador](docs/architecture/system-overview.md#arquitetura-com-simulador).
+O simulador web (EASY ou HUPAA) cadastra a topologia virtual e publica leituras conforme a posição ilustrativa dos itens; o cadastro dos equipamentos é feito pelo dashboard. A partir do broker, percorre o mesmo pipeline usado no ensaio com leitor. Alcance, RSSI e período de leitura do simulador são parâmetros de demonstração, sem equivalência metrológica com o hardware. [Fluxo e limites do simulador](docs/architecture/system-overview.md#arquitetura-com-simulador).
+
+## Limpeza do banco e implantação
+
+```bash
+python -m tools.limpeza_banco previa --env-file config/environments/.env.local
+```
+
+A prévia mostra o que seria removido (leituras, passagens, histórico, simulações e equipamentos de laboratório) sem alterar nada; usuários, perfis e auditoria são sempre preservados e a execução exige `--confirmar <nome do banco>`, sendo bloqueada em produção. [Procedimento completo](docs/operations/limpeza-banco.md).
+
+A hospedagem ainda não foi escolhida. `deploy/production/` traz imagens e Compose de referência (API, ingestor, migrations e frontend em Nginx na mesma origem), com `APP_ENV`, readiness, cabeçalhos de segurança e exemplo `.env.production.example`. [Estudo de arquitetura e roteiro de deploy](docs/operations/deploy.md).
 
 ## Inventário e monitoramento
 
@@ -245,7 +273,7 @@ Esse contrato é opcional do software e precisa ser validado no leitor físico.
 | Ingestão | Python 3.12, Paho MQTT 2; normalização, lotes, ACK manual e recuperação |
 | Inferência | Regras Python de debounce, passagem, direção e projeção temporal |
 | Dados | PostgreSQL 16, SQLAlchemy 2, Alembic; idempotência e integridade relacional |
-| Laboratório | Flet; simulação visual e observadores MQTT/banco/ingestor |
+| Laboratório | Simulador web (React + API) e observadores MQTT/banco/ingestor |
 | Ambiente | Docker Compose; execução local ou serviços externos configuráveis |
 
 `api/`, `db/` e `rfid_*/` contêm o backend; `frontend/` contém a interface. `tools/` reúne o laboratório; `scripts/`, os comandos auxiliares; `config/`, as configurações e exemplos; `requirements/`, as dependências; `deploy/`, o Compose e o Dockerfile. Os arquivos de controle do Git e as orientações de agentes permanecem na raiz por seu escopo técnico. [Guia do código e contratos](docs/reference/code-guide.md).
@@ -271,6 +299,8 @@ Para mais detalhes, **acesse a [documentação no repositório](docs/README.md)*
 - [Modelo de dados](docs/architecture/data-model.md) e [diagrama de entidades](docs/architecture/er-diagrama.mermaid)
 - [Módulos, funções e geração de documentação pydoc](docs/reference/code-guide.md)
 - [Ordenação estável das tabelas](docs/implementations/ordenacao-estavel-tabelas.md)
-- [Laboratório e simulador visual](docs/lab_test_launcher.md)
+- [Laboratório e simulador web](docs/lab_test_launcher.md)
+- [Preparação para implantação (deploy)](docs/operations/deploy.md)
+- [Limpeza segura do banco, backup e restauração](docs/operations/limpeza-banco.md)
 - [Experimentos e evidências](docs/experiments/README.md)
 - [Decisões de arquitetura](docs/decisions/README.md)

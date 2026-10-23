@@ -8,8 +8,8 @@ Os comandos da [página inicial](../../README.md) iniciam a demonstração compl
 ## Instalação
 
 Python 3.12, Node.js 22 e Docker Compose v2. No Windows use Docker Desktop com
-backend WSL2 e execute Python no Windows para abrir a interface gráfica Flet.
-No Ubuntu 24.04 use Docker Engine e um terminal gráfico; observadores podem usar tmux.
+backend WSL2. No Ubuntu 24.04 use Docker Engine e um terminal gráfico;
+observadores podem usar tmux. O simulador é web: basta um navegador.
 
 ```bash
 python -m venv .venv
@@ -27,10 +27,10 @@ Docker e npm são equivalentes. Para copiar exemplos, use `cp` no Ubuntu ou
 
 | Comando | Resultado |
 |---|---|
-| `python scripts/dev.py --teste 1` | API + interface + infraestrutura local + simulador visual |
+| `python scripts/dev.py --teste 1` | API (com simulador web) + interface + infraestrutura local; navegador em `#/simulador` |
 | `python scripts/dev.py --teste 2` | API + interface + infraestrutura local + leitor físico |
 | `python scripts/dev.py --teste 3` | API + interface + ingestor com broker/banco externos + leitor físico |
-| `python scripts/dev.py --teste 4` | API + interface + ingestor com broker/banco externos + simulador visual |
+| `python scripts/dev.py --teste 4` | API (com simulador web) + interface + ingestor com broker/banco externos |
 | `python scripts/dev.py --sem-teste` | API + interface no perfil externo; infraestrutura já deve estar preparada |
 
 `--sem-navegador`, `--api-port`, `--front-port` e `--env-file` ajustam a inicialização.

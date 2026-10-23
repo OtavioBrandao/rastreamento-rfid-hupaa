@@ -57,33 +57,34 @@ o evento canônico usa a recepção UTC e mantém o valor original. O RSSI origi
 
 ```mermaid
 flowchart TB
-    OP[Operador / arraste do equipamento] --> MODEL[Modelo geométrico EASY]
-    MODEL --> UI[Janela Flet / alcance e estado visual]
-    MODEL --> SEND[Thread de envio / Publicador MQTT]
-    SEND -->|QoS 1 / tópico de leitor| MQ[Mosquitto ou broker externo]
-    SEND -->|cadastro nomeado de itens| DB[(PostgreSQL)]
+    CFG[Aba de configuração<br/>planta, zonas, portais, leitores virtuais] -->|layout| API
+    CTL[Aba de controle<br/>arrastar equipamentos] -->|posições virtuais| API[FastAPI / sessões no PostgreSQL]
+    API -->|iniciar: cadastra topologia sim-*| DB[(PostgreSQL)]
+    API --> MOTOR[Motor do simulador<br/>thread da API, advisory lock]
+    MOTOR -->|QoS 1, contrato EZ700, um tópico por leitor virtual| MQ[Mosquitto ou broker externo]
     MQ --> ING[Mesmo ingestor do modo físico]
     ING --> PIPE[Debounce / passagem / direção / projeção]
     PIPE --> DB
     ING --> DB
-    ING --> LOG[JSONL]
-    DB --> API[FastAPI] --> WEB[Dashboard / mapas / leituras]
+    DB --> API --> MON[Monitoramento e dashboard<br/>somente dados do pipeline]
 ```
 
-O modelo usa coordenadas normalizadas 0–100, duas salas, portal e antenas em
-(28, 66) e (72, 66). Gera 1–12 itens com EPC aleatório de 96 bits e nomes dados
-pelo operador. O alcance circular tem raio ilustrativo 16, ajustado à proporção
-da planta. No alcance, cada item produz leitura a cada 0,2 s. O RSSI varia de
--5700 a -6700 como valor sintético, sem unidade física validada.
+Um único simulador web atende aos cenários **EASY** (salas A/B, portal e
+antenas em (28, 66) e (72, 66), raio 16 — o mesmo do antigo simulador Flet) e
+**HUPAA** (planta de referência, leitores EZ700 e DR Max virtuais, 1 a 4
+antenas cada). Coordenadas normalizadas 0–100; o alcance é um círculo na
+escala de x corrigido pela proporção da planta. No alcance, cada item
+etiquetado gera uma leitura a cada 0,2 s, com RSSI sintético de −5700 a
+−6700; itens sem EPC não geram leitura.
 
-O simulador visual publica o formato compacto observado pelo adapter EZ700:
-`epc`, `rssi`, `antenna`, `timestamp`. O timestamp é um contador sintético de
-sete dígitos; o `reader_id` vem do tópico. Existe também o publicador de CLI
-`rfid_ingestion.simulator`, útil para testes de contrato dos adapters.
-
-A publicação tem acompanhamento de PUBACK e falha se houver desconexão ou
-confirmação pendente além do prazo. A janela não espera o banco ou a rede na
-thread visual. O cadastro e o pipeline são reais; a interação RF é simulada.
+Iniciar a sessão cadastra a topologia (zonas, portais, leitores com serial
+`SIM-L<layout>-…`, antenas e mapeamentos versionados). O motor publica o
+formato compacto do adapter EZ700 (`epc`, `rssi`, `antenna`, `timestamp`
+contador) com o `reader_id` no tópico; o pipeline é o mesmo dos leitores
+físicos. A posição virtual nunca altera a zona: só passagens confirmadas.
+Detalhes em [simulador web](../implementations/simulador-web.md) e
+[ADR 0010](../decisions/0010-simulador-web-no-pipeline-real.md). O publicador
+de CLI `rfid_ingestion.simulator` continua disponível para testes de contrato.
 
 ## Fluxo de processamento
 

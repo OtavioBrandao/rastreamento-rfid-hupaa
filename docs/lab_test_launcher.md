@@ -10,8 +10,8 @@ acompanhar a sequência MQTT → ingestão → `leituras_brutas`.
 ## O que foi implementado
 
 `python -m tools.lab_launcher` limpa a tela e mostra quatro escolhas: local com
-simulador visual, local com leitor físico, broker/banco externos com leitor físico e
-broker/banco externos com simulador visual. No modo local, também pergunta se
+simulador web, local com leitor físico, broker/banco externos com leitor físico e
+broker/banco externos com simulador web. No modo local, também pergunta se
 deve reaproveitar os dados. O modo sem perguntas usa as flags equivalentes:
 
 ```bash
@@ -32,33 +32,24 @@ broker externo (opções 3 e 4), pergunta também o transporte: `mqtts` (TLS, 88
 ou `mqtt` sem TLS (1883, `--mqtt-transport plain`). Veja o
 [hotfix de tags físicas e MQTT sem TLS](implementations/hotfix-lab-tags-fisicas-mqtt-sem-tls.md).
 
-Nos testes sintéticos (opções 1 e 4), depois do ingestor saudável o launcher abre
-o **simulador visual** (`python -m tools.lab_simulator`), uma janela Flet com a
-mesma planta do mapa EASY: salas A e B, leitor 01, portal e as antenas A
-(porta 1) e B (porta 2), cada uma com um círculo de alcance. Na janela:
+Nos testes sintéticos (opções 1 e 4) o launcher **não abre aplicativo
+desktop**: o simulador agora é web. `python scripts/dev.py --teste 1` sobe a API
+com `SIMULADOR_HABILITADO=true` e abre o navegador em `#/simulador`, onde se
+escolhe a planta **Laboratório EASY** (mesmas salas A/B, portal e antenas A e B
+do simulador anterior) ou **Hospital HUPAA**. Iniciada a simulação, o link de
+controle (`#/simulador/controle/<código>`) abre em outra aba para adicionar e
+arrastar os equipamentos. Na opção 4 a API usa a credencial de publicação de
+`config/environments/.env.cloud.reader-01`, que precisa permitir os tópicos dos
+leitores virtuais (`MQTT_TOPIC=easy/dev/hupaa/+/+/readings` no perfil; `#` é
+recusado). Detalhes em [simulador web](implementations/simulador-web.md).
 
-1. Informe a quantidade de itens (1 a 12) e clique em **Definir nomes**.
-2. Dê um nome a cada item e clique em **Gerar itens no mapa**. Cada item recebe
-   um EPC aleatório de 96 bits (prefixo `E2804C41`) e é cadastrado no banco do
-   ensaio como equipamento do tipo sintético, com o nome escolhido. Os itens
-   aparecem em posições sorteadas, sempre fora do alcance das antenas;
-   **Novas posições** sorteia de novo.
-3. Arraste um item com o botão esquerdo. Dentro de um círculo, a antena gera uma
-   leitura a cada 0,2 s, com RSSI de -5700 (sobre a antena) a -6700 (na borda);
-   o círculo pulsa e o item fica verde. Para gerar passagem, saia do alcance de
-   uma antena e entre no da outra em até 3 s (`RFID_PASSAGE_MAX_INTERVAL_MS`).
-
-A publicação usa uma thread própria com QoS 1 e não espera cada PUBACK; o
-simulador falha e mostra o erro se uma mensagem ficar mais de 10 s sem PUBACK ou
-se a conexão cair. O cabeçalho da janela mostra destino, leituras publicadas,
-pendentes e a contagem por antena. Os pulsos do mapa EASY no dashboard vêm das
-leituras gravadas no banco, então acompanham o simulador em tempo real. O
-alcance, o RSSI e o período são ilustrativos, sem calibração física. Os roteiros
-fixos anteriores (`--scenario`, `--count`, `--messages`, `--interval`, `--epc`,
-`--single`) e a conferência automática no banco foram removidos.
+Os equipamentos não são mais cadastrados pela janela: crie itens virtuais
+"etiquetados, não cadastrados" e cadastre-os em **Cadastro → por leitura RFID**,
+ou use o EPC de um equipamento já cadastrado. Alcance, RSSI (−5700 a −6700) e
+período de 0,2 s continuam ilustrativos, sem calibração física.
 
 O launcher usa `--timestamp-format counter` por padrão tanto no teste físico
-quanto no sintético. O simulador usa os campos JSON observados
+quanto no sintético. O simulador web usa os campos JSON observados
 (`epc`, `rssi`, `antenna`, `timestamp`) na mesma ordem do JSON capturado do leitor,
 em JSON compacto e sem `readerid` no corpo. O identificador do leitor vem do tópico MQTT. O
 `timestamp` é uma string numérica de sete dígitos, crescente durante o ensaio;
@@ -81,8 +72,8 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
 
 ## Pré-requisitos
 
-- Python 3.12 e `pip install -r requirements/lab.txt` no host (inclui o Flet do
-  simulador visual; na primeira execução o Flet baixa o cliente desktop).
+- Python 3.12 e `pip install -r requirements/lab.txt` no host. Não há
+  dependência gráfica desktop: o simulador roda no navegador.
 - Windows 11: Docker Desktop com backend WSL2. O launcher abre três abas
   nomeadas **MQTT**, **Ingestor** e **Banco** no Windows Terminal. Se `wt.exe`
   não estiver disponível, abre janelas `cmd.exe` com esses títulos. O launcher
@@ -105,7 +96,6 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
   confirma que as portas locais ficaram livres e oferece encerrar outros
   processos que ainda as ocupem; `--clear-ports` faz essa limpeza sem pergunta.
   Em execução sem terminal (`--no-terminals`), use `stop` para encerrar o Compose.
-  Com o simulador e `--no-terminals`, o launcher espera a janela ser fechada.
 
 No modo `managed`, configure `config/environments/.env.cloud` fora do Git com broker e banco de
 testes. O launcher pede campos ausentes e oferece salvá-los no arquivo ignorado
@@ -135,7 +125,7 @@ ponta a ponta exige um daemon Docker ativo e acesso ao broker/banco.
 
 Durante a execução, o terminal principal mostra o cenário, o arquivo de
 configuração, o progresso do Compose e do build, as migrations, o resultado do
-cadastro base (criado ou reutilizado) e a abertura do simulador. Se
+cadastro base (criado ou reutilizado) e o endereço do simulador web. Se
 uma etapa falhar, a mensagem identifica a etapa e mostra as últimas linhas do
 comando ou do serviço com falha. Senhas e URLs com credenciais são ocultadas
 nessas mensagens. Use os três terminais de observação para acompanhar a
