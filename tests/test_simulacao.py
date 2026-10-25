@@ -253,7 +253,58 @@ def test_hupaa_usa_andar_proprio_e_dois_layouts_nao_compartilham_leitor(db):
         Leitor.identificador_serial.like("SIM-%"))) == 4
     with pytest.raises(service.SimulacaoRecusada) as erro:
         service.iniciar_sessao(db, _layout(db, "hupaa", configuracao).id, None)
-    assert "outro layout" in str(erro.value)
+    assert "já é usado pelo layout “Hospital HUPAA (padrão)”" in str(erro.value)
+
+
+def test_layout_excluido_libera_os_leitores_para_o_proximo(db):
+    """Caso real: o teste rápido antigo ficou dono de sim-hupaa-03/04 e travava o layout do vídeo."""
+    antigo = _layout(db, "hupaa", preset("hupaa"))
+    service.iniciar_sessao(db, antigo.id, None)
+    novo = _layout(db, "hupaa", preset("hupaa"))
+    with pytest.raises(service.SimulacaoRecusada):
+        service.iniciar_sessao(db, novo.id, None)
+
+    db.rollback()
+    service.transicionar(db, service.listar_sessoes(db)[0].codigo, "encerrar")
+    service.arquivar_layout(db, antigo.id)
+    leitores = db.scalars(select(Leitor).where(Leitor.identificador_serial.like("SIM-%"))).all()
+    assert leitores and not any(leitor.ativo for leitor in leitores)
+    assert db.scalar(select(func.count()).select_from(MapeamentoAntenaPortal).where(
+        MapeamentoAntenaPortal.fim.is_(None))) == 0
+
+    sessao = service.iniciar_sessao(db, novo.id, None)
+    assumidos = db.scalars(select(Leitor).where(Leitor.reader_id.like("sim-hupaa-%"))).all()
+    assert {leitor.identificador_serial for leitor in assumidos} == {
+        f"SIM-L{novo.id}-sim-hupaa-{n:02d}" for n in range(1, 5)}
+    assert all(leitor.ativo for leitor in assumidos)
+    # Cada antena aponta só para os portais do layout novo.
+    ativos = db.scalars(select(MapeamentoAntenaPortal.portal_id).where(
+        MapeamentoAntenaPortal.fim.is_(None))).all()
+    assert set(ativos) <= set(sessao.topologia["portais"].values())
+
+
+def test_teste_rapido_nao_disputa_leitor_com_layout_do_usuario(db):
+    meu = _layout(db, "hupaa", Layout.model_validate(layout_teste_rapido("hupaa")).model_dump(mode="json")
+                  | {"leitores": preset("hupaa")["leitores"]})
+    service.iniciar_sessao(db, meu.id, None)
+    rapido = service.teste_rapido(db, "hupaa", None)
+    assert rapido.estado == "em_execucao"
+    assert {leitor["reader_id"] for leitor in rapido.layout["leitores"]} == {f"sim-demo-hupaa-{n:02d}" for n in range(1, 5)}
+    assert len(service.listar_sessoes(db)) == 2
+
+
+def test_avisa_antenas_no_mesmo_ponto_e_lados_sobrepostos():
+    configuracao = layout_teste_rapido("hupaa")
+    restrito = configuracao["leitores"][3]
+    assert restrito["nome"] == "Leitor 4 · zona restrita (escada)"
+    assert [a["nome"] for a in restrito["antenas"]] == ["Entrada pela Zona 3", "Entrada pela Zona 1"]
+    restrito["antenas"][1]["posicao"] = dict(restrito["antenas"][0]["posicao"])
+    portal = configuracao["leitores"][0]["antenas"][0]  # lado A do portal 1 ↔ 2
+    portal["posicao"] = {"x": 54, "y": 15}
+    textos = avisos(Layout.model_validate(configuracao))
+    assert any("Entrada pela Zona 3 e Leitor 4 · zona restrita (escada) / Entrada pela Zona 1 "
+               "estão no mesmo ponto" in texto for texto in textos)
+    assert any("lados A e B se sobrepõem" in texto for texto in textos)
 
 
 # --- API e sincronização entre abas ----------------------------------------------

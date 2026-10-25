@@ -52,18 +52,27 @@ _EASY = {
 }
 
 
-def _leitor_hupaa(numero: int, modelo: str, antenas: list[tuple[int, str, str]]) -> dict:
+def _leitor_hupaa(numero: int, modelo: str, antenas: list[tuple[int, str, str]],
+                  nome: str | None = None, nomes_antenas: dict[int, str] | None = None) -> dict:
     """Leitor sem posição, com antenas sem posição ligadas aos portais indicados."""
     return {
-        "chave": f"leitor-{numero}", "nome": f"Leitor {numero}",
+        "chave": f"leitor-{numero}", "nome": nome or f"Leitor {numero}",
         "reader_id": f"sim-hupaa-{numero:02d}", "modelo": modelo, "posicao": None,
         "antenas": [
-            {"chave": f"leitor-{numero}-antena-{porta}", "nome": f"Antena {porta}",
+            {"chave": f"leitor-{numero}-antena-{porta}",
+             "nome": (nomes_antenas or {}).get(porta, f"Antena {porta}"),
              "porta": porta, "posicao": None, "alcance": 6, "portal": portal, "lado": lado,
              "zona": None}
             for porta, portal, lado in antenas
         ],
     }
+
+
+# O leitor 4 é o da zona restrita: as duas antenas ficam DENTRO da circulação
+# vertical (lado B dos dois portais), uma em cada entrada — nunca no mesmo ponto.
+# Ler a tag ali, depois do lado A, confirma que o item entrou na área restrita.
+NOME_LEITOR_RESTRITO = "Leitor 4 · zona restrita (escada)"
+ANTENAS_LEITOR_RESTRITO = {1: "Entrada pela Zona 3", 2: "Entrada pela Zona 1"}
 
 
 _HUPAA = {
@@ -94,7 +103,8 @@ _HUPAA = {
         _leitor_hupaa(1, "EZ700", [(1, "portal-1-2", "a"), (2, "portal-1-escada", "a")]),
         _leitor_hupaa(2, "EZ700", [(1, "portal-1-2", "b"), (2, "portal-2-3", "a")]),
         _leitor_hupaa(3, "DR_MAX", [(1, "portal-2-3", "b"), (2, "portal-3-escada", "a")]),
-        _leitor_hupaa(4, "DR_MAX", [(1, "portal-3-escada", "b"), (2, "portal-1-escada", "b")]),
+        _leitor_hupaa(4, "DR_MAX", [(1, "portal-3-escada", "b"), (2, "portal-1-escada", "b")],
+                      NOME_LEITOR_RESTRITO, ANTENAS_LEITOR_RESTRITO),
     ],
 }
 
@@ -117,7 +127,8 @@ def preset(cenario: str) -> dict:
 
 def _antena(leitor: int, porta: int, portal: str, lado: str, x: float, y: float) -> dict:
     """Antena posicionada, com alcance ilustrativo 5."""
-    return {"chave": f"leitor-{leitor}-antena-{porta}", "nome": f"Antena {porta}", "porta": porta,
+    nome = ANTENAS_LEITOR_RESTRITO[porta] if leitor == 4 else f"Antena {porta}"
+    return {"chave": f"leitor-{leitor}-antena-{porta}", "nome": nome, "porta": porta,
             "posicao": {"x": x, "y": y}, "alcance": 5, "portal": portal, "lado": lado,
             "zona": None}
 
@@ -150,6 +161,13 @@ def _hupaa_demo() -> dict:
     return layout
 
 
+def _ids_proprios(layout: dict) -> dict:
+    """Leitores `sim-demo-*`: o teste rápido nunca disputa leitor com os layouts do usuário."""
+    for leitor in layout["leitores"]:
+        leitor["reader_id"] = leitor["reader_id"].replace("sim-", "sim-demo-", 1)
+    return layout
+
+
 NOMES_TESTE_RAPIDO = {"easy": "Laboratório EASY (teste rápido)",
                       "hupaa": "Hospital HUPAA (teste rápido · posições ilustrativas)"}
 
@@ -174,4 +192,4 @@ POSICOES_TESTE_RAPIDO = {"easy": [(10, 14), (20, 14), (30, 14), (40, 14)],
 
 def teste_rapido(cenario: str) -> dict:
     """Layout pronto do teste rápido do cenário."""
-    return preset("easy") if cenario == "easy" else _hupaa_demo()
+    return _ids_proprios(preset("easy") if cenario == "easy" else _hupaa_demo())

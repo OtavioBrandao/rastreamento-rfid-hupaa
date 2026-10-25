@@ -69,6 +69,24 @@ describe('editor da planta', () => {
     expect(pendencias(config)).toEqual([])
   })
 
+  it('identifica o leitor da zona restrita e avisa antenas no mesmo ponto', () => {
+    const config: LayoutConfig = structuredClone(easy)
+    config.zonas.push({ chave: 'escada', nome: 'Escada', cor: '#7a3fb2', area: { x: 1, y: 70, largura: 20, altura: 25 }, referencia_planta: null, restrita: true })
+    config.portais.push({ chave: 'p-escada', nome: 'Zona A ↔ Escada', zona_a: 'zona-a', zona_b: 'escada', posicao: null })
+    config.leitores.push({ chave: 'leitor-4', nome: 'Leitor 4', reader_id: 'sim-easy-04', modelo: 'DR_MAX', posicao: { x: 10, y: 80 }, antenas: [
+      { chave: 'l4-a1', nome: 'Antena 1', porta: 1, posicao: { x: 10, y: 85 }, alcance: 3, portal: 'p-escada', lado: 'b', zona: 'escada' },
+      { chave: 'l4-a2', nome: 'Antena 2', porta: 2, posicao: { x: 10, y: 85 }, alcance: 3, portal: null, lado: null, zona: 'escada' }] })
+    config.leitores[0].antenas.push({ chave: 'antena-c', nome: 'Antena C', porta: 3, posicao: { x: 10, y: 45 }, alcance: 3, portal: 'p-escada', lado: 'a', zona: 'zona-a' })
+    render(<LayoutEditor config={config} onChange={vi.fn()}/>)
+    expect(screen.getByText('zona restrita')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Leitor 4 · DR Max/ }))
+    expect(screen.getByText('Leitor da zona restrita.')).toBeInTheDocument()
+    expect(pendencias(config)).toContain('Leitor 4 / Antena 1 e Leitor 4 / Antena 2 estão no mesmo ponto: separe-as, uma em cada entrada.')
+    const sobreposto = structuredClone(easy)
+    sobreposto.leitores[0].antenas[1].posicao = { x: 40, y: 66 }
+    expect(pendencias(sobreposto).join(' ')).toMatch(/lados A e B se sobrepõem/)
+  })
+
   it('limpar planta apaga tudo depois de confirmar e mostra o passo a passo', () => {
     let config = structuredClone(easy)
     const onChange = vi.fn((next: LayoutConfig) => { config = next })

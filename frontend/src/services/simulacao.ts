@@ -115,6 +115,16 @@ export function zoneAt(layout: LayoutConfig, point: Ponto) {
     && point.y >= zona.area.y && point.y <= zona.area.y + zona.area.altura) ?? null
 }
 
+/** Zona restrita vigiada pelo leitor (alguma antena dele fica dentro dela), ou null. */
+export function zonaRestritaDoLeitor(layout: LayoutConfig, leitor: LeitorLayout) {
+  const restritas = new Set(layout.zonas.filter((zona) => zona.restrita).map((zona) => zona.chave))
+  const chave = leitor.antenas.find((antena) => antena.zona && restritas.has(antena.zona))?.zona
+  return layout.zonas.find((zona) => zona.chave === chave) ?? null
+}
+
+export const antenaNaZonaRestrita = (layout: LayoutConfig, antena: AntenaLayout) =>
+  !!antena.zona && layout.zonas.some((zona) => zona.chave === antena.zona && zona.restrita)
+
 /** O que ainda falta para a demonstração funcionar (mesmas regras de `avisos` no backend). */
 export function pendencias(layout: LayoutConfig): string[] {
   const resultado: string[] = []
@@ -129,5 +139,15 @@ export function pendencias(layout: LayoutConfig): string[] {
     const lados = new Set(layout.leitores.flatMap((l) => l.antenas.filter((a) => a.portal === portal.chave).map((a) => a.lado)))
     if (!lados.has('a') || !lados.has('b')) resultado.push(`Portal “${portal.nome}”: falta antena no lado ${!lados.has('a') ? 'A' : 'B'}.`)
   }
+  const posicionadas = layout.leitores.flatMap((leitor) => leitor.antenas.filter((antena) => antena.posicao).map((antena) => ({ leitor, antena })))
+  posicionadas.forEach(({ leitor, antena }, i) => {
+    for (const outro of posicionadas.slice(i + 1)) {
+      const d = Math.hypot(antena.posicao!.x - outro.antena.posicao!.x, (antena.posicao!.y - outro.antena.posicao!.y) / layout.proporcao)
+      const nomes = `${leitor.nome} / ${antena.nome} e ${outro.leitor.nome} / ${outro.antena.nome}`
+      if (d < 1) resultado.push(`${nomes} estão no mesmo ponto: separe-as, uma em cada entrada.`)
+      else if (antena.portal && antena.portal === outro.antena.portal && antena.lado !== outro.antena.lado && d <= antena.alcance + outro.antena.alcance)
+        resultado.push(`${nomes}: os alcances dos lados A e B se sobrepõem e a direção não é confirmada. Afaste-as ou reduza o alcance.`)
+    }
+  })
   return resultado
 }

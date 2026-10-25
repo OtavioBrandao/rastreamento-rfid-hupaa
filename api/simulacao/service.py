@@ -171,6 +171,7 @@ def arquivar_layout(db: Session, layout_id: int) -> None:
             SimulacaoSessao.estado.in_(ESTADOS_ABERTOS))):
         raise SimulacaoRecusada("sessao_aberta", "encerre a simulação deste layout antes")
     registro.arquivado = True
+    topologia.liberar(db, registro)
     db.commit()
 
 
@@ -382,6 +383,7 @@ def apagar_cenario(db: Session, cenario: str) -> dict:
         SimulacaoLayout.arquivado.is_(False)).with_for_update()))
     for layout in layouts:
         layout.arquivado = True
+        topologia.liberar(db, layout)
     db.commit()
     return {"sessoes_encerradas": len(sessoes), "layouts_arquivados": len(layouts)}
 

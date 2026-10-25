@@ -1,6 +1,6 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Icon } from '../layout/Icon'
-import type { AntenaLayout, LayoutConfig, LeitorLayout, Modelo, Ponto } from '../../services/simulacao'
+import { zonaRestritaDoLeitor, type AntenaLayout, type LayoutConfig, type LeitorLayout, type Modelo, type Ponto } from '../../services/simulacao'
 import { at, pointFromEvent, SimPlan } from './SimPlan'
 
 type Selection = { kind: 'zona' | 'portal' | 'leitor'; chave: string; antena?: string } | null
@@ -230,7 +230,7 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
         {config.portais.map((portal) => portal.posicao && <button key={portal.chave} type="button" className={`sim-marker sim-portal ${selection?.chave === portal.chave ? 'selected' : ''}`} style={at(portal.posicao)}
           aria-label={`Portal ${portal.nome}`} onPointerDown={(e) => startDrag(e, { kind: 'portal', chave: portal.chave }, { kind: 'portal', chave: portal.chave })}><Icon name="portal" size={16}/><span>{portal.nome}</span></button>)}
         {config.leitores.map((leitor) => <div key={leitor.chave}>
-          {leitor.posicao && <button type="button" className={`sim-marker sim-reader ${selection?.chave === leitor.chave ? 'selected' : ''}`} style={at(leitor.posicao)} aria-label={`${leitor.nome} (${leitor.reader_id})`}
+          {leitor.posicao && <button type="button" className={`sim-marker sim-reader ${zonaRestritaDoLeitor(config, leitor) ? 'restrita' : ''} ${selection?.chave === leitor.chave ? 'selected' : ''}`} style={at(leitor.posicao)} aria-label={`${leitor.nome} (${leitor.reader_id})`}
             onPointerDown={(e) => startDrag(e, { kind: 'leitor', chave: leitor.chave }, { kind: 'leitor', chave: leitor.chave })}><Icon name="reader" size={16}/><span>{leitor.nome}</span></button>}
           {leitor.antenas.map((antena) => antena.posicao && <button key={antena.chave} type="button" className={`sim-marker sim-antenna ${selection?.antena === antena.chave ? 'selected' : ''}`} style={at(antena.posicao)}
             aria-label={`${leitor.nome} · ${antena.nome}`} onPointerDown={(e) => startDrag(e, { kind: 'antena', chave: antena.chave, leitor: leitor.chave }, { kind: 'leitor', chave: leitor.chave, antena: antena.chave })}>
@@ -301,6 +301,7 @@ function Overview({ config, onSelect, onPlace }: { config: LayoutConfig; onSelec
     <ul>{config.portais.map((portal) => <li key={portal.chave}><button type="button" className="link-button" onClick={() => onSelect({ kind: 'portal', chave: portal.chave })}>{portal.nome}</button>{!portal.posicao && <span className="tag-chip tag-unknown">sem marcador</span>}</li>)}</ul>
     <h3>Leitores ({config.leitores.length})</h3>
     <ul>{config.leitores.map((leitor) => <li key={leitor.chave}><button type="button" className="link-button" onClick={() => onSelect({ kind: 'leitor', chave: leitor.chave })}>{leitor.nome} · {leitor.modelo === 'DR_MAX' ? 'DR Max' : 'EZ700'} · {leitor.antenas.length} antena(s)</button>
+      {zonaRestritaDoLeitor(config, leitor) && <span className="tag-chip tag-restricted" title={`Detecta a entrada em ${zonaRestritaDoLeitor(config, leitor)!.nome}`}>zona restrita</span>}
       {(!leitor.posicao || leitor.antenas.some((a) => !a.posicao)) && (onPlace
         ? <button type="button" className="tag-chip tag-unknown sim-chip-action" title="Clique aqui e depois na planta" onClick={() => onPlace(leitor)}>posicionar</button>
         : <span className="tag-chip tag-unknown">posicionar</span>)}</li>)}</ul>
@@ -333,7 +334,9 @@ function ReaderForm({ config, leitor, focus, disabled, onChange, onPosition, onR
 }) {
   const portasLivres = (atual: number) => [1, 2, 3, 4].filter((porta) => porta === atual || !leitor.antenas.some((a) => a.porta === porta))
   const setAntena = (chave: string, mutate: (antena: AntenaLayout) => void) => onChange((l) => mutate(l.antenas.find((a) => a.chave === chave)!))
+  const restrita = zonaRestritaDoLeitor(config, leitor)
   return <div className="sim-form"><h3>Leitor virtual</h3>
+    {restrita && <p className="sim-restricted-note" role="note"><strong>Leitor da zona restrita.</strong> As antenas dele ficam dentro de “{restrita.nome}”, uma em cada entrada, como lado B do portal. A tag lida no lado A e depois aqui confirma que o item entrou na área restrita. Não deixe as antenas no mesmo ponto.</p>}
     <label>Nome<input value={leitor.nome} maxLength={60} disabled={disabled} onChange={(e) => onChange((l) => { l.nome = e.target.value })}/></label>
     <label>Identificador lógico (MQTT)<input value={leitor.reader_id} maxLength={45} disabled={disabled} spellCheck={false} onChange={(e) => onChange((l) => { l.reader_id = e.target.value.toLowerCase() })}/>
       <small>Sempre com prefixo <code>sim-</code>: separa a fonte simulada dos leitores físicos.</small></label>

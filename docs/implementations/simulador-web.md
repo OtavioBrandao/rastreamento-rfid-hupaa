@@ -84,6 +84,29 @@ editor era pouco intuitivo e não havia como apagar tudo):
 - `scripts/dev.py` sobe a API com recarga automática (o frontend já recarrega
   pelo Vite) e recusa subir com o banco atrás da migration mais recente.
 
+**Layouts sem interferência e leitor da zona restrita** (relato do primeiro
+uso com o layout do vídeo: "Iniciar" recusava porque o teste rápido, mesmo
+excluído, continuava dono de `sim-hupaa-03/04`):
+
+- Excluir um layout (ou "Apagar tudo") desliga os leitores virtuais dele e
+  encerra os mapeamentos; o primeiro layout ativo que usar o mesmo
+  `reader_id` assume o leitor. Dois layouts **ativos** com o mesmo
+  `reader_id` continuam recusados, agora com o nome do layout na mensagem.
+- O teste rápido usa leitores `sim-demo-*`, que nunca coincidem com os do
+  preset nem com os do usuário.
+- O leitor 4 do HUPAA é o **leitor da zona restrita** ("Leitor 4 · zona
+  restrita (escada)"): as duas antenas ficam dentro da circulação vertical,
+  como lado B dos portais, uma em cada entrada ("Entrada pela Zona 1",
+  "Entrada pela Zona 3"). O editor marca esse leitor e o alcance das antenas
+  em roxo.
+- Novos avisos: antenas no mesmo ponto e lados A/B do mesmo portal com
+  alcances sobrepostos (a direção nunca seria confirmada).
+- O layout do vídeo no Neon foi corrigido: as antenas do leitor 4 foram
+  separadas, os lados A dos portais da escada foram aproximados das entradas
+  e o portal Zona 1 ↔ Zona 2 deixou de ter lados sobrepostos. Ensaio pelo
+  pipeline com essa planta: Zona 1 → escada, escada → Zona 3 e Zona 1 →
+  Zona 2, todas confirmadas.
+
 Validado em 25/10/2026 com Mosquitto e ingestor locais: teste rápido HUPAA,
 Maca 01 arrastada da Zona 1 para a Zona 2 → 14 leituras, passagem confirmada
 e última zona "Zona 2".

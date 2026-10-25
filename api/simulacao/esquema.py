@@ -14,6 +14,7 @@ aceitos (ainda não posicionados na planta) e simplesmente não detectam nada.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Literal
 
@@ -232,4 +233,17 @@ def avisos(layout: Layout) -> list[str]:
     for zona in layout.zonas:
         if zona.area is None:
             resultado.append(f"zona '{zona.nome}' ainda não foi delimitada na planta")
+    posicionadas = [(leitor, antena) for leitor in layout.leitores for antena in leitor.antenas
+                    if antena.posicao is not None]
+    for i, (leitor, antena) in enumerate(posicionadas):
+        for outro_leitor, outra in posicionadas[i + 1:]:
+            d = math.hypot(antena.posicao.x - outra.posicao.x,
+                           (antena.posicao.y - outra.posicao.y) / layout.proporcao)
+            nomes = f"{leitor.nome} / {antena.nome} e {outro_leitor.nome} / {outra.nome}"
+            if d < 1:
+                resultado.append(f"{nomes} estão no mesmo ponto; separe-as, uma em cada entrada")
+            elif (antena.portal and antena.portal == outra.portal and antena.lado != outra.lado
+                  and d <= antena.alcance + outra.alcance):
+                resultado.append(f"{nomes}: alcances dos lados A e B se sobrepõem, então a "
+                                 "direção da passagem não é confirmada; afaste-as ou reduza o alcance")
     return resultado

@@ -1,6 +1,6 @@
 import { forwardRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { hospitalContextAreas, hospitalOutlinePath } from '../../config/mapaConfig'
-import type { LayoutConfig, Ponto } from '../../services/simulacao'
+import { antenaNaZonaRestrita, type LayoutConfig, type Ponto } from '../../services/simulacao'
 
 /** Converte a posição do ponteiro em coordenadas normalizadas 0–100 da planta. */
 export function pointFromEvent(element: HTMLElement | null, event: { clientX: number; clientY: number }): Ponto {
@@ -54,7 +54,7 @@ export const SimPlan = forwardRef<HTMLDivElement, {
         <line key={`cabo-${antena.chave}`} x1={leitor.posicao!.x} y1={leitor.posicao!.y} x2={antena.posicao.x} y2={antena.posicao.y}
           stroke="#365fc4" strokeOpacity="0.35" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/>))}
       {showCoverage && layout.leitores.flatMap((leitor) => leitor.antenas).map((antena) => antena.posicao &&
-        <ellipse key={`alcance-${antena.chave}`} className={activeAntennas?.has(antena.chave) ? 'sim-coverage sim-coverage-active' : 'sim-coverage'}
+        <ellipse key={`alcance-${antena.chave}`} className={`sim-coverage${antenaNaZonaRestrita(layout, antena) ? ' sim-coverage-restrita' : ''}${activeAntennas?.has(antena.chave) ? ' sim-coverage-active' : ''}`}
           cx={antena.posicao.x} cy={antena.posicao.y} rx={antena.alcance} ry={antena.alcance * p} vectorEffect="non-scaling-stroke"/>)}
     </svg>
     {layout.zonas.map((zona) => zona.area && <span key={`rotulo-${zona.chave}`} className="sim-zone-label" style={{ ...at({ x: zona.area.x, y: zona.area.y }), color: zona.cor }}>{zona.nome}{zona.restrita ? ' · restrita' : ''}</span>)}
