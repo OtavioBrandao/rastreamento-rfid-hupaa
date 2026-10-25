@@ -73,10 +73,14 @@ def ambiente_simulador(modo: str, valores: dict[str, str]) -> dict[str, str]:
             return {"SIMULADOR_HABILITADO": "false"}
         extras.update({f"SIMULADOR_{chave}": valor for chave, valor in perfil.items()
                        if chave in ("MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_CA_CERT")})
-        # Tópico exato (perfil legado de um leitor) não descreve a ACL dos leitores
-        # virtuais: só um filtro com `+` vira checagem local; senão decide o broker.
-        if "+" in perfil.get("MQTT_TOPIC", ""):
-            extras["SIMULADOR_MQTT_TOPICO_PERMITIDO"] = perfil["MQTT_TOPIC"]
+        # Perfil com tópico exato (ACL de um leitor só, como o simulador Flet usava):
+        # os leitores virtuais publicam por ele (relay) e o ingestor do ensaio aceita
+        # `sim_reader_id` só desse tópico. Filtro com `+` vira só checagem local.
+        topico = perfil.get("MQTT_TOPIC", "")
+        if "+" in topico:
+            extras["SIMULADOR_MQTT_TOPICO_PERMITIDO"] = topico
+        elif topico:
+            extras["SIMULADOR_MQTT_TOPICO_RELAY"] = topico
     return extras
 
 

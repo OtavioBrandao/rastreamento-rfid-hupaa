@@ -258,7 +258,12 @@ def start(
             if timestamp_format not in (None, "counter"):
                 raise ValueError("dados sintéticos reproduzem o timestamp counter do leitor")
             # Validado aqui para falhar cedo; quem publica é a API (scripts/dev.py).
-            _perfil_publicador(modo, valores, publisher_env_file, interativo)
+            perfil = _perfil_publicador(modo, valores, publisher_env_file, interativo) or {}
+            topico = perfil.get("MQTT_TOPIC", "") if modo == "managed" else ""
+            if topico and "+" not in topico:
+                # ACL de um tópico só: o simulador web publica por ele em nome dos
+                # leitores virtuais; só o ingestor deste ensaio aceita (sim_reader_id).
+                ambiente["RFID_RELAY_LEITORES_VIRTUAIS"] = topico.split("/")[4]
         ambiente["EZ700_TIMESTAMP_FORMAT"] = timestamp_format or "counter"
         projeto = valores.get("COMPOSE_PROJECT_NAME", "rfid-hospital-local" if modo == "local"
                               else "rfid-hospital-managed")

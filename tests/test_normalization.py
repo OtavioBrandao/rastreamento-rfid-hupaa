@@ -42,6 +42,38 @@ class NormalizationTests(unittest.TestCase):
         self.assertEqual(canonical["metadata"]["rssi_original"], -3880)
         self.assertEqual(canonical["metadata"]["source_fields"]["tid"], self.payload["tid"])
 
+    def test_relay_attributes_reading_to_virtual_reader_only_when_enabled(self):
+        """Simulador web no HiveMQ: tópico do reader-01, leitura do leitor virtual."""
+        topic = reading_topic("reader-01")
+        body = {"epc": "E2804C41000000000000ABCD", "rssi": -5900, "antenna": 2,
+                "timestamp": "123", "sim_reader_id": "sim-hupaa-03", "reader_id": "sim-hupaa-03"}
+        relay = replace(self.settings, relay_virtual_readers=("reader-01",))
+        event = self.build(body, relay, topic=topic)
+        self.assertEqual(event["validation_errors"], [])
+        self.assertEqual(event["reader_id"], "sim-hupaa-03")
+        self.assertEqual(event["canonical_event"]["reader_id"], "sim-hupaa-03")
+        self.assertEqual(event["canonical_event"]["metadata"]["relay_reader_id"], "reader-01")
+        # Sem habilitação, em outro tópico ou com id não virtual: recusa, nunca vira reader-01.
+        for settings, corpo, outro in ((self.settings, body, topic),
+                                       (relay, body, reading_topic("reader-02")),
+                                       (relay, dict(body, sim_reader_id="reader-02"), topic)):
+            recusado = self.build(corpo, settings, topic=outro)
+            self.assertIsNone(recusado["canonical_event"])
+            self.assertTrue(any("sim_reader_id" in erro for erro in recusado["validation_errors"]))
+        # Ingestor sem suporte a relay (código antigo) vê só o reader_id divergente: recusa.
+        antigo = self.build({k: v for k, v in body.items() if k != "sim_reader_id"}, relay,
+                            topic=topic)
+        self.assertIsNone(antigo["canonical_event"])
+        self.assertIn("reader_id do payload diverge do tópico", antigo["validation_errors"])
+        fisico = self.build({k: v for k, v in body.items() if k not in ("sim_reader_id", "reader_id")},
+                            relay, topic=topic)
+        self.assertEqual(fisico["reader_id"], "reader-01")  # leitor físico segue igual
+
+    def test_relay_is_refused_in_production(self):
+        with self.assertRaisesRegex(ValueError, "RFID_RELAY_LEITORES_VIRTUAIS"):
+            Settings.from_env({"RFID_RELAY_LEITORES_VIRTUAIS": "reader-01",
+                               "APP_ENV": "production"}).validate()
+
     def test_ez700_counter_uses_receive_time_for_both_legacy_profiles(self):
         for profile in ("rfc3339", "epoch_ms", "counter"):
             for counter in ("1166264", 1166264, "1632759395291", 0, "0"):

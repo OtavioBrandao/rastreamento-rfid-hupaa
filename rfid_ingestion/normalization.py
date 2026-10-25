@@ -55,6 +55,9 @@ def simulator(payload, settings):
             payload.get("observed_at"), signal.get("unit"), False, extras)
 
 
+# Mesmo formato de api/simulacao/esquema.py: leitores virtuais nunca colidem com físicos.
+READER_ID_VIRTUAL = re.compile(r"sim-[a-z0-9][a-z0-9-]{0,40}")
+
 # Novo adapter: função com o mesmo contrato e registro aqui; consumidor não muda.
 ADAPTERS = {"ez700": ez700, "simulator": simulator}
 
@@ -70,6 +73,17 @@ def normalize(payload, topic, raw, settings, *, received_at_utc=None):
     try:
         validate_topic(topic)
         reader_id = topic.split("/")[4]
+        relay = None
+        if isinstance(payload, dict) and "sim_reader_id" in payload:
+            # Simulador web no broker externo: a ACL só libera o tópico do leitor de
+            # laboratório, então os leitores virtuais publicam por ele e se identificam
+            # aqui. Só vale num tópico habilitado como relay e só para ids `sim-*`.
+            if reader_id not in getattr(settings, "relay_virtual_readers", ()):
+                raise ValueError("sim_reader_id recusado: este tópico não é relay de leitores virtuais")
+            virtual = payload["sim_reader_id"]
+            if not isinstance(virtual, str) or not READER_ID_VIRTUAL.fullmatch(virtual):
+                raise ValueError("sim_reader_id deve ser um leitor virtual (sim-...)")
+            relay, reader_id = reader_id, virtual
         adapter = settings.reader_adapters.get(reader_id, adapter)
         if adapter not in ADAPTERS:
             raise ValueError("adapter desconhecido")
@@ -109,6 +123,8 @@ def normalize(payload, topic, raw, settings, *, received_at_utc=None):
                                    rssi_original=rssi, rssi_unit=unit,
                                    timestamp_original=payload.get("timestamp", payload.get("observed_at")),
                                    timestamp_format=timestamp_format))
+        if relay is not None:
+            event["metadata"]["relay_reader_id"] = relay
         return event, [], reader_id, adapter
     except ValueError as error:
         return None, [str(error)], reader_id, adapter

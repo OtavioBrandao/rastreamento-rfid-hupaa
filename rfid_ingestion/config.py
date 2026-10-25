@@ -94,6 +94,10 @@ class Settings:
   max_payload_bytes: int = DEFAULT_MAX_PAYLOAD_BYTES
   normalization_adapter: str = "ez700"
   reader_adapters: dict[str, str] = field(default_factory=dict)
+  # Leitores cujo tópico pode carregar leituras de leitores VIRTUAIS do simulador web
+  # (`sim_reader_id` no payload). Vazio = recusa; nunca em produção (ver validate).
+  relay_virtual_readers: tuple[str, ...] = ()
+  app_env: str = "development"
   ez700_timestamp_format: str = "rfc3339"
   mqtt_reconnect_initial_delay: float = DEFAULT_RETRY_INITIAL_DELAY
   mqtt_reconnect_max_delay: float = DEFAULT_RETRY_MAX_DELAY
@@ -155,6 +159,11 @@ class Settings:
           max_payload_bytes=_integer_value(source, "MQTT_MAX_PAYLOAD_BYTES", DEFAULT_MAX_PAYLOAD_BYTES),
           normalization_adapter=source.get("RFID_DEFAULT_ADAPTER", "ez700"),
           reader_adapters=json.loads(source.get("RFID_READER_ADAPTERS", "{}")),
+          relay_virtual_readers=tuple(
+              item.strip() for item in source.get("RFID_RELAY_LEITORES_VIRTUAIS", "").split(",")
+              if item.strip()
+          ),
+          app_env=(source.get("APP_ENV") or "development").strip().lower(),
           ez700_timestamp_format=source.get("EZ700_TIMESTAMP_FORMAT", "rfc3339"),
           mqtt_reconnect_initial_delay=_float_value(
               source, "MQTT_RECONNECT_INITIAL_DELAY", DEFAULT_RETRY_INITIAL_DELAY
@@ -225,6 +234,10 @@ class Settings:
           for k, v in self.reader_adapters.items()
       ):
           raise ValueError("RFID_READER_ADAPTERS deve mapear reader_id para nome de adapter")
+      if any(not re.fullmatch(r"[A-Za-z0-9_-]+", item) for item in self.relay_virtual_readers):
+          raise ValueError("RFID_RELAY_LEITORES_VIRTUAIS deve listar reader_ids separados por vírgula")
+      if self.relay_virtual_readers and self.app_env == "production":
+          raise ValueError("RFID_RELAY_LEITORES_VIRTUAIS não é permitido com APP_ENV=production")
       if type(self.rfid_debounce_window_ms) is not int or self.rfid_debounce_window_ms < 1:
           raise ValueError("RFID_DEBOUNCE_WINDOW_MS deve ser inteiro positivo")
       if type(self.rfid_passage_max_interval_ms) is not int or self.rfid_passage_max_interval_ms < 0:

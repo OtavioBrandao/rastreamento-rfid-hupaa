@@ -53,8 +53,8 @@ class EstadoSessao:
     publicadas: int = 0
     erro_topologia: str | None = None
 
-    def devidas(self, agora: float, periodo: float) -> list[tuple[str, str, int, int]]:
-        """Leituras a publicar agora: (tópico, EPC, porta, RSSI)."""
+    def devidas(self, agora: float, periodo: float) -> list[tuple[str, str, int, int, str]]:
+        """Leituras a publicar agora: (tópico, EPC, porta, RSSI, reader_id)."""
         saida = []
         self.no_alcance = {}
         instante = datetime.now(timezone.utc).isoformat()
@@ -72,7 +72,8 @@ class EstadoSessao:
                 if anterior is None or agora - anterior >= periodo - 0.01:
                     self.ultima_leitura[chave] = agora
                     self.ultima_deteccao[item["id"]] = instante
-                    saida.append((self.topicos[antena.reader_id], item["epc"], antena.porta, valor))
+                    saida.append((self.topicos[antena.reader_id], item["epc"], antena.porta, valor,
+                                  antena.reader_id))
         return saida
 
     def publico(self) -> dict:
@@ -213,7 +214,8 @@ class MotorSimulacao:
         self._ocioso_desde = None
         if self._publicador is None:
             publicador = self._fabrica(self.config.mqtt, assinatura=self.config.assinatura,
-                                       permitido=self.config.topico_permitido)
+                                       permitido=self.config.topico_permitido,
+                                       relay=self.config.topico_relay)
             publicador.conectar()
             self._publicador = publicador
             self.conectado = True
@@ -228,8 +230,9 @@ class MotorSimulacao:
             except ValueError as erro:
                 sessao.erro_topologia = str(erro)
                 continue
-            for topico, epc, porta, rssi in sessao.devidas(agora, self.config.periodo_leitura_s):
-                self._publicador.emitir(topico, epc, porta, rssi)
+            for topico, epc, porta, rssi, reader_id in sessao.devidas(
+                    agora, self.config.periodo_leitura_s):
+                self._publicador.emitir(topico, epc, porta, rssi, reader_id)
                 sessao.publicadas += 1
         self._publicador.conferir()
 

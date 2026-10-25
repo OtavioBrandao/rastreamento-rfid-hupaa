@@ -33,6 +33,9 @@ class ConfigSimulador:
     mqtt: dict[str, str] = field(default_factory=dict, repr=False)
     assinatura: str = ASSINATURA_PADRAO
     topico_permitido: str | None = None
+    # Broker com ACL de um tópico só (perfil de um leitor): todos os leitores virtuais
+    # publicam nele e se identificam por `sim_reader_id` (ver rfid_ingestion.normalization).
+    topico_relay: str | None = None
     tick_s: float = 0.1
     periodo_leitura_s: float = 0.2
 
@@ -83,4 +86,5 @@ def carregar(environ: Mapping[str, str] | None = None) -> ConfigSimulador:
         assinatura=source.get("SIMULADOR_TOPICO_INGESTOR") or source.get("MQTT_TOPIC")
         or ASSINATURA_PADRAO,
         topico_permitido=source.get("SIMULADOR_MQTT_TOPICO_PERMITIDO") or None,
+        topico_relay=source.get("SIMULADOR_MQTT_TOPICO_RELAY") or None,
         tick_s=tick, periodo_leitura_s=periodo)

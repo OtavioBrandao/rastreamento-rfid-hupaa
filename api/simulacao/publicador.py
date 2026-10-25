@@ -57,10 +57,19 @@ def topico_sintetico(config: dict[str, str], reader_id: str, portal_id: str) -> 
     return topic
 
 
-def payload(epc: str, porta: int, rssi: int, contador: int) -> str:
-    """JSON compacto na ordem observada no leitor; sem ``readerid`` no corpo."""
-    return json.dumps({"epc": epc, "rssi": rssi, "antenna": porta,
-                       "timestamp": str(contador)}, separators=(",", ":"))
+def payload(epc: str, porta: int, rssi: int, contador: int,
+            leitor_virtual: str | None = None) -> str:
+    """JSON compacto na ordem observada no leitor; sem ``readerid`` no corpo.
+
+    Via relay (broker com ACL de um tópico só), ``sim_reader_id`` diz ao ingestor
+    qual leitor virtual leu; o leitor dono do tópico nunca recebe a leitura.
+    """
+    corpo = {"epc": epc, "rssi": rssi, "antenna": porta, "timestamp": str(contador)}
+    if leitor_virtual:
+        # `reader_id` também: um ingestor sem suporte a relay recusa a leitura ("reader_id
+        # do payload diverge do tópico") em vez de gravá-la como o leitor dono do tópico.
+        corpo["sim_reader_id"] = corpo["reader_id"] = leitor_virtual
+    return json.dumps(corpo, separators=(",", ":"))
 
 
 def _dica_acl(motivo: str | None) -> str:
@@ -84,10 +93,14 @@ class PublicadorMultiLeitor:
     """
 
     def __init__(self, config: dict[str, str], *, assinatura: str, permitido: str | None = None,
-                 capacidade: int = 8_000_000) -> None:
-        """`assinatura` é o filtro do ingestor; `permitido`, o da ACL do publicador."""
+                 relay: str | None = None, capacidade: int = 8_000_000) -> None:
+        """`assinatura` é o filtro do ingestor; `permitido`, o da ACL do publicador;
+        `relay`, o tópico único autorizado pelo broker (quando houver)."""
         self.assinatura = assinatura
         self.permitido = permitido
+        self.relay = relay
+        if relay and not mqtt.topic_matches_sub(assinatura, relay):
+            raise ValueError(f"tópico relay {relay} fora da assinatura do ingestor ({assinatura})")
         self.contador = novo_contador(capacidade)
         self._fim = self.contador + capacidade
         source = dict(config, MQTT_TOPIC=reading_topic("sim-validacao"),
@@ -110,6 +123,8 @@ class PublicadorMultiLeitor:
 
     def topico(self, reader_id: str, portal_id: str) -> str:
         """Tópico do leitor virtual, conferido contra o ingestor e a ACL do publicador."""
+        if self.relay:
+            return self.relay
         topico = topico_sintetico({"MQTT_TOPIC": self.assinatura}, reader_id, portal_id)
         if self.permitido and not mqtt.topic_matches_sub(self.permitido, topico):
             raise ValueError(f"o tópico {topico} não está autorizado para o publicador "
@@ -139,12 +154,16 @@ class PublicadorMultiLeitor:
         if self._erro:
             raise RuntimeError(self._erro[0])
 
-    def emitir(self, topico: str, epc: str, porta: int, rssi: int) -> None:
-        """Publica uma leitura QoS 1 no tópico do leitor virtual."""
+    def emitir(self, topico: str, epc: str, porta: int, rssi: int,
+               reader_id: str | None = None) -> None:
+        """Publica uma leitura QoS 1 no tópico do leitor virtual (ou no relay)."""
         if self.contador >= self._fim:
             raise RuntimeError("contador sintético esgotado; reinicie a simulação")
+        if self.relay and not reader_id:
+            raise ValueError("via relay, a leitura precisa do reader_id do leitor virtual")
         result = self._client.publish(
-            topico, payload(normalizar_epc(epc), porta, rssi, self.contador), qos=1)
+            topico, payload(normalizar_epc(epc), porta, rssi, self.contador,
+                            reader_id if self.relay else None), qos=1)
         if result.rc != mqtt.MQTT_ERR_SUCCESS:
             motivo = f" (broker desconectou: {self.motivo_desconexao})" if self.motivo_desconexao else ""
             raise RuntimeError(f"MQTT não enfileirou a leitura para {topico}: "

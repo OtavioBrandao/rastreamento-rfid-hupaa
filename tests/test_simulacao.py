@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 import json
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
@@ -144,7 +145,8 @@ def test_item_sem_epc_nao_produz_leitura_e_periodo_e_respeitado():
     com_tag = {"id": "i2", "epc": "E2804C41000000000000ABCD", "x": 72, "y": 66}
     estado = _estado([sem_tag, com_tag])
     leituras = estado.devidas(10.0, 0.2)
-    assert [(porta, epc) for _, epc, porta, _ in leituras] == [(2, com_tag["epc"])]
+    assert [(porta, epc, leitor) for _, epc, porta, _, leitor in leituras] == [
+        (2, com_tag["epc"], "sim-easy-01")]
     assert estado.no_alcance == {"i1": ["antena-a"], "i2": ["antena-b"]}
     assert estado.devidas(10.1, 0.2) == []
     assert len(estado.devidas(10.2, 0.2)) == 1
@@ -478,21 +480,25 @@ class PublicadorCapturado:
 
     instancias: list[PublicadorCapturado] = []
 
-    def __init__(self, mqtt, *, assinatura, permitido=None):
+    def __init__(self, mqtt, *, assinatura, permitido=None, relay=None):
         self.assinatura = assinatura
+        self.relay = relay
         self.mensagens: list[tuple[str, dict]] = []
         self.destino = "mqtt://capturado"
         self.pendentes = 0
         PublicadorCapturado.instancias.append(self)
 
     def topico(self, reader_id, portal_id):
+        if self.relay:
+            return self.relay
         return topico_sintetico({"MQTT_TOPIC": self.assinatura}, reader_id, portal_id)
 
     def conectar(self):
         pass
 
-    def emitir(self, topico, epc, porta, rssi):
-        self.mensagens.append((topico, json.loads(payload(epc, porta, rssi, 1_000_000))))
+    def emitir(self, topico, epc, porta, rssi, reader_id=None):
+        self.mensagens.append((topico, json.loads(payload(
+            epc, porta, rssi, 1_000_000, reader_id if self.relay else None))))
 
     def conferir(self):
         pass
@@ -506,7 +512,7 @@ T0 = datetime.now(UTC).replace(microsecond=0) + timedelta(hours=1)
 EPC_MACA = "E2804C4100000000000000A1"
 
 
-def _receptor(pg_engine, tmp_path):
+def _receptor(pg_engine, tmp_path, relay=()):
     location = LocationProjectionService(pg_engine)
     direction = DirectionInferenceService(DirectionRepository(pg_engine), 100,
                                           confirmed_handler=location.process_passage)
@@ -516,7 +522,8 @@ def _receptor(pg_engine, tmp_path):
     factory = patch("rfid_ingestion.mqtt_client.create_client")
     client = factory.start().return_value
     client.ack.return_value = 0
-    receiver = MqttReceiver(Settings(mqtt_topic="easy/dev/hupaa/+/+/readings"),
+    receiver = MqttReceiver(Settings(mqtt_topic="easy/dev/hupaa/+/+/readings",
+                                     relay_virtual_readers=relay),
                             JsonlEventStore(tmp_path / "events.jsonl"),
                             RawReadingRepository(pg_engine),
                             observation_handler=passage.handle_observation,
@@ -524,11 +531,13 @@ def _receptor(pg_engine, tmp_path):
     return receiver, client, factory
 
 
-def _simular(pg_engine, tmp_path, sessao_codigo, percurso, inicio=0.0):
+def _simular(pg_engine, tmp_path, sessao_codigo, percurso, inicio=0.0, relay=None,
+             relay_aceito=()):
     """Move o item pelo percurso (x, y, segundos) e entrega cada publicação ao ingestor."""
     PublicadorCapturado.instancias.clear()
-    motor = MotorSimulacao(HABILITADO, pg_engine, fabrica_publicador=PublicadorCapturado)
-    receiver, client, factory = _receptor(pg_engine, tmp_path)
+    config = dataclasses.replace(HABILITADO, topico_relay=relay) if relay else HABILITADO
+    motor = MotorSimulacao(config, pg_engine, fabrica_publicador=PublicadorCapturado)
+    receiver, client, factory = _receptor(pg_engine, tmp_path, relay_aceito)
     mid = 0
     try:
         relogio = inicio
@@ -664,3 +673,31 @@ def test_teste_rapido_hupaa_confirma_passagem_pelo_pipeline(pg_engine, tmp_path)
     _simular(pg_engine, tmp_path, codigo, [(44, 15, 0.6), (51, 15, 0.4), (58, 15, 0.6), (70, 15, 0.3)])
     zona, movimentos, estados = _projecao(pg_engine, maca)
     assert zona == zonas["zona-2"] and movimentos == 1 and estados == ["confirmed"]
+
+
+RELAY = "easy/dev/hupaa/portal-01/reader-01/readings"
+
+
+def test_relay_no_topico_autorizado_atribui_ao_leitor_virtual(pg_engine, cenario_easy, tmp_path):
+    """Regressão do HiveMQ: a ACL só libera o tópico do reader-01; o simulador publica
+    por ele e o ingestor atribui a leitura ao leitor virtual, nunca ao reader-01."""
+    a, b = (28, 66), (72, 66)
+    _simular(pg_engine, tmp_path, cenario_easy["codigo"],
+             [(*a, 0.6), (50, 90, 0.4), (*b, 0.6), (50, 90, 0.3)],
+             relay=RELAY, relay_aceito=("reader-01",))
+    with Session(pg_engine) as session:
+        leitores = set(session.scalars(select(Leitor.reader_id).join(Antena).join(LeituraBruta)))
+        # A origem registra por qual tópico a leitura chegou (auditável).
+        relays = {leitura.dados_origem["metadata"].get("relay_reader_id")
+                  for leitura in session.scalars(select(LeituraBruta))}
+    assert leitores == {"sim-easy-01"}
+    zona, movimentos, estados = _projecao(pg_engine, cenario_easy["equipamento"])
+    assert zona == cenario_easy["zonas"]["zona-b"] and estados == ["confirmed"]
+    assert relays == {"reader-01"}
+
+
+def test_relay_nao_habilitado_recusa_e_nao_atribui_ao_leitor_fisico(pg_engine, cenario_easy,
+                                                                    tmp_path):
+    _simular(pg_engine, tmp_path, cenario_easy["codigo"], [(28, 66, 0.6)], relay=RELAY)
+    with Session(pg_engine) as session:
+        assert session.scalar(select(func.count()).select_from(LeituraBruta)) == 0
