@@ -2335,3 +2335,70 @@ button:disabled { opacity:.55; cursor:default }
   .sim-session-state { margin-left:0 }
   .sim-marker span { display:none }
 }
+
+/* --- Simulador: marcadores mínimos, edição de áreas, visada e etapas (hotfix PR #85) --- */
+.sim-coverage { fill:#df3f45; fill-opacity:.06; stroke:#df3f45; stroke-opacity:.5; stroke-width:1; stroke-dasharray:3 3 }
+.sim-coverage-active { fill-opacity:.2; stroke-opacity:.9; stroke-dasharray:none }
+.sim-coverage-restrita { fill:#c2413b; stroke:#c2413b }
+.sim-boresight { stroke:#df3f45; stroke-width:1.5; stroke-opacity:.8 }
+.sim-swatch { background:transparent !important; border:2px dashed currentColor }
+
+.sim-dot { position:absolute; transform:translate(-50%,-50%); width:22px; height:22px; padding:0; margin:0; border:0; background:transparent; display:grid; place-items:center; cursor:grab; z-index:2 }
+.sim-dot.static { cursor:default }
+.sim-dot:focus-visible { outline:2px solid #0095da; outline-offset:0; border-radius:50% }
+.sim-dot-shape { position:relative; display:block; box-shadow:0 0 0 1.5px #fff, 0 1px 2px rgba(16,42,66,.4) }
+.sim-dot-leitor .sim-dot-shape { width:9px; height:9px; border-radius:2px; background:var(--reader) }
+.sim-dot-leitor.restrita .sim-dot-shape { background:#c2413b }
+.sim-dot-antena .sim-dot-shape { width:8px; height:8px; border-radius:50%; background:var(--antenna) }
+.sim-dot-portal .sim-dot-shape { width:7px; height:7px; background:#526b7e; transform:rotate(45deg) }
+.sim-dot-arrow { position:absolute; left:50%; top:50%; width:9px; height:2px; background:var(--antenna); transform-origin:0 50%; margin-top:-1px }
+.sim-dot.selected .sim-dot-shape { box-shadow:0 0 0 2px #fff, 0 0 0 4px #0095da }
+.sim-dot.reading .sim-dot-shape { animation:sim-pulse .9s ease-in-out infinite alternate; box-shadow:0 0 0 2px #fff, 0 0 0 5px rgba(223,63,69,.35) }
+.sim-dot-label { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:.62rem; font-weight:700; color:var(--slate); white-space:nowrap; background:rgba(255,255,255,.85); padding:0 3px; border-radius:3px; pointer-events:none }
+.sim-tip { display:none; position:absolute; left:50%; bottom:calc(100% + 4px); transform:translateX(-50%); min-width:170px; max-width:260px; padding:7px 9px; border-radius:8px; background:#17242e; color:#fff; font-size:.72rem; font-weight:500; line-height:1.35; text-align:left; white-space:normal; z-index:20; pointer-events:none; box-shadow:0 4px 14px rgba(0,0,0,.25) }
+.sim-tip strong { display:block; font-size:.76rem; margin-bottom:2px }
+.sim-tip span { display:block; color:#cfdbe4 }
+.sim-dot:hover .sim-tip,.sim-dot:focus-visible .sim-tip { display:block }
+
+.sim-zone-label { font-size:.62rem; opacity:.9 }
+.sim-zone-edit { position:absolute; outline:2px solid #0095da; outline-offset:-1px; pointer-events:none; z-index:1 }
+.sim-handle { position:absolute; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:3px; background:#fff; border:2px solid #0095da; pointer-events:auto; z-index:3 }
+.sim-handle-n { left:50%; top:0; cursor:ns-resize } .sim-handle-s { left:50%; top:100%; cursor:ns-resize }
+.sim-handle-e { left:100%; top:50%; cursor:ew-resize } .sim-handle-w { left:0; top:50%; cursor:ew-resize }
+.sim-handle-ne { left:100%; top:0; cursor:nesw-resize } .sim-handle-sw { left:0; top:100%; cursor:nesw-resize }
+.sim-handle-nw { left:0; top:0; cursor:nwse-resize } .sim-handle-se { left:100%; top:100%; cursor:nwse-resize }
+.sim-plan-editor.tool-selecionar { cursor:default }
+.sim-area-fields { display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; border:1px solid var(--line); border-radius:8px; padding:8px }
+.sim-area-fields input { width:100% }
+.sim-view-toggles { display:inline-flex; gap:10px; margin-left:auto; font-size:.82rem }
+.sim-hint { margin:0 0 8px }
+
+.sim-visada { border:1px dashed var(--line); border-radius:8px; padding:8px; display:grid; gap:6px }
+.sim-visada legend { font-size:.8rem; font-weight:700; padding:0 4px }
+.sim-compass { display:grid; grid-template-columns:repeat(3,34px); gap:4px }
+.sim-compass button { min-height:30px; padding:0; font-size:1rem; line-height:1 }
+.sim-compass button[aria-pressed="true"] { background:var(--antenna); color:#fff; border-color:var(--antenna) }
+.sim-compass-center { font-size:.8rem !important }
+.sim-range-row { display:flex; gap:8px; align-items:center }
+.sim-range-row input[type="range"] { flex:1 }
+.sim-range-row input[type="number"] { width:70px }
+.sim-defaults { border:1px solid #f0d58e; background:#fffaf0; border-radius:8px; padding:8px 10px; margin-bottom:10px; display:grid; gap:6px; font-size:.84rem }
+.sim-defaults p { margin:0 }
+
+.sim-legend-plan { list-style:none; display:flex; flex-wrap:wrap; gap:4px 14px; margin:8px 0 0; padding:0; font-size:.74rem; color:var(--muted) }
+.sim-legend-plan li { display:flex; align-items:center; gap:5px }
+.sim-legend-plan span { width:10px; height:10px; border-radius:2px; opacity:.75 }
+
+.sim-item { padding:4px 8px; font-size:.72rem; gap:4px }
+.sim-stages { list-style:none; display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; padding:0; margin:0 0 12px }
+.sim-stages li { border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:#fff; display:grid; gap:2px; font-size:.8rem; color:var(--muted) }
+.sim-stages li strong { color:var(--slate); font-size:.82rem }
+.sim-stages li.on { border-color:#1f8a70; background:#f1faf6 }
+.sim-alerts { border:1px solid #f0c2bf; background:#fff6f5; border-radius:10px; padding:10px 12px; margin:0 0 12px }
+.sim-alerts.active { border-color:#c2413b; box-shadow:0 0 0 3px rgba(194,65,59,.15) }
+.sim-alerts h3 { display:flex; gap:6px; align-items:center; margin:0 0 6px; font-size:.92rem; color:#9b2c27 }
+.sim-alerts ul { list-style:none; margin:0; padding:0; display:grid; gap:6px; font-size:.84rem }
+.sim-alerts li.recent strong:first-child { color:#9b2c27 }
+.sim-alerts small { display:block; color:var(--muted) }
+.sim-alert-none { color:var(--muted); font-size:.84rem; margin:0 0 10px }
+@media (max-width: 700px) { .sim-view-toggles { margin-left:0 } }

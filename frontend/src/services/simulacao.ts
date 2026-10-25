@@ -8,8 +8,21 @@ export interface Area { x: number; y: number; largura: number; altura: number }
 
 export interface ZonaLayout { chave: string; nome: string; cor: string; area: Area | null; referencia_planta: string | null; restrita: boolean }
 export interface PortalLayout { chave: string; nome: string; zona_a: string; zona_b: string; posicao: Ponto | null }
-export interface AntenaLayout { chave: string; nome: string; porta: number; posicao: Ponto | null; alcance: number; portal: string | null; lado: 'a' | 'b' | null; zona: string | null }
-export interface LeitorLayout { chave: string; nome: string; reader_id: string; modelo: Modelo; posicao: Ponto | null; antenas: AntenaLayout[] }
+/** `orientacao`: visada em graus da tela (0 direita, 90 baixo, 180 esquerda, 270 cima); null = omnidirecional (layout antigo). */
+export interface AntenaLayout { chave: string; nome: string; porta: number; posicao: Ponto | null; alcance: number; orientacao?: number | null; fator_traseiro?: number; portal: string | null; lado: 'a' | 'b' | null; zona: string | null }
+export interface LeitorLayout { chave: string; nome: string; reader_id: string; modelo: Modelo; posicao: Ponto | null; antenas: AntenaLayout[]; alerta_area_restrita?: boolean }
+
+export const ALCANCE_PADRAO = 4
+export const FATOR_TRASEIRO_PADRAO = 0.35
+export const DIRECOES: { graus: number; seta: string; nome: string }[] = [
+  { graus: 270, seta: '↑', nome: 'Cima' }, { graus: 315, seta: '↗', nome: 'Cima-direita' }, { graus: 0, seta: '→', nome: 'Direita' }, { graus: 45, seta: '↘', nome: 'Baixo-direita' },
+  { graus: 90, seta: '↓', nome: 'Baixo' }, { graus: 135, seta: '↙', nome: 'Baixo-esquerda' }, { graus: 180, seta: '←', nome: 'Esquerda' }, { graus: 225, seta: '↖', nome: 'Cima-esquerda' },
+]
+export function nomeDirecao(graus: number | null | undefined) {
+  if (graus === null || graus === undefined) return 'todas as direções'
+  const exata = DIRECOES.find((item) => item.graus === Math.round(graus) % 360)
+  return exata ? `${exata.seta} ${exata.nome.toLowerCase()} (${exata.graus}°)` : `${Math.round(graus)}°`
+}
 export interface LayoutConfig {
   cenario: Cenario
   proporcao: number
@@ -71,8 +84,10 @@ export interface SimConfig {
 }
 
 export interface EquipamentoZona { id: number; nome: string; tipo: string; epc: string | null; ultima_deteccao_em: string | null; estado_recencia: string }
+export interface AlertaRestrito { epc: string; zona: string; leitor: string; reader_id: string; antena: string; porta: number; leituras: number; primeira_leitura_em: string; ultima_leitura_em: string; recente: boolean; equipamento: { id: number; nome: string } | null }
 export interface Monitor {
   gerado_em: string
+  alertas_restritos?: AlertaRestrito[]
   leituras_total: number
   leituras: { id: number; epc: string; reader_id: string; porta: number; antena: string | null; lido_em: string; rssi: number | null; equipamento: { id: number; nome: string } | null }[]
   tags: { epc: string; leituras: number; ultima_leitura_em: string; recente: boolean; equipamento: { id: number; nome: string } | null }[]
@@ -104,10 +119,47 @@ export const getMonitor = (codigo: string, signal?: AbortSignal) => readJson<Mon
 
 export const controlUrl = (codigo: string) => `${window.location.origin}${window.location.pathname}#/simulador/controle/${codigo}`
 
-/** Mesmo cálculo de api/simulacao/geometria.py: distância na escala de x. */
+/** Mesma fórmula de api/simulacao/geometria.py: alcance na direção `angulo` (radianos, escala de x, y para baixo). */
+export function alcanceNaDirecao(antena: AntenaLayout, angulo: number) {
+  if (antena.orientacao === null || antena.orientacao === undefined) return antena.alcance
+  const f = antena.fator_traseiro ?? FATOR_TRASEIRO_PADRAO
+  const frente = (1 + Math.cos(angulo - (antena.orientacao * Math.PI) / 180)) / 2
+  return antena.alcance * (f + (1 - f) * frente ** 2)
+}
+
+/** A antena lê o ponto? Distância na escala de x, alcance conforme a visada. */
 export function inRange(item: Ponto, antenna: AntenaLayout, proporcao: number) {
   if (!antenna.posicao) return false
-  return Math.hypot(item.x - antenna.posicao.x, (item.y - antenna.posicao.y) / proporcao) <= antenna.alcance
+  const dx = item.x - antenna.posicao.x, dy = (item.y - antenna.posicao.y) / proporcao
+  return Math.hypot(dx, dy) <= alcanceNaDirecao(antenna, Math.atan2(dy, dx)) + 1e-9
+}
+
+/** Contorno da cobertura (coordenadas 0–100 da planta) para desenhar no SVG. */
+export function contornoCobertura(antena: AntenaLayout, proporcao: number, passos = 48) {
+  if (!antena.posicao) return ''
+  const { x, y } = antena.posicao
+  const pontos = Array.from({ length: passos }, (_, i) => {
+    const angulo = (i / passos) * 2 * Math.PI
+    const r = alcanceNaDirecao(antena, angulo)
+    return `${(x + r * Math.cos(angulo)).toFixed(2)},${(y + r * Math.sin(angulo) * proporcao).toFixed(2)}`
+  })
+  return `M${pontos.join(' L')} Z`
+}
+
+/** Novos padrões para antenas de layouts antigos: visada para o centro da própria zona,
+ *  traseira curta e alcance limitado. Posições, portais e nomes não mudam. */
+export function aplicarPadroesDeAntena(layout: LayoutConfig): LayoutConfig {
+  const limite = layout.cenario === 'easy' ? 11 : ALCANCE_PADRAO
+  return { ...layout, leitores: layout.leitores.map((leitor) => ({ ...leitor, antenas: leitor.antenas.map((antena) => {
+    if (antena.orientacao !== null && antena.orientacao !== undefined) return antena
+    const area = layout.zonas.find((zona) => zona.chave === antena.zona)?.area
+    let orientacao = 0
+    if (area && antena.posicao) {
+      const dx = area.x + area.largura / 2 - antena.posicao.x, dy = (area.y + area.altura / 2 - antena.posicao.y) / layout.proporcao
+      if (Math.hypot(dx, dy) > 0.5) orientacao = Math.round(((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360)
+    }
+    return { ...antena, orientacao, fator_traseiro: FATOR_TRASEIRO_PADRAO, alcance: Math.min(antena.alcance, limite) }
+  }) })) }
 }
 
 export function zoneAt(layout: LayoutConfig, point: Ponto) {
@@ -124,6 +176,9 @@ export function zonaRestritaDoLeitor(layout: LayoutConfig, leitor: LeitorLayout)
 
 export const antenaNaZonaRestrita = (layout: LayoutConfig, antena: AntenaLayout) =>
   !!antena.zona && layout.zonas.some((zona) => zona.chave === antena.zona && zona.restrita)
+
+const alcanceEntre = (a: AntenaLayout, b: AntenaLayout, p: number) =>
+  alcanceNaDirecao(a, Math.atan2((b.posicao!.y - a.posicao!.y) / p, b.posicao!.x - a.posicao!.x))
 
 /** Mesmo lado e mesma zona, cada uma num portal: no mesmo ponto valem como UM ponto de detecção (igual a esquema.py). */
 export const pontoUnico = (a: AntenaLayout, b: AntenaLayout) => !!a.portal && !!b.portal && a.portal !== b.portal && a.lado === b.lado && a.zona === b.zona
@@ -148,9 +203,12 @@ export function pendencias(layout: LayoutConfig): string[] {
       const d = Math.hypot(antena.posicao!.x - outro.antena.posicao!.x, (antena.posicao!.y - outro.antena.posicao!.y) / layout.proporcao)
       const nomes = `${leitor.nome} / ${antena.nome} e ${outro.leitor.nome} / ${outro.antena.nome}`
       if (d < 1 && !pontoUnico(antena, outro.antena)) resultado.push(`${nomes} estão no mesmo ponto: só faz sentido se forem o mesmo lado de portais diferentes, na mesma zona.`)
-      else if (antena.portal && antena.portal === outro.antena.portal && antena.lado !== outro.antena.lado && d <= antena.alcance + outro.antena.alcance)
+      else if (antena.portal && antena.portal === outro.antena.portal && antena.lado !== outro.antena.lado && d <= alcanceEntre(antena, outro.antena, layout.proporcao) + alcanceEntre(outro.antena, antena, layout.proporcao))
         resultado.push(`${nomes}: os alcances dos lados A e B se sobrepõem e a direção não é confirmada. Afaste-as ou reduza o alcance.`)
     }
   })
+  const restritas = new Set(layout.zonas.filter((zona) => zona.restrita).map((zona) => zona.chave))
+  for (const leitor of layout.leitores) if (leitor.alerta_area_restrita && !leitor.antenas.some((antena) => antena.zona && restritas.has(antena.zona)))
+    resultado.push(`${leitor.nome} avisa área restrita, mas nenhuma antena dele está numa zona marcada como restrita.`)
   return resultado
 }

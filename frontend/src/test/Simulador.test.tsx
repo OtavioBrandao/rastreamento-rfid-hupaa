@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LayoutEditor } from '../components/simulador/LayoutEditor'
+import { LayoutEditor, redimensionar } from '../components/simulador/LayoutEditor'
 import { SimulatorControlPage } from '../pages/SimulatorControlPage'
-import { inRange, pendencias, zoneAt, type LayoutConfig, type Sessao } from '../services/simulacao'
+import { aplicarPadroesDeAntena, alcanceNaDirecao, contornoCobertura, inRange, pendencias, zoneAt, type LayoutConfig, type Sessao } from '../services/simulacao'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -30,8 +30,71 @@ describe('geometria compartilhada com o motor', () => {
   })
 })
 
+describe('antena direcional', () => {
+  it('lê mais longe na visada e pouco atrás; desenha o mesmo contorno', () => {
+    const antena = { ...easy.leitores[0].antenas[0], posicao: { x: 50, y: 50 }, alcance: 4, orientacao: 0, fator_traseiro: 0.35 }
+    expect(inRange({ x: 53.8, y: 50 }, antena, 1)).toBe(true)
+    expect(inRange({ x: 46.5, y: 50 }, antena, 1)).toBe(false)
+    expect(inRange({ x: 48.8, y: 50 }, antena, 1)).toBe(true)
+    const baixo = { ...antena, orientacao: 90 }
+    expect(inRange({ x: 50, y: 53.8 }, baixo, 1)).toBe(true)
+    expect(inRange({ x: 50, y: 46.5 }, baixo, 1)).toBe(false)
+    expect(alcanceNaDirecao(antena, 0)).toBeCloseTo(4)
+    expect(alcanceNaDirecao(antena, Math.PI)).toBeCloseTo(1.4)
+    expect(contornoCobertura(antena, 1)).toMatch(/^M54\.00,50\.00 L/)
+    const antiga = { ...antena, orientacao: null }
+    expect(inRange({ x: 46.5, y: 50 }, antiga, 1)).toBe(true)
+  })
+
+  it('aplica novos padrões só em antenas antigas, sem mexer em posições', () => {
+    const antigo = structuredClone(easy)
+    const novo = aplicarPadroesDeAntena(antigo)
+    const [a, b] = novo.leitores[0].antenas
+    expect(a.posicao).toEqual(antigo.leitores[0].antenas[0].posicao)
+    // Centro das salas fica acima das antenas: visada para cima (pouco inclinada para o centro de cada sala).
+    expect(a.orientacao).toBeGreaterThan(250); expect(a.orientacao).toBeLessThan(270)
+    expect(b.orientacao).toBeGreaterThan(270); expect(b.orientacao).toBeLessThan(290)
+    expect(a.alcance).toBe(11)
+    expect(aplicarPadroesDeAntena(novo)).toEqual(novo)
+  })
+})
+
+describe('áreas', () => {
+  it('redimensiona por qualquer borda ou canto sem sair da planta', () => {
+    const area = { x: 10, y: 10, largura: 20, altura: 20 }
+    expect(redimensionar(area, 'e', 5, 0)).toEqual({ x: 10, y: 10, largura: 25, altura: 20 })
+    expect(redimensionar(area, 'w', -15, 0)).toEqual({ x: 0, y: 10, largura: 30, altura: 20 })
+    expect(redimensionar(area, 'n', 0, 30)).toEqual({ x: 10, y: 28, largura: 20, altura: 2 })
+    expect(redimensionar(area, 'se', 200, 200)).toEqual({ x: 10, y: 10, largura: 90, altura: 90 })
+    expect(redimensionar(area, 'nw', 5, 5)).toEqual({ x: 15, y: 15, largura: 15, altura: 15 })
+    expect(redimensionar(area, 'mover', 200, -50)).toEqual({ x: 80, y: 0, largura: 20, altura: 20 })
+  })
+})
+
 describe('editor da planta', () => {
   afterEach(cleanup)
+
+  it('seleciona a área pela lista, mostra as 8 alças e aceita valores numéricos', () => {
+    let config = structuredClone(easy)
+    const onChange = vi.fn((next: LayoutConfig) => { config = next })
+    const { rerender } = render(<LayoutEditor config={config} onChange={onChange}/>)
+    fireEvent.click(screen.getByRole('button', { name: 'Zona A' }))
+    expect(document.querySelectorAll('.sim-handle')).toHaveLength(8)
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Largura' }), { target: { value: '30' } })
+    rerender(<LayoutEditor config={config} onChange={onChange}/>)
+    expect(config.zonas[0].area).toEqual({ x: 1, y: 5, largura: 30, altura: 60 })
+  })
+
+  it('gira a visada da antena pela rosa dos ventos', () => {
+    let config = structuredClone(easy)
+    const onChange = vi.fn((next: LayoutConfig) => { config = next })
+    const { rerender } = render(<LayoutEditor config={config} onChange={onChange}/>)
+    fireEvent.click(screen.getByRole('button', { name: /Leitor EASY · EZ700/ }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Visada baixo (90°)' })[0])
+    rerender(<LayoutEditor config={config} onChange={onChange}/>)
+    expect(config.leitores[0].antenas[0].orientacao).toBe(90)
+    expect(screen.getAllByText(/Visada direta: ↓ baixo \(90°\)/)[0]).toBeInTheDocument()
+  })
   it('limita quatro antenas por leitor e mostra o aviso do DR Max', () => {
     let config = structuredClone(easy)
     const onChange = vi.fn((next: LayoutConfig) => { config = next })
@@ -80,7 +143,7 @@ describe('editor da planta', () => {
     render(<LayoutEditor config={config} onChange={vi.fn()}/>)
     expect(screen.getByText('zona restrita')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Leitor 4 · DR Max/ }))
-    expect(screen.getByText('Leitor da zona restrita.')).toBeInTheDocument()
+    expect(screen.getByText('Leitor da área restrita.')).toBeInTheDocument()
     // Antena sem portal no mesmo ponto: aviso. Lado B de dois portais no mesmo ponto: ponto único válido.
     expect(pendencias(config).join(' ')).toMatch(/Antena 1 e Leitor 4 \/ Antena 2 estão no mesmo ponto/)
     config.portais.push({ chave: 'p-escada-2', nome: 'Zona B ↔ Escada', zona_a: 'zona-b', zona_b: 'escada', posicao: null })
@@ -111,8 +174,12 @@ describe('editor da planta', () => {
 describe('aba de controle', () => {
   let session: Sessao
   let calls: { url: URL; init: RequestInit }[]
+  let monitor: Record<string, unknown>
+  let patch: (url: URL, init: RequestInit) => Promise<unknown> | unknown
   beforeEach(() => {
     calls = []
+    monitor = { gerado_em: new Date().toISOString(), leituras_total: 3, leituras: [], tags: [], passagens: [], zonas: {}, leitores: [], alertas_restritos: [] }
+    patch = (_url, init) => json({ codigo: session.codigo, versao: session.versao + 1, itens: session.itens.map((item) => item.id === 'it-1' ? { ...item, ...JSON.parse(String(init.body)) } : item) })
     session = { codigo: '0123456789abcdef', layout_id: 1, cenario: 'easy', estado: 'em_execucao', versao: 3, layout: easy,
       itens: [{ id: 'it-1', nome: 'Maca 1', tipo: 'Maca', epc: 'E2804C4100000000000000A1', x: 28, y: 66, x0: 8, y0: 94 },
         { id: 'it-2', nome: 'Cadeira', tipo: 'Cadeira', epc: null, x: 72, y: 66, x0: 24, y0: 94 }],
@@ -121,7 +188,9 @@ describe('aba de controle', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit = {}) => {
       const url = new URL(String(input), 'http://localhost')
       calls.push({ url, init })
+      if (url.pathname.endsWith('/monitor')) return json(monitor)
       if (url.pathname.endsWith('/itens') && init.method === 'POST') return json({ ...session, versao: 4 }, 201)
+      if (init.method === 'PATCH') return patch(url, init)
       return json(session)
     }))
   })
@@ -131,8 +200,8 @@ describe('aba de controle', () => {
     render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
     expect(await screen.findByRole('button', { name: 'Maca 1, sendo lido' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cadeira (sem etiqueta)' })).toBeInTheDocument()
-    expect(screen.getByText(/12 leitura\(s\) publicada\(s\)/)).toBeInTheDocument()
-    expect(await screen.findByText(/não tem etiqueta: nenhuma leitura/)).toBeInTheDocument()
+    expect(screen.getByText(/12 publicada\(s\)/)).toBeInTheDocument()
+    expect(await screen.findByText(/sem etiqueta: nenhuma leitura/)).toBeInTheDocument()
   })
 
   it('adiciona equipamento sem etiqueta', async () => {
@@ -157,6 +226,31 @@ describe('aba de controle', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remover todos' }))
     await vi.waitFor(() => expect(calls.some((call) => call.init.method === 'DELETE' && call.url.pathname.endsWith('/itens'))).toBe(true))
     vi.restoreAllMocks()
+  })
+
+  it('resposta antiga do arraste não desfaz a posição final', async () => {
+    const respostas: ((valor: unknown) => void)[] = []
+    patch = () => new Promise((resolve) => { respostas.push(resolve) })
+    const { container } = render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
+    const maca = await screen.findByRole('button', { name: 'Maca 1, sendo lido' })
+    const plano = container.querySelector('.sim-plan') as HTMLElement
+    plano.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}) })
+    fireEvent.pointerDown(maca, { clientX: 28, clientY: 66 })
+    fireEvent.pointerMove(plano, { clientX: 40, clientY: 66 })
+    fireEvent.pointerUp(plano, { clientX: 40, clientY: 66 })
+    await vi.waitFor(() => expect(respostas.length).toBe(2))
+    const item = (x: number, versao: number) => json({ codigo: session.codigo, versao, itens: [{ ...session.itens[0], x, y: 66 }, session.itens[1]] })
+    // Chega primeiro a resposta do último envio (x=40) e depois a do primeiro (x=40 também, versão menor).
+    respostas[1](item(40, 6)); respostas[0](item(28, 5))
+    await vi.waitFor(() => expect((container.querySelector('.sim-item.tagged') as HTMLElement).style.left).toBe('40%'))
+  })
+
+  it('mostra o alerta de área restrita vindo do sistema', async () => {
+    monitor.alertas_restritos = [{ epc: 'E2804C4100000000000000A1', zona: 'Escada', leitor: 'Leitor 5 · área restrita', reader_id: 'sim-hupaa-05', antena: 'Antena 1', porta: 1, leituras: 4,
+      primeira_leitura_em: new Date().toISOString(), ultima_leitura_em: new Date().toISOString(), recente: true, equipamento: { id: 1, nome: 'Maca 01' } }]
+    render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
+    expect(await screen.findByText('1 item(ns) na área restrita agora')).toBeInTheDocument()
+    expect(screen.getByText('Maca 01')).toBeInTheDocument()
   })
 
   it('perfil de consulta não vê controles de alteração', async () => {

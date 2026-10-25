@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ageLabel } from '../components/DashboardParts'
 import { Icon } from '../components/layout/Icon'
 import { LayoutEditor } from '../components/simulador/LayoutEditor'
-import { SimPlan } from '../components/simulador/SimPlan'
+import { PlanLegend, SimPlan } from '../components/simulador/SimPlan'
 import { errorMessage } from '../services/api'
 import { useLiveQuery, useLiveRefresh } from '../services/live'
 import {
   archiveLayout, controlUrl, createLayout, getLayouts, getMonitor, getSessions, getSimConfig, pendencias, quickTest, restorePreset, saveLayout, sessionAction, startSession, wipeScenario,
-  type Cenario, type LayoutConfig, type LayoutResumo, type Monitor, type SessaoResumo,
+  type AlertaRestrito, type Cenario, type LayoutConfig, type LayoutResumo, type Monitor, type SessaoResumo,
 } from '../services/simulacao'
 
 const CENARIOS: { id: Cenario; nome: string; descricao: string }[] = [
@@ -57,13 +57,17 @@ export function SimulatorPage({ canEdit }: { canEdit: boolean }) {
     setLayoutId(id); setDraft(chosen.configuracao); setName(chosen.nome); setDirty(false); setNotice(''); setHistory([])
   }
 
-  function edit(next: LayoutConfig) {
-    if (draft) setHistory((old) => [...old.slice(-49), draft])
+  // Um arraste (ou digitação no mesmo campo) manda vários `edit` com o mesmo grupo: vira UM passo do desfazer.
+  const ultimoGrupo = useRef<string | undefined>(undefined)
+  function edit(next: LayoutConfig, grupo?: string) {
+    if (draft && (!grupo || grupo !== ultimoGrupo.current)) setHistory((old) => [...old.slice(-49), draft])
+    ultimoGrupo.current = grupo
     setDraft(next); setDirty(true)
   }
   function undo() {
     const previous = history.at(-1)
     if (!previous) return
+    ultimoGrupo.current = undefined
     setHistory((old) => old.slice(0, -1)); setDraft(previous); setDirty(true)
   }
   useEffect(() => {
@@ -202,9 +206,11 @@ function SessionMonitor({ codigo, layout }: { codigo: string; layout: LayoutConf
   const data: Monitor | null = query.data
   if (!data) return query.error ? <div className="state-panel error-panel" role="alert">Não foi possível carregar o monitoramento.</div> : <div className="panel table-skeleton" role="status" aria-label="Carregando monitoramento"><span/><span/></div>
   const naoCadastradas = data.tags.filter((tag) => !tag.equipamento).length
+  const alertas = data.alertas_restritos ?? []
   const confirmadas = data.passagens.filter((item) => item.direcao_status === 'confirmed').length
   return <div className="sim-monitor">
     <p className="muted-text">Tudo nesta visão vem do banco: leituras gravadas pelo ingestor, passagens e última zona confirmadas pela inferência. A posição virtual dos itens não aparece aqui — o RFID só sabe a zona.</p>
+    <AlertasRestritos alertas={alertas}/>
     <div className="kpi-grid sim-kpis">
       <article className="kpi-card kpi-total"><div className="kpi-card-heading"><span className="kpi-card-label">Leituras recebidas</span><span className="kpi-icon"><Icon name="antenna" size={18}/></span></div><strong>{data.leituras_total.toLocaleString('pt-BR')}</strong></article>
       <article className="kpi-card kpi-available"><div className="kpi-card-heading"><span className="kpi-card-label">Tags reconhecidas</span><span className="kpi-icon"><Icon name="check" size={18}/></span></div><strong>{data.tags.length - naoCadastradas}</strong></article>
@@ -212,12 +218,13 @@ function SessionMonitor({ codigo, layout }: { codigo: string; layout: LayoutConf
       <article className="kpi-card kpi-attention"><div className="kpi-card-heading"><span className="kpi-card-label">Passagens confirmadas</span><span className="kpi-icon"><Icon name="portal" size={18}/></span></div><strong>{confirmadas}</strong></article>
     </div>
     <section className="panel" aria-labelledby="sim-zones-title"><div className="panel-heading"><div><p className="eyebrow">ÚLTIMA ZONA CONFIRMADA</p><h2 id="sim-zones-title">Distribuição por zona</h2></div></div>
-      <SimPlan layout={layout} label="Planta com equipamentos agrupados pela última zona confirmada" options={{ showCoverage: false }}>
+      <SimPlan layout={layout} label="Planta com equipamentos agrupados pela última zona confirmada" options={{ showCoverage: false, showZoneNames: true }}>
         {layout.zonas.map((zona) => zona.area && <div key={zona.chave} className="sim-zone-summary" style={{ left: `${zona.area.x + 1}%`, top: `${zona.area.y + 6}%`, maxWidth: `${Math.max(zona.area.largura - 2, 12)}%` }}>
           <strong>{data.zonas[zona.chave]?.length ?? 0}</strong> equipamento(s)
           <ul>{(data.zonas[zona.chave] ?? []).slice(0, 6).map((item) => <li key={item.id} className={`recency-${item.estado_recencia}`}>{item.nome}</li>)}</ul>
         </div>)}
       </SimPlan>
+      {layout.cenario === 'hupaa' && <PlanLegend/>}
       {layout.zonas.some((zona) => !zona.area) && <ul className="sim-zone-list">{layout.zonas.filter((zona) => !zona.area).map((zona) => <li key={zona.chave}><strong>{zona.nome}</strong>: {(data.zonas[zona.chave] ?? []).map((item) => item.nome).join(', ') || 'nenhum equipamento'}</li>)}</ul>}
     </section>
     <div className="sim-monitor-grid">
@@ -239,4 +246,18 @@ function SessionMonitor({ codigo, layout }: { codigo: string; layout: LayoutConf
       </tbody></table></div> : <p className="empty-panel">Sem leituras. Arraste um item etiquetado até uma área de leitura na aba de controle.</p>}
     </section>
   </div>
+}
+
+/** Alertas de área restrita: cada um vem de leitura gravada pelo ingestor numa antena do leitor de alerta. */
+export function AlertasRestritos({ alertas, compacto = false }: { alertas: AlertaRestrito[]; compacto?: boolean }) {
+  if (!alertas.length) return compacto ? null : <p className="sim-alert-none">Nenhuma tag lida na área restrita nesta sessão.</p>
+  const recentes = alertas.filter((alerta) => alerta.recente)
+  return <section className={`sim-alerts ${recentes.length ? 'active' : ''}`} role={recentes.length ? 'alert' : 'status'} aria-label="Alertas de área restrita">
+    <h3><Icon name="alert" size={16}/> {recentes.length ? `${recentes.length} item(ns) na área restrita agora` : 'Passaram pela área restrita nesta sessão'}</h3>
+    <ul>{alertas.slice(0, compacto ? 4 : 10).map((alerta) => <li key={`${alerta.epc}-${alerta.antena}`} className={alerta.recente ? 'recent' : ''}>
+      <strong>{alerta.equipamento?.nome ?? 'Tag não cadastrada'}</strong> em <strong>{alerta.zona}</strong>
+      <small>{alerta.leitor} · {alerta.antena} (porta {alerta.porta}) · {alerta.leituras} leitura(s) · última {ageLabel(alerta.ultima_leitura_em)} · <code>{alerta.epc}</code></small>
+    </li>)}</ul>
+    {!compacto && <p className="muted-text">Basta uma leitura processada pelo sistema nessa antena. Não indica direção nem confirma passagem.</p>}
+  </section>
 }
