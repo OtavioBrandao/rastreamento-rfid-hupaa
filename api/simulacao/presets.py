@@ -68,9 +68,10 @@ def _leitor_hupaa(numero: int, modelo: str, antenas: list[tuple[int, str, str]],
     }
 
 
-# O leitor 4 é o da zona restrita: as duas antenas ficam DENTRO da circulação
-# vertical (lado B dos dois portais), uma em cada entrada — nunca no mesmo ponto.
-# Ler a tag ali, depois do lado A, confirma que o item entrou na área restrita.
+# O leitor 4 é o ponto de detecção da zona restrita: as duas antenas ficam DENTRO
+# da circulação vertical, cada uma como lado B de um portal (uma por entrada).
+# Podem ficar no mesmo ponto: a inferência trata cada portal à parte. Ler a tag
+# ali, depois do lado A, confirma que o item entrou na área restrita.
 NOME_LEITOR_RESTRITO = "Leitor 4 · zona restrita (escada)"
 ANTENAS_LEITOR_RESTRITO = {1: "Entrada pela Zona 3", 2: "Entrada pela Zona 1"}
 
@@ -150,8 +151,8 @@ def _hupaa_demo() -> dict:
                        _antena(2, 2, "portal-2-3", "a", 56, 42)]),
         3: ((38, 90), [_antena(3, 1, "portal-2-3", "b", 56, 78),
                        _antena(3, 2, "portal-3-escada", "a", 17, 80)]),
-        4: ((6, 50), [_antena(4, 1, "portal-3-escada", "b", 6, 62),
-                      _antena(4, 2, "portal-1-escada", "b", 6, 38)]),
+        4: ((6, 44), [_antena(4, 1, "portal-3-escada", "b", 6, 50),
+                      _antena(4, 2, "portal-1-escada", "b", 6, 50)]),  # um só ponto
     }
     for leitor in layout["leitores"]:
         numero = int(leitor["chave"].rsplit("-", 1)[1])

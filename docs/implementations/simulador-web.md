@@ -95,17 +95,22 @@ excluído, continuava dono de `sim-hupaa-03/04`):
 - O teste rápido usa leitores `sim-demo-*`, que nunca coincidem com os do
   preset nem com os do usuário.
 - O leitor 4 do HUPAA é o **leitor da zona restrita** ("Leitor 4 · zona
-  restrita (escada)"): as duas antenas ficam dentro da circulação vertical,
-  como lado B dos portais, uma em cada entrada ("Entrada pela Zona 1",
-  "Entrada pela Zona 3"). O editor marca esse leitor e o alcance das antenas
+  restrita (escada)"), um **ponto único de detecção** dentro da circulação
+  vertical. Cada antena dele é o lado B de um portal ("Entrada pela Zona 1",
+  "Entrada pela Zona 3"), e as duas podem ficar no mesmo ponto. O modelo
+  continua com uma antena por portal (o mapeamento antena → portal do
+  pipeline não mudou), mas a inferência agrupa por tag + portal, então cada
+  entrada confirma a própria passagem. O editor marca esse leitor e o alcance
   em roxo.
-- Novos avisos: antenas no mesmo ponto e lados A/B do mesmo portal com
-  alcances sobrepostos (a direção nunca seria confirmada).
-- O layout do vídeo no Neon foi corrigido: as antenas do leitor 4 foram
-  separadas, os lados A dos portais da escada foram aproximados das entradas
-  e o portal Zona 1 ↔ Zona 2 deixou de ter lados sobrepostos. Ensaio pelo
-  pipeline com essa planta: Zona 1 → escada, escada → Zona 3 e Zona 1 →
-  Zona 2, todas confirmadas.
+- Novos avisos: lados A/B do mesmo portal com alcances sobrepostos (a direção
+  nunca seria confirmada) e antenas no mesmo ponto, exceto o ponto único
+  (mesmo lado e mesma zona, em portais diferentes).
+- O layout do vídeo no Neon foi corrigido: os lados A dos portais da escada
+  foram aproximados das entradas e o portal Zona 1 ↔ Zona 2 deixou de ter
+  lados sobrepostos. O leitor 4 ficou com as duas antenas num ponto só, no
+  meio da escada. Ensaio pelo pipeline com essa planta: Zona 1 → escada,
+  volta para a Zona 1, Zona 1 → escada → Zona 3, Zona 3 → escada e
+  Zona 1 → Zona 2, todas confirmadas.
 
 Validado em 25/10/2026 com Mosquitto e ingestor locais: teste rápido HUPAA,
 Maca 01 arrastada da Zona 1 para a Zona 2 → 14 leituras, passagem confirmada

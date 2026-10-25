@@ -214,6 +214,15 @@ def _unicos(erros: list[str], rotulo: str, valores: list) -> None:
         vistos.add(valor)
 
 
+def ponto_unico(antena: AntenaLayout, outra: AntenaLayout) -> bool:
+    """Duas antenas no mesmo ponto valem como UM ponto de detecção (ex.: leitor da zona
+    restrita): mesmo lado e mesma zona, cada uma num portal. A inferência trata cada
+    portal à parte, então cada entrada confirma a própria passagem."""
+    return (antena.portal is not None and outra.portal is not None
+            and antena.portal != outra.portal and antena.lado == outra.lado
+            and antena.zona == outra.zona)
+
+
 def avisos(layout: Layout) -> list[str]:
     """Situações aceitas, mas que impedem parte da demonstração (não bloqueiam salvar)."""
     resultado = []
@@ -240,8 +249,9 @@ def avisos(layout: Layout) -> list[str]:
             d = math.hypot(antena.posicao.x - outra.posicao.x,
                            (antena.posicao.y - outra.posicao.y) / layout.proporcao)
             nomes = f"{leitor.nome} / {antena.nome} e {outro_leitor.nome} / {outra.nome}"
-            if d < 1:
-                resultado.append(f"{nomes} estão no mesmo ponto; separe-as, uma em cada entrada")
+            if d < 1 and not ponto_unico(antena, outra):
+                resultado.append(f"{nomes} estão no mesmo ponto; só faz sentido se forem o "
+                                 "mesmo lado de portais diferentes, na mesma zona")
             elif (antena.portal and antena.portal == outra.portal and antena.lado != outra.lado
                   and d <= antena.alcance + outra.alcance):
                 resultado.append(f"{nomes}: alcances dos lados A e B se sobrepõem, então a "

@@ -81,7 +81,12 @@ describe('editor da planta', () => {
     expect(screen.getByText('zona restrita')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Leitor 4 · DR Max/ }))
     expect(screen.getByText('Leitor da zona restrita.')).toBeInTheDocument()
-    expect(pendencias(config)).toContain('Leitor 4 / Antena 1 e Leitor 4 / Antena 2 estão no mesmo ponto: separe-as, uma em cada entrada.')
+    // Antena sem portal no mesmo ponto: aviso. Lado B de dois portais no mesmo ponto: ponto único válido.
+    expect(pendencias(config).join(' ')).toMatch(/Antena 1 e Leitor 4 \/ Antena 2 estão no mesmo ponto/)
+    config.portais.push({ chave: 'p-escada-2', nome: 'Zona B ↔ Escada', zona_a: 'zona-b', zona_b: 'escada', posicao: null })
+    Object.assign(config.leitores[1].antenas[1], { portal: 'p-escada-2', lado: 'b' })
+    config.leitores[0].antenas.push({ chave: 'antena-d', nome: 'Antena D', porta: 4, posicao: { x: 70, y: 45 }, alcance: 3, portal: 'p-escada-2', lado: 'a', zona: 'zona-b' })
+    expect(pendencias(config).join(' ')).not.toMatch(/mesmo ponto/)
     const sobreposto = structuredClone(easy)
     sobreposto.leitores[0].antenas[1].posicao = { x: 40, y: 66 }
     expect(pendencias(sobreposto).join(' ')).toMatch(/lados A e B se sobrepõem/)

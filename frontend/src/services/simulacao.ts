@@ -125,6 +125,9 @@ export function zonaRestritaDoLeitor(layout: LayoutConfig, leitor: LeitorLayout)
 export const antenaNaZonaRestrita = (layout: LayoutConfig, antena: AntenaLayout) =>
   !!antena.zona && layout.zonas.some((zona) => zona.chave === antena.zona && zona.restrita)
 
+/** Mesmo lado e mesma zona, cada uma num portal: no mesmo ponto valem como UM ponto de detecção (igual a esquema.py). */
+export const pontoUnico = (a: AntenaLayout, b: AntenaLayout) => !!a.portal && !!b.portal && a.portal !== b.portal && a.lado === b.lado && a.zona === b.zona
+
 /** O que ainda falta para a demonstração funcionar (mesmas regras de `avisos` no backend). */
 export function pendencias(layout: LayoutConfig): string[] {
   const resultado: string[] = []
@@ -144,7 +147,7 @@ export function pendencias(layout: LayoutConfig): string[] {
     for (const outro of posicionadas.slice(i + 1)) {
       const d = Math.hypot(antena.posicao!.x - outro.antena.posicao!.x, (antena.posicao!.y - outro.antena.posicao!.y) / layout.proporcao)
       const nomes = `${leitor.nome} / ${antena.nome} e ${outro.leitor.nome} / ${outro.antena.nome}`
-      if (d < 1) resultado.push(`${nomes} estão no mesmo ponto: separe-as, uma em cada entrada.`)
+      if (d < 1 && !pontoUnico(antena, outro.antena)) resultado.push(`${nomes} estão no mesmo ponto: só faz sentido se forem o mesmo lado de portais diferentes, na mesma zona.`)
       else if (antena.portal && antena.portal === outro.antena.portal && antena.lado !== outro.antena.lado && d <= antena.alcance + outro.antena.alcance)
         resultado.push(`${nomes}: os alcances dos lados A e B se sobrepõem e a direção não é confirmada. Afaste-as ou reduza o alcance.`)
     }

@@ -17,7 +17,7 @@ from api.main import app
 from api.router_simulacao import obter_config
 from api.simulacao import config as config_simulador
 from api.simulacao import service
-from api.simulacao.esquema import Layout, avisos
+from api.simulacao.esquema import Layout, avisos, ponto_unico
 from api.simulacao.geometria import antenas_do_layout, detectar, distancia
 from api.simulacao.motor import EstadoSessao, MotorSimulacao
 from api.simulacao.presets import ITENS_TESTE_RAPIDO, POSICOES_TESTE_RAPIDO, preset
@@ -76,8 +76,12 @@ def test_teste_rapido_vem_pronto_sem_alcances_sobrepostos(cenario):
     layout = Layout.model_validate(layout_teste_rapido(cenario)).model_dump(mode="json")
     assert avisos(Layout.model_validate(layout)) == []
     antenas = antenas_do_layout(layout)
+    config = Layout.model_validate(layout)
+    por_chave = {a.chave: a for leitor in config.leitores for a in leitor.antenas}
     for i, uma in enumerate(antenas):
         for outra in antenas[i + 1:]:
+            if ponto_unico(por_chave[uma.chave], por_chave[outra.chave]):
+                continue  # leitor da zona restrita: um só ponto de detecção
             assert distancia(uma.x, uma.y, outra.x, outra.y, layout["proporcao"]) >                 uma.alcance + outra.alcance, (uma.chave, outra.chave)
     # Equipamentos começam dentro da primeira zona e fora de qualquer área de leitura.
     primeira = layout["zonas"][0]["area"]
@@ -293,17 +297,20 @@ def test_teste_rapido_nao_disputa_leitor_com_layout_do_usuario(db):
     assert len(service.listar_sessoes(db)) == 2
 
 
-def test_avisa_antenas_no_mesmo_ponto_e_lados_sobrepostos():
+def test_ponto_unico_da_zona_restrita_e_aceito_mas_outros_avisos_continuam():
     configuracao = layout_teste_rapido("hupaa")
     restrito = configuracao["leitores"][3]
     assert restrito["nome"] == "Leitor 4 · zona restrita (escada)"
     assert [a["nome"] for a in restrito["antenas"]] == ["Entrada pela Zona 3", "Entrada pela Zona 1"]
-    restrito["antenas"][1]["posicao"] = dict(restrito["antenas"][0]["posicao"])
-    portal = configuracao["leitores"][0]["antenas"][0]  # lado A do portal 1 ↔ 2
-    portal["posicao"] = {"x": 54, "y": 15}
+    # Leitor 4: as duas antenas no mesmo ponto (lado B de portais diferentes) é válido.
+    assert restrito["antenas"][0]["posicao"] == restrito["antenas"][1]["posicao"]
+    assert avisos(Layout.model_validate(configuracao)) == []
+    # Mesmo ponto com lados diferentes, ou lados A/B sobrepostos, continuam avisando.
+    leitor_1 = configuracao["leitores"][0]["antenas"]
+    leitor_1[1]["posicao"] = dict(restrito["antenas"][0]["posicao"])  # lado A no ponto do B
+    configuracao["leitores"][1]["antenas"][0]["posicao"] = {"x": 48, "y": 15}  # B do portal 1-2
     textos = avisos(Layout.model_validate(configuracao))
-    assert any("Entrada pela Zona 3 e Leitor 4 · zona restrita (escada) / Entrada pela Zona 1 "
-               "estão no mesmo ponto" in texto for texto in textos)
+    assert any("estão no mesmo ponto" in texto for texto in textos)
     assert any("lados A e B se sobrepõem" in texto for texto in textos)
 
 

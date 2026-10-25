@@ -336,7 +336,7 @@ function ReaderForm({ config, leitor, focus, disabled, onChange, onPosition, onR
   const setAntena = (chave: string, mutate: (antena: AntenaLayout) => void) => onChange((l) => mutate(l.antenas.find((a) => a.chave === chave)!))
   const restrita = zonaRestritaDoLeitor(config, leitor)
   return <div className="sim-form"><h3>Leitor virtual</h3>
-    {restrita && <p className="sim-restricted-note" role="note"><strong>Leitor da zona restrita.</strong> As antenas dele ficam dentro de “{restrita.nome}”, uma em cada entrada, como lado B do portal. A tag lida no lado A e depois aqui confirma que o item entrou na área restrita. Não deixe as antenas no mesmo ponto.</p>}
+    {restrita && <p className="sim-restricted-note" role="note"><strong>Leitor da zona restrita.</strong> Ele é o ponto de detecção dentro de “{restrita.nome}”: cada antena é o lado B de um portal (uma por entrada) e as duas podem ficar no mesmo ponto, funcionando como uma só. A tag lida no lado A e depois aqui confirma que o item entrou na área restrita.</p>}
     <label>Nome<input value={leitor.nome} maxLength={60} disabled={disabled} onChange={(e) => onChange((l) => { l.nome = e.target.value })}/></label>
     <label>Identificador lógico (MQTT)<input value={leitor.reader_id} maxLength={45} disabled={disabled} spellCheck={false} onChange={(e) => onChange((l) => { l.reader_id = e.target.value.toLowerCase() })}/>
       <small>Sempre com prefixo <code>sim-</code>: separa a fonte simulada dos leitores físicos.</small></label>
