@@ -449,6 +449,52 @@ def resumo_sessao(sessao: SimulacaoSessao) -> dict:
 # --- monitoramento (somente o que o pipeline gravou) ---------------------------
 
 
+ALERTA_RECENTE_S = 10
+
+
+def _alertas_restritos(db: Session, sessao: SimulacaoSessao, vinculo, now: datetime) -> list[dict]:
+    """Tags lidas pelas antenas dos leitores de área restrita, por tag e antena.
+
+    Vem só de `leituras_brutas` (o que o ingestor gravou), nunca da posição virtual:
+    uma leitura basta, sem lado A nem passagem — e não se afirma direção alguma.
+    """
+    layout, ids = sessao.layout or {}, (sessao.topologia or {}).get("antenas", {})
+    zonas = {zona["chave"]: zona["nome"] for zona in layout.get("zonas", [])}
+    vigiadas = {}
+    for leitor in layout.get("leitores", []):
+        if not leitor.get("alerta_area_restrita"):
+            continue
+        for antena in leitor["antenas"]:
+            if antena["chave"] in ids:
+                vigiadas[ids[antena["chave"]]] = (leitor["nome"], leitor["reader_id"],
+                                                 antena["nome"], antena["porta"],
+                                                 zonas.get(antena.get("zona"), "zona restrita"))
+    if not vigiadas:
+        return []
+    linhas = db.execute(
+        select(LeituraBruta.epc, LeituraBruta.antena_id, func.count().label("leituras"),
+               func.min(LeituraBruta.lido_em).label("primeira"),
+               func.max(LeituraBruta.lido_em).label("ultima"),
+               Equipamento.id.label("equipamento_id"), Equipamento.nome.label("equipamento"))
+        .outerjoin(Tag, Tag.epc == LeituraBruta.epc)
+        .outerjoin(AssociacaoTagEquipamento, vinculo)
+        .outerjoin(Equipamento, Equipamento.id == AssociacaoTagEquipamento.equipamento_id)
+        .where(LeituraBruta.antena_id.in_(list(vigiadas)), LeituraBruta.lido_em >= sessao.iniciada_em)
+        .group_by(LeituraBruta.epc, LeituraBruta.antena_id, Equipamento.id, Equipamento.nome)
+        .order_by(func.max(LeituraBruta.lido_em).desc())
+    ).all()
+    return [{
+        "epc": linha.epc, "zona": vigiadas[linha.antena_id][4],
+        "leitor": vigiadas[linha.antena_id][0], "reader_id": vigiadas[linha.antena_id][1],
+        "antena": vigiadas[linha.antena_id][2], "porta": vigiadas[linha.antena_id][3],
+        "leituras": linha.leituras, "primeira_leitura_em": em_utc(linha.primeira),
+        "ultima_leitura_em": em_utc(linha.ultima),
+        "recente": linha.ultima >= now - timedelta(seconds=ALERTA_RECENTE_S),
+        "equipamento": ({"id": linha.equipamento_id, "nome": linha.equipamento}
+                        if linha.equipamento_id else None),
+    } for linha in linhas]
+
+
 def monitor(db: Session, sessao: SimulacaoSessao, *, now: datetime,
             policy: StatusPolicy | None = None, limite: int = 25) -> dict:
     """Leituras, passagens, leitores e zonas confirmadas desde o início da sessão."""
@@ -545,6 +591,7 @@ def monitor(db: Session, sessao: SimulacaoSessao, *, now: datetime,
 
     return {
         "gerado_em": em_utc(now),
+        "alertas_restritos": _alertas_restritos(db, sessao, vinculo, now),
         "leituras_total": total_leituras,
         "leituras": [{
             "id": linha.id, "epc": linha.epc, "reader_id": linha.reader_id,

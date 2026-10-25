@@ -22,12 +22,18 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from api.normalizacao import normalizar_nome
 
+from .geometria import alcance_na_direcao
+
 MAX_ANTENAS_POR_LEITOR = 4
 MAX_LEITORES = 24
 MAX_ZONAS = 40
 MAX_PORTAIS = 40
 CHAVE = r"^[a-z0-9][a-z0-9-]{0,39}$"
 READER_ID = re.compile(r"^sim-[a-z0-9][a-z0-9-]{0,40}$")
+
+# Padrões das antenas novas (menores que os 6–16 anteriores, para não poluir a planta).
+ALCANCE_PADRAO = 4.0
+FATOR_TRASEIRO_PADRAO = 0.35
 
 MODELOS_LEITOR: dict[str, dict] = {
     "EZ700": {"nome": "Identix EZ700", "max_antenas": 4,
@@ -103,7 +109,17 @@ class AntenaLayout(BaseModel):
     nome: str = Field(..., min_length=1, max_length=60)
     porta: int = Field(..., ge=1, le=MAX_ANTENAS_POR_LEITOR)
     posicao: Ponto | None = None
-    alcance: float = Field(8, ge=1, le=40)
+    alcance: float = Field(ALCANCE_PADRAO, ge=1, le=40)
+    # Visada direta em graus da tela (0 direita, 90 baixo, 180 esquerda, 270 cima).
+    # Nula = omnidirecional (layouts salvos antes da antena direcional).
+    orientacao: float | None = Field(None, ge=0, le=360)
+    fator_traseiro: float = Field(FATOR_TRASEIRO_PADRAO, ge=0.1, le=1)
+
+    @field_validator("orientacao")
+    @classmethod
+    def angulo_normalizado(cls, valor: float | None) -> float | None:
+        """360° é a mesma visada de 0°."""
+        return None if valor is None else round(valor % 360, 1)
     portal: str | None = None
     lado: Literal["a", "b"] | None = None
     zona: str | None = None
@@ -119,6 +135,9 @@ class LeitorLayout(BaseModel):
     modelo: Literal["EZ700", "DR_MAX"]
     posicao: Ponto | None = None
     antenas: list[AntenaLayout]
+    # Leitor de área restrita: basta UMA antena dentro da zona monitorada (sem portal);
+    # cada leitura processada pelo sistema vira alerta. Não confirma passagem nem direção.
+    alerta_area_restrita: bool = False
 
     @field_validator("antenas")
     @classmethod
@@ -214,6 +233,13 @@ def _unicos(erros: list[str], rotulo: str, valores: list) -> None:
         vistos.add(valor)
 
 
+def _alcance_entre(antena: AntenaLayout, alvo: AntenaLayout, proporcao: float) -> float:
+    """Alcance efetivo da antena na direção da outra (considera a visada)."""
+    angulo = math.atan2((alvo.posicao.y - antena.posicao.y) / proporcao,
+                        alvo.posicao.x - antena.posicao.x)
+    return alcance_na_direcao(antena.alcance, antena.orientacao, antena.fator_traseiro, angulo)
+
+
 def ponto_unico(antena: AntenaLayout, outra: AntenaLayout) -> bool:
     """Duas antenas no mesmo ponto valem como UM ponto de detecção (ex.: leitor da zona
     restrita): mesmo lado e mesma zona, cada uma num portal. A inferência trata cada
@@ -242,6 +268,11 @@ def avisos(layout: Layout) -> list[str]:
     for zona in layout.zonas:
         if zona.area is None:
             resultado.append(f"zona '{zona.nome}' ainda não foi delimitada na planta")
+    restritas = {zona.chave for zona in layout.zonas if zona.restrita}
+    for leitor in layout.leitores:
+        if leitor.alerta_area_restrita and not any(a.zona in restritas for a in leitor.antenas):
+            resultado.append(f"{leitor.nome} avisa área restrita, mas nenhuma antena dele está "
+                             "numa zona marcada como restrita")
     posicionadas = [(leitor, antena) for leitor in layout.leitores for antena in leitor.antenas
                     if antena.posicao is not None]
     for i, (leitor, antena) in enumerate(posicionadas):
@@ -253,7 +284,8 @@ def avisos(layout: Layout) -> list[str]:
                 resultado.append(f"{nomes} estão no mesmo ponto; só faz sentido se forem o "
                                  "mesmo lado de portais diferentes, na mesma zona")
             elif (antena.portal and antena.portal == outra.portal and antena.lado != outra.lado
-                  and d <= antena.alcance + outra.alcance):
+                  and d <= _alcance_entre(antena, outra, layout.proporcao)
+                  + _alcance_entre(outra, antena, layout.proporcao)):
                 resultado.append(f"{nomes}: alcances dos lados A e B se sobrepõem, então a "
                                  "direção da passagem não é confirmada; afaste-as ou reduza o alcance")
     return resultado

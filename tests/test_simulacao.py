@@ -58,13 +58,19 @@ PRODUCAO = config_simulador.ConfigSimulador(False, "production", "bloqueado em p
 # --- layout -----------------------------------------------------------------
 
 
-def test_presets_sao_validos_e_hupaa_tem_quatro_leitores_sem_posicao():
+def test_presets_sao_validos_e_hupaa_tem_cinco_leitores_sem_posicao():
     easy = Layout.model_validate(preset("easy"))
     assert [antena.zona for antena in easy.leitores[0].antenas] == ["zona-a", "zona-b"]
+    assert [antena.orientacao for antena in easy.leitores[0].antenas] == [270, 270]
     hupaa = Layout.model_validate(preset("hupaa"))
-    assert [(leitor.reader_id, leitor.modelo) for leitor in hupaa.leitores] == [
-        ("sim-hupaa-01", "EZ700"), ("sim-hupaa-02", "EZ700"),
-        ("sim-hupaa-03", "DR_MAX"), ("sim-hupaa-04", "DR_MAX")]
+    assert [(leitor.reader_id, leitor.modelo, leitor.alerta_area_restrita)
+            for leitor in hupaa.leitores] == [
+        ("sim-hupaa-01", "EZ700", False), ("sim-hupaa-02", "EZ700", False),
+        ("sim-hupaa-03", "DR_MAX", False), ("sim-hupaa-04", "DR_MAX", False),
+        ("sim-hupaa-05", "DR_MAX", True)]
+    restrito = hupaa.leitores[4]
+    assert len(restrito.antenas) == 1 and restrito.antenas[0].portal is None
+    assert restrito.antenas[0].zona == "circulacao-vertical"
     assert all(leitor.posicao is None for leitor in hupaa.leitores)
     assert all(antena.posicao is None for leitor in hupaa.leitores for antena in leitor.antenas)
     escada = next(zona for zona in hupaa.zonas if zona.restrita)
@@ -120,6 +126,8 @@ def test_quatro_antenas_por_leitor_e_varios_portais_sao_aceitos():
     configuracao = preset("hupaa")
     leitor = configuracao["leitores"][0]
     leitor["antenas"] += [
+        {"chave": "l1-a2", "nome": "Antena 2", "porta": 2, "posicao": None, "alcance": 5,
+         "portal": "portal-1-2", "lado": "a", "zona": None},
         {"chave": "l1-a3", "nome": "Antena 3", "porta": 3, "posicao": {"x": 20, "y": 20},
          "alcance": 5, "portal": "portal-2-3", "lado": "a", "zona": None},
         {"chave": "l1-a4", "nome": "Antena 4", "porta": 4, "posicao": None, "alcance": 5,
@@ -128,7 +136,7 @@ def test_quatro_antenas_por_leitor_e_varios_portais_sao_aceitos():
     layout = service.validar_layout(configuracao)
     assert len(layout.leitores[0].antenas) == 4
     assert layout.leitores[0].antenas[2].zona == "zona-2"
-    assert len(layout.portais) == 4
+    assert len(layout.portais) == 2
 
 
 # --- motor (sem banco) ----------------------------------------------------------
@@ -256,7 +264,7 @@ def test_hupaa_usa_andar_proprio_e_dois_layouts_nao_compartilham_leitor(db):
     zona = db.get(Zona, sessao.topologia["zonas"]["zona-1"])
     assert zona.setor.andar.nome == "Simulação HUPAA"
     assert db.scalar(select(func.count()).select_from(Leitor).where(
-        Leitor.identificador_serial.like("SIM-%"))) == 4
+        Leitor.identificador_serial.like("SIM-%"))) == 5
     with pytest.raises(service.SimulacaoRecusada) as erro:
         service.iniciar_sessao(db, _layout(db, "hupaa", configuracao).id, None)
     assert "já é usado pelo layout “Hospital HUPAA (padrão)”" in str(erro.value)
@@ -281,7 +289,7 @@ def test_layout_excluido_libera_os_leitores_para_o_proximo(db):
     sessao = service.iniciar_sessao(db, novo.id, None)
     assumidos = db.scalars(select(Leitor).where(Leitor.reader_id.like("sim-hupaa-%"))).all()
     assert {leitor.identificador_serial for leitor in assumidos} == {
-        f"SIM-L{novo.id}-sim-hupaa-{n:02d}" for n in range(1, 5)}
+        f"SIM-L{novo.id}-sim-hupaa-{n:02d}" for n in range(1, 6)}
     assert all(leitor.ativo for leitor in assumidos)
     # Cada antena aponta só para os portais do layout novo.
     ativos = db.scalars(select(MapeamentoAntenaPortal.portal_id).where(
@@ -295,25 +303,50 @@ def test_teste_rapido_nao_disputa_leitor_com_layout_do_usuario(db):
     service.iniciar_sessao(db, meu.id, None)
     rapido = service.teste_rapido(db, "hupaa", None)
     assert rapido.estado == "em_execucao"
-    assert {leitor["reader_id"] for leitor in rapido.layout["leitores"]} == {f"sim-demo-hupaa-{n:02d}" for n in range(1, 5)}
+    assert {leitor["reader_id"] for leitor in rapido.layout["leitores"]} == {f"sim-demo-hupaa-{n:02d}" for n in range(1, 6)}
     assert len(service.listar_sessoes(db)) == 2
 
 
-def test_ponto_unico_da_zona_restrita_e_aceito_mas_outros_avisos_continuam():
+def test_ponto_unico_e_avisos_de_sobreposicao_consideram_a_visada():
     configuracao = layout_teste_rapido("hupaa")
-    restrito = configuracao["leitores"][3]
-    assert restrito["nome"] == "Leitor 4 · zona restrita (escada)"
-    assert [a["nome"] for a in restrito["antenas"]] == ["Entrada pela Zona 3", "Entrada pela Zona 1"]
-    # Leitor 4: as duas antenas no mesmo ponto (lado B de portais diferentes) é válido.
-    assert restrito["antenas"][0]["posicao"] == restrito["antenas"][1]["posicao"]
+    restrito = configuracao["leitores"][4]
+    assert restrito["nome"] == "Leitor 5 · área restrita" and restrito["alerta_area_restrita"]
+    assert len(restrito["antenas"]) == 1  # uma antena basta para o alerta
     assert avisos(Layout.model_validate(configuracao)) == []
-    # Mesmo ponto com lados diferentes, ou lados A/B sobrepostos, continuam avisando.
-    leitor_1 = configuracao["leitores"][0]["antenas"]
-    leitor_1[1]["posicao"] = dict(restrito["antenas"][0]["posicao"])  # lado A no ponto do B
-    configuracao["leitores"][1]["antenas"][0]["posicao"] = {"x": 48, "y": 15}  # B do portal 1-2
-    textos = avisos(Layout.model_validate(configuracao))
-    assert any("estão no mesmo ponto" in texto for texto in textos)
-    assert any("lados A e B se sobrepõem" in texto for texto in textos)
+    # Lados A e B do portal 1-2 frente a frente e perto: alcances se sobrepõem.
+    a, b = configuracao["leitores"][0]["antenas"][0], configuracao["leitores"][1]["antenas"][0]
+    a.update(posicao={"x": 49, "y": 15}, orientacao=0)
+    b.update(posicao={"x": 54, "y": 15}, orientacao=180)
+    assert any("lados A e B se sobrepõem" in t for t in avisos(Layout.model_validate(configuracao)))
+    # Mesmas posições, mas de costas uma para a outra: só as traseiras (curtas) se olham.
+    a["orientacao"], b["orientacao"] = 180, 0
+    assert not any("se sobrepõem" in t for t in avisos(Layout.model_validate(configuracao)))
+    # Duas antenas no mesmo ponto, lados diferentes: aviso.
+    b["posicao"] = dict(a["posicao"])
+    assert any("estão no mesmo ponto" in t for t in avisos(Layout.model_validate(configuracao)))
+
+
+def test_leitor_de_area_restrita_sem_zona_restrita_gera_aviso():
+    configuracao = layout_teste_rapido("hupaa")
+    next(z for z in configuracao["zonas"] if z["restrita"])["restrita"] = False
+    assert any("avisa área restrita" in t for t in avisos(Layout.model_validate(configuracao)))
+
+
+def test_antena_direcional_le_mais_na_frente_que_atras():
+    from api.simulacao.geometria import AntenaVirtual
+
+    antena = AntenaVirtual("a", "sim-x", 1, 50, 50, 4, 0, 0.35)  # visada para a direita
+    assert detectar(53.5, 50, [antena], 2.05) and not detectar(46.5, 50, [antena], 2.05)
+    assert detectar(48.8, 50, [antena], 2.05)  # atrás, bem perto
+    baixo = AntenaVirtual("b", "sim-x", 1, 50, 50, 4, 90, 0.35)  # 90° = baixo na tela
+    assert detectar(50, 57, [baixo], 2.05) and not detectar(50, 43, [baixo], 2.05)
+    # Mesma distância: RSSI mais forte na frente do que de lado.
+    frente = detectar(52, 50, [antena], 1)[0][1]
+    lado = detectar(50, 51.5, [antena], 1)
+    assert not lado or frente > lado[0][1] - 1000
+    # Layout antigo (sem orientação) continua omnidirecional.
+    antiga = AntenaVirtual("c", "sim-x", 1, 50, 50, 4)
+    assert detectar(46.5, 50, [antiga], 2.05)
 
 
 # --- API e sincronização entre abas ----------------------------------------------
@@ -701,3 +734,22 @@ def test_relay_nao_habilitado_recusa_e_nao_atribui_ao_leitor_fisico(pg_engine, c
     _simular(pg_engine, tmp_path, cenario_easy["codigo"], [(28, 66, 0.6)], relay=RELAY)
     with Session(pg_engine) as session:
         assert session.scalar(select(func.count()).select_from(LeituraBruta)) == 0
+
+
+def test_alerta_de_area_restrita_com_uma_antena_vem_da_leitura_processada(pg_engine, tmp_path):
+    with Session(pg_engine) as session:
+        sessao = service.teste_rapido(session, "hupaa", None)
+        codigo = sessao.codigo
+        antes = service.monitor(session, sessao, now=T0)
+    assert antes["alertas_restritos"] == []  # posição virtual sozinha não gera alerta
+    # Maca 01 levada para a escada, na frente da antena do leitor 5 (visada para baixo).
+    _simular(pg_engine, tmp_path, codigo, [(6, 44, 0.8), (30, 5, 0.3)])
+    with Session(pg_engine) as session:
+        dados = service.monitor(session, service.obter_sessao(session, codigo),
+                                now=T0 + timedelta(seconds=1))
+        passagens = session.scalar(select(func.count()).select_from(Passagem))
+    [alerta] = dados["alertas_restritos"]
+    assert alerta["equipamento"]["nome"] == "Maca 01"
+    assert alerta["zona"] == "Escada (área restrita)" and alerta["leitor"] == "Leitor 5 · área restrita"
+    assert alerta["leituras"] >= 1 and alerta["recente"] is True
+    assert passagens == 0  # uma antena não confirma passagem nem direção
