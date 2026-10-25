@@ -61,7 +61,15 @@ não cadastrados continuam rejeitadas (`unknown_reader`) e não aparecem.
 2. *Cadastro manual*: EPC validado no cliente com a mesma regra da API e
    consulta de disponibilidade; EPC vazio cadastra sem tag.
 3. *Equipamentos e tags*: equipamentos sem tag com ação "Associar tag"
-   (digitar ou escolher entre as não cadastradas detectadas).
+   (digitar ou escolher entre as não cadastradas detectadas) e, só para
+   administrador, **Fora de serviço / Reativar**. Fora de serviço é a baixa
+   lógica já existente (`POST /equipamentos/{id}/inativar` e `/reativar`,
+   permissão `equipamentos:alterar`): pede confirmação, nada é apagado, a tag
+   continua vinculada, o equipamento sai do dashboard e da busca (aparece só
+   com "Mostrar cadastros inativos") e a mudança entra na auditoria com o
+   usuário. O filtro "Serviço" (em serviço, fora de serviço, todos) usa o
+   novo parâmetro `estado` de `GET /api/cadastro/equipamentos`. Não há
+   distinção entre manutenção temporária e baixa definitiva.
 
 Criação rápida de tipo de equipamento no próprio formulário.
 
@@ -71,7 +79,8 @@ Criação rápida de tipo de equipamento no próprio formulário.
   equipamento órfão, confirmação obrigatória, patrimônio duplicado, sem tag e
   associação posterior, descoberta (consolidação, filtros, recência, origem),
   cadastro por EPC detectado com auditoria e sem localização, operacional
-  consulta mas não cadastra (403).
+  consulta mas não cadastra (403), fora de serviço e reativação com filtro
+  `estado` e auditoria, operacional não tira de serviço (403).
 - `frontend/src/test/Cadastro.test.tsx`: fluxos das três abas e permissões.
 - Ensaio manual no navegador (23/10/2026, ambiente local, dados sintéticos):
   tag virtual detectada pelo simulador web, cadastrada pela aba de leitura;

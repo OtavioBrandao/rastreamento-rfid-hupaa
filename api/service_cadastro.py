@@ -216,12 +216,19 @@ class PaginaCadastro:
 
 def listar_equipamentos(
     db: Session, *, situacao: str = "todos", busca: str | None = None,
-    incluir_inativos: bool = False, page: int = 1, size: int = 20,
+    incluir_inativos: bool = False, estado: str | None = None, page: int = 1, size: int = 20,
 ) -> PaginaCadastro:
-    """Equipamentos com o EPC ativo (ou nenhum), filtráveis por situação e texto."""
+    """Equipamentos com o EPC ativo (ou nenhum), filtráveis por situação, estado e texto.
+
+    `estado` ("ativo", "inativo" ou "todos") tem precedência sobre
+    `incluir_inativos`; "inativo" é o equipamento fora de serviço (baixa lógica).
+    """
     if situacao not in SITUACOES_EQUIPAMENTO:
         raise CadastroInvalido(
             "situacao_invalida", f"situacao deve ser {', '.join(SITUACOES_EQUIPAMENTO)}")
+    estado = estado or ("todos" if incluir_inativos else "ativo")
+    if estado not in ("ativo", "inativo", "todos"):
+        raise CadastroInvalido("estado_invalido", "estado deve ser ativo, inativo ou todos")
     vinculo = (
         select(AssociacaoTagEquipamento.equipamento_id, Tag.epc, AssociacaoTagEquipamento.inicio)
         .join(Tag, Tag.id == AssociacaoTagEquipamento.tag_id)
@@ -229,8 +236,8 @@ def listar_equipamentos(
         .subquery()
     )
     filtros = []
-    if not incluir_inativos:
-        filtros.append(Equipamento.status == "ativo")
+    if estado != "todos":
+        filtros.append(Equipamento.status == estado)
     if situacao == "sem_tag":
         filtros.append(vinculo.c.epc.is_(None))
     elif situacao == "com_tag":

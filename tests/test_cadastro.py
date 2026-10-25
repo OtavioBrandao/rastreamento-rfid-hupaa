@@ -214,6 +214,51 @@ def test_cadastro_por_epc_detectado_cria_vinculo_e_auditoria(client, tipo, engin
         assert equipamento.ultima_zona_id is None
 
 
+def test_fora_de_servico_sai_da_lista_padrao_e_volta_ao_reativar(client, tipo, engine):
+    maca = _cadastrar(client, tipo["id"], nome="Maca", epc=EPC_1, confirmar_associacao=True).json()
+    cadeira = _cadastrar(client, tipo["id"], nome="Cadeira").json()
+    assert client.post(f"/equipamentos/{maca['id']}/inativar").status_code == 200
+
+    def ids(**params):
+        return [item["id"] for item in client.get("/api/cadastro/equipamentos", params=params).json()["items"]]
+
+    assert ids() == [cadeira["id"]]
+    assert ids(estado="inativo") == [maca["id"]]
+    assert set(ids(estado="todos")) == {maca["id"], cadeira["id"]}
+    assert set(ids(incluir_inativos=True)) == {maca["id"], cadeira["id"]}
+    fora = client.get("/api/cadastro/equipamentos", params={"estado": "inativo"}).json()["items"][0]
+    assert fora["status"] == "inativo" and fora["epc"] == EPC_1  # a tag continua vinculada
+    assert client.get("/api/cadastro/equipamentos", params={"estado": "x"}).status_code == 422
+
+    assert client.post(f"/equipamentos/{maca['id']}/reativar").status_code == 200
+    assert set(ids()) == {maca["id"], cadeira["id"]}
+    with Session(engine) as session:
+        # A trilha registra quem tirou e quem devolveu ao serviço.
+        mudancas = [depois["status"] for depois in session.scalars(
+            select(Auditoria.dados_depois).where(Auditoria.entidade_id == maca["id"])
+            .order_by(Auditoria.id)) if depois and "status" in depois]
+        assert mudancas[-2:] == ["inativo", "ativo"]
+
+
+@pytest.mark.autenticacao_real
+def test_operacional_nao_coloca_fora_de_servico(api_auth, engine, truncate_all):
+    from suporte_auth import inserir_usuario, logar
+
+    inserir_usuario(engine, "operador@hupaa.example", perfil="operacional")
+    with engine.begin() as conexao:
+        tipo_id = conexao.execute(text(
+            "INSERT INTO tipos_equipamento (nome, nome_normalizado) VALUES ('Maca', 'maca') "
+            "RETURNING id")).scalar_one()
+        equipamento_id = conexao.execute(text(
+            "INSERT INTO equipamentos (nome, tipo_id, identificador_interno, "
+            "identificador_interno_normalizado) VALUES ('Maca', :tipo, 'PAT-9', 'pat-9') "
+            "RETURNING id"), {"tipo": tipo_id}).scalar_one()
+    cliente = api_auth()
+    logar(cliente, "operador@hupaa.example")
+    assert cliente.post(f"/equipamentos/{equipamento_id}/inativar").status_code == 403
+    assert cliente.post(f"/equipamentos/{equipamento_id}/reativar").status_code == 403
+
+
 @pytest.mark.autenticacao_real
 def test_operacional_consulta_mas_nao_cadastra(api_auth, engine, truncate_all):
     from suporte_auth import inserir_usuario, logar

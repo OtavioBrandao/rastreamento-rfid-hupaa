@@ -2196,6 +2196,8 @@ button.admin-primary { background:var(--blue); color:white; border-color:var(--b
 .tag-chip { display:inline-block; padding:3px 9px; margin:0 4px 2px 0; border-radius:20px; font-size:.72rem; font-weight:750; white-space:nowrap; vertical-align:middle }
 .tag-known { color:#176b40; background:#e4f5eb }
 .tag-unknown { color:#875007; background:#fff3da }
+.tag-out-of-service { color:#8a2b25; background:#fde8e6; margin-left:6px }
+.row-out-of-service td { color:var(--muted) }
 .tag-sim { color:#4a3a8c; background:#efeafd; margin-left:6px }
 .tag-reading { color:#fff; background:#1e9e4a }
 .discovery-table tr[aria-selected="true"] td { background:#eef6fb }

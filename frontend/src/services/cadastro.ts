@@ -107,8 +107,10 @@ export function getDiscovery(filters: FiltrosDescoberta, signal?: AbortSignal): 
   return readJson(`/api/cadastro/epcs-detectados?${params}`, signal)
 }
 
-export function getRegistrations(situacao: string, busca: string, page: number, signal?: AbortSignal): Promise<PaginaCadastro> {
-  const params = new URLSearchParams({ situacao, page: String(page), size: '20' })
+export type EstadoServico = 'ativo' | 'inativo' | 'todos'
+
+export function getRegistrations(situacao: string, busca: string, page: number, signal?: AbortSignal, estado: EstadoServico = 'ativo'): Promise<PaginaCadastro> {
+  const params = new URLSearchParams({ situacao, page: String(page), size: '20', estado })
   if (busca.trim()) params.set('busca', busca.trim())
   return readJson(`/api/cadastro/equipamentos?${params}`, signal)
 }
@@ -120,5 +122,7 @@ export async function getEquipmentTypes(signal?: AbortSignal): Promise<TipoEquip
 
 export const createEquipmentType = (nome: string) => sendJson<TipoEquipamento>('/tipos-equipamento', 'POST', { nome })
 export const register = (payload: NovoCadastro) => sendJson<CadastroCriado>('/api/cadastro/equipamentos', 'POST', payload)
-export const associateTag = (equipamentoId: number, epc: string) => sendJson(`/equipamentos/${equipamentoId}/tag`, 'POST', { epc })
+/** Fora de serviço = baixa lógica (status inativo); a tag continua vinculada. */
+export const setInService = (equipamentoId: number, emServico: boolean) => sendJson(`/equipamentos/${equipamentoId}/${emServico ? 'reativar' : 'inativar'}`, 'POST')
+export const associateTag =(equipamentoId: number, epc: string) => sendJson(`/equipamentos/${equipamentoId}/tag`, 'POST', { epc })
 export const epcAvailability = (epc: string) => apiRequest<{ epc: string; disponivel: boolean; equipamento: EpcDetectado['equipamento'] }>(`/api/cadastro/epcs/${encodeURIComponent(epc.trim())}`)

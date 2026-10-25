@@ -3,8 +3,8 @@ import { ageLabel } from '../components/DashboardParts'
 import { Icon } from '../components/layout/Icon'
 import { errorMessage } from '../services/api'
 import {
-  associateTag, createEquipmentType, epcAvailability, epcProblem, getDiscovery, getEquipmentTypes, getRegistrations, register,
-  type EpcDetectado, type FiltrosDescoberta, type TipoEquipamento,
+  associateTag, createEquipmentType, epcAvailability, epcProblem, getDiscovery, getEquipmentTypes, getRegistrations, register, setInService,
+  type EpcDetectado, type EquipamentoCadastro, type EstadoServico, type FiltrosDescoberta, type TipoEquipamento,
 } from '../services/cadastro'
 import { useLiveQuery, useLiveRefresh } from '../services/live'
 
@@ -184,26 +184,44 @@ function EquipmentList({ canEdit, onDone }: { canEdit: boolean; onDone: (message
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [associating, setAssociating] = useState<number | null>(null)
-  const query = useLiveQuery(`registrations:${situation}:${search}:${page}`, (signal) => getRegistrations(situation, search, page, signal))
+  const [service, setService] = useState<EstadoServico>('ativo')
+  const [busy, setBusy] = useState<number | null>(null)
+  const [error, setError] = useState('')
+  const { refresh } = useLiveRefresh()
+  const query = useLiveQuery(`registrations:${situation}:${search}:${page}:${service}`, (signal) => getRegistrations(situation, search, page, signal, service))
   const data = query.data
+  async function toggleService(item: EquipamentoCadastro) {
+    const emServico = item.status !== 'ativo'
+    if (!emServico && !window.confirm(`Colocar “${item.nome}” (${item.identificador_interno}) fora de serviço? Ele sai do dashboard e da busca até ser reativado; a tag e o histórico ficam.`)) return
+    setBusy(item.id); setError('')
+    try { await setInService(item.id, emServico); refresh(); onDone(emServico ? `“${item.nome}” voltou ao serviço.` : `“${item.nome}” está fora de serviço.`) }
+    catch (failure) { setError(errorMessage(failure)) } finally { setBusy(null) }
+  }
   return <>
     <form className="panel asset-filters" onSubmit={(event) => event.preventDefault()}>
       <label>Situação da tag<select value={situation} onChange={(e) => { setSituation(e.target.value); setPage(1) }}><option value="sem_tag">Sem tag (aguardando etiqueta)</option><option value="com_tag">Com tag associada</option><option value="todos">Todos</option></select></label>
+      <label>Serviço<select value={service} onChange={(e) => { setService(e.target.value as EstadoServico); setPage(1) }}><option value="ativo">Em serviço</option><option value="inativo">Fora de serviço</option><option value="todos">Todos</option></select></label>
       <label>Buscar<input type="search" placeholder="Nome, patrimônio ou EPC" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }}/></label>
     </form>
     {query.error && !data && <div className="state-panel error-panel" role="alert"><h2>Não foi possível carregar os equipamentos.</h2></div>}
+    {error && <p className="admin-error" role="alert">{error}</p>}
     {data && <section className="panel inventory-panel" aria-labelledby="registered-title">
       <div className="panel-heading"><h2 id="registered-title">Equipamentos</h2><span>{data.total} equipamento(s)</span></div>
       {data.items.length ? <div className="table-wrap"><table className="equipment-table">
         <thead><tr><th>Equipamento</th><th>Tipo</th><th>Tag</th><th>Última zona confirmada</th><th><span className="visually-hidden">Ação</span></th></tr></thead>
-        <tbody>{data.items.map((item) => <tr key={item.id}>
-          <td><strong>{item.nome}</strong><small>{item.identificador_interno}</small></td>
+        <tbody>{data.items.map((item) => <tr key={item.id} className={item.status !== 'ativo' ? 'row-out-of-service' : undefined}>
+          <td><strong>{item.nome}</strong><small>{item.identificador_interno}</small>{item.status !== 'ativo' && <span className="tag-chip tag-out-of-service">Fora de serviço</span>}</td>
           <td>{item.tipo_nome}</td>
           <td>{item.epc ? <code>{item.epc}</code> : <span className="tag-chip tag-unknown">Sem tag</span>}</td>
           <td>{item.ultima_zona ?? 'Nenhuma'}</td>
-          <td>{!item.epc && canEdit && (associating === item.id
-            ? <AssociateTag equipmentId={item.id} name={item.nome} onCancel={() => setAssociating(null)} onDone={(message) => { setAssociating(null); onDone(message) }}/>
-            : <button type="button" className="admin-primary" onClick={() => setAssociating(item.id)}>Associar tag</button>)}</td>
+          <td>{canEdit && <div className="admin-row-actions">
+            {!item.epc && item.status === 'ativo' && (associating === item.id
+              ? <AssociateTag equipmentId={item.id} name={item.nome} onCancel={() => setAssociating(null)} onDone={(message) => { setAssociating(null); onDone(message) }}/>
+              : <button type="button" className="admin-primary" onClick={() => setAssociating(item.id)}>Associar tag</button>)}
+            {associating !== item.id && <button type="button" className={item.status === 'ativo' ? 'danger' : undefined} disabled={busy === item.id}
+              aria-label={`${item.status === 'ativo' ? 'Colocar fora de serviço' : 'Reativar'}: ${item.nome}`} onClick={() => { void toggleService(item) }}>
+              {item.status === 'ativo' ? 'Fora de serviço' : 'Reativar'}</button>}
+          </div>}</td>
         </tr>)}</tbody>
       </table></div> : <p className="empty-panel">Nenhum equipamento nesta situação.</p>}
       {data.pages > 1 && <div className="admin-pagination"><span>Página {data.page} de {data.pages}</span><button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>Anterior</button><button type="button" disabled={page >= data.pages} onClick={() => setPage(page + 1)}>Próxima</button></div>}

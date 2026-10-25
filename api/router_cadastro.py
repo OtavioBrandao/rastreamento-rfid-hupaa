@@ -115,13 +115,16 @@ def listar_equipamentos(
     situacao: str = Query("todos", pattern="^(todos|sem_tag|com_tag)$"),
     busca: str | None = Query(None, max_length=100),
     incluir_inativos: bool = Query(False),
+    estado: str | None = Query(None, pattern="^(ativo|inativo|todos)$",
+                               description="ativo = em serviço; inativo = fora de serviço"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> dict:
     """Lista equipamentos com o EPC ativo de cada um (ou a ausência dele)."""
     pagina = service.listar_equipamentos(db, situacao=situacao, busca=busca,
-                                         incluir_inativos=incluir_inativos, page=page, size=size)
+                                         incluir_inativos=incluir_inativos, estado=estado,
+                                         page=page, size=size)
     return {"items": pagina.items, "page": pagina.page, "size": pagina.size,
             "total": pagina.total, "pages": pagina.pages}
 

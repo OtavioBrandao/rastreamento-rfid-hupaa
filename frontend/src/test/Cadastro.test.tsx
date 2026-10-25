@@ -106,6 +106,28 @@ describe('cadastro manual', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Associar tag' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Associar' })).toBeInTheDocument())
   })
+
+  it('administrador coloca fora de serviço depois de confirmar e filtra os fora de serviço', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    renderPage()
+    fireEvent.click(screen.getByRole('tab', { name: 'Equipamentos e tags' }))
+    const button = await screen.findByRole('button', { name: 'Colocar fora de serviço: Cadeira de rodas' })
+    fireEvent.click(button)
+    expect(calls.some((call) => call.url.pathname.endsWith('/inativar'))).toBe(false)
+    fireEvent.click(button)
+    await waitFor(() => expect(calls.some((call) => call.url.pathname === '/equipamentos/4/inativar' && call.init.method === 'POST')).toBe(true))
+    expect(await screen.findByText('“Cadeira de rodas” está fora de serviço.')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Serviço' }), { target: { value: 'inativo' } })
+    await waitFor(() => expect(calls.some((call) => call.url.searchParams.get('estado') === 'inativo')).toBe(true))
+    confirm.mockRestore()
+  })
+
+  it('operacional não vê o botão de fora de serviço', async () => {
+    renderPage(false)
+    fireEvent.click(screen.getByRole('tab', { name: 'Equipamentos e tags' }))
+    expect(await screen.findByText('Cadeira de rodas')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /fora de serviço|Reativar/ })).toBeNull()
+  })
 })
 
 describe('regra de EPC', () => {
