@@ -107,7 +107,7 @@ def servir_api(modo: str, env_file: str | None, host: str, porta: int,
                simulador: bool = False) -> None:
     """Roda no Python da .venv: resolve o banco como o launcher e inicia o uvicorn."""
     sys.path.insert(0, str(ROOT))
-    import uvicorn
+    from watchfiles import PythonFilter, watch
 
     from tools.lab_launcher.config import carregar
 
@@ -121,10 +121,21 @@ def servir_api(modo: str, env_file: str | None, host: str, porta: int,
                  f"  python -m alembic -c config/alembic.ini upgrade head  (com DATABASE_URL do {modo})")
     if simulador:
         os.environ.update(ambiente_simulador(modo, valores))
-    # Recarrega ao salvar código do backend (o frontend já recarrega pelo Vite);
-    # o processo filho herda o ambiente montado acima.
-    uvicorn.run("api.main:app", host=host, port=porta, reload=True,
-                reload_dirs=[str(ROOT / pasta) for pasta in PASTAS_BACKEND])
+    # Recarrega ao salvar código do backend (o frontend já recarrega pelo Vite).
+    # Não usa o `reload=True` do uvicorn: no Windows ele reinicia mandando Ctrl+C,
+    # que este processo (grupo próprio, ver `iniciar`) ignora, e a API antiga fica
+    # no ar com o código velho. Aqui a árvore do uvicorn é derrubada e sobe de novo.
+    comando = [sys.executable, "-m", "uvicorn", "api.main:app", "--host", host, "--port", str(porta)]
+    processo = subprocess.Popen(comando, cwd=ROOT)
+    try:
+        for mudancas in watch(*(ROOT / pasta for pasta in PASTAS_BACKEND), watch_filter=PythonFilter()):
+            nomes = sorted({Path(caminho).relative_to(ROOT).as_posix() for _, caminho in mudancas})
+            print(f"Código alterado ({', '.join(nomes)}): reiniciando a API...", flush=True)
+            encerrar(processo)
+            processo.wait()
+            processo = subprocess.Popen(comando, cwd=ROOT)
+    finally:
+        encerrar(processo)
 
 
 def escolher_teste(valor: str | None) -> str:
