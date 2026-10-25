@@ -63,6 +63,19 @@ def payload(epc: str, porta: int, rssi: int, contador: int) -> str:
                        "timestamp": str(contador)}, separators=(",", ":"))
 
 
+def _dica_acl(motivo: str | None) -> str:
+    """Queda logo ao publicar: quase sempre ACL do broker sem os tópicos virtuais.
+
+    Em MQTT 3.1.1 o HiveMQ Cloud não diz o motivo: só fecha a conexão
+    ("Unspecified error"). Conferido em 25/10/2026 com a credencial do
+    reader-01: conectada e parada fica no ar; publicar fora do tópico dela, cai.
+    """
+    if motivo and any(trecho in motivo.lower() for trecho in ("authoriz", "autoriz", "unspecified")):
+        return ("; provável falta de permissão: a credencial de publicação do simulador precisa "
+                "publicar em easy/<ambiente>/<site>/+/+/readings no broker (ACL do HiveMQ)")
+    return ""
+
+
 class PublicadorMultiLeitor:
     """Uma conexão MQTT para vários leitores virtuais (um tópico por leitor).
 
@@ -83,6 +96,7 @@ class PublicadorMultiLeitor:
         self._client = create_client(self._settings)
         self._conectado = Event()
         self._desconectado = Event()
+        self.motivo_desconexao: str | None = None
         self._erro: list[str] = []
         self._em_voo: deque[tuple[float, str, mqtt.MQTTMessageInfo]] = deque()
         self.publicadas = 0
@@ -110,8 +124,9 @@ class PublicadorMultiLeitor:
                 self._erro.append("conexão MQTT do simulador recusada; confira a credencial")
             self._conectado.set()
 
-        def on_disconnect(_client, _userdata, _flags, _reason_code, _properties):
-            """Marca a desconexão para `conferir` falhar com diagnóstico."""
+        def on_disconnect(_client, _userdata, _flags, reason_code, _properties):
+            """Marca a desconexão (com o motivo do broker) para `conferir` falhar com diagnóstico."""
+            self.motivo_desconexao = str(reason_code) if reason_code is not None else None
             self._desconectado.set()
 
         self._client.on_connect = on_connect
@@ -131,8 +146,9 @@ class PublicadorMultiLeitor:
         result = self._client.publish(
             topico, payload(normalizar_epc(epc), porta, rssi, self.contador), qos=1)
         if result.rc != mqtt.MQTT_ERR_SUCCESS:
+            motivo = f" (broker desconectou: {self.motivo_desconexao})" if self.motivo_desconexao else ""
             raise RuntimeError(f"MQTT não enfileirou a leitura para {topico}: "
-                               f"{mqtt.error_string(result.rc)}")
+                               f"{mqtt.error_string(result.rc)}{motivo}{_dica_acl(self.motivo_desconexao)}")
         self.contador += 1
         self.publicadas += 1
         self._em_voo.append((time.monotonic(), topico, result))

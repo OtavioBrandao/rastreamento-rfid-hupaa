@@ -215,6 +215,8 @@ def main() -> int:
     parser.add_argument("--api-port", type=int, default=8010)
     parser.add_argument("--front-port", type=int, default=5173)
     parser.add_argument("--sem-navegador", action="store_true", help="não abre o navegador")
+    parser.add_argument("--mqtt-transport", choices=("tls", "plain"),
+                        help="repassa ao launcher (broker externo) e pula a pergunta do transporte")
     parser.add_argument("--servir-api", choices=("local", "managed"), help=argparse.SUPPRESS)
     parser.add_argument("--com-simulador", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -288,6 +290,8 @@ def main() -> int:
 
         print("\nAbrindo o launcher de laboratório...\n", flush=True)
         comando = [python, "-m", "tools.lab_launcher", "start", "--env", modo, "--source", origem]
+        if args.mqtt_transport:
+            comando += ["--mqtt-transport", args.mqtt_transport]
         if args.env_file:
             comando += ["--env-file", args.env_file]
         launcher = subprocess.Popen(comando, cwd=ROOT, env=dict(os.environ))
