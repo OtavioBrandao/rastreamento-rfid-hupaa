@@ -261,10 +261,15 @@ def avisos(layout: Layout) -> list[str]:
                 resultado.append(f"{leitor.nome} / {antena.nome} sem posição: não detecta tags")
             if antena.portal and antena.lado:
                 lados[antena.portal].add(antena.lado)
+    nomes_zonas = {zona.chave: zona.nome for zona in layout.zonas}
     for portal in layout.portais:
-        if lados[portal.chave] != {"a", "b"}:
-            resultado.append(f"portal '{portal.nome}' precisa de antenas nos lados A e B "
-                             "para confirmar direção")
+        for lado, zona in (("a", portal.zona_a), ("b", portal.zona_b)):
+            if lado not in lados[portal.chave]:
+                resultado.append(
+                    f"portal '{portal.nome}': nenhuma antena no lado {lado.upper()} "
+                    f"({nomes_zonas.get(zona, zona)}), então a passagem por ele nunca é "
+                    "confirmada; ligue uma antena a esse lado ou remova o portal se essa "
+                    "entrada é vigiada só pelo leitor de área restrita")
     for zona in layout.zonas:
         if zona.area is None:
             resultado.append(f"zona '{zona.nome}' ainda não foi delimitada na planta")

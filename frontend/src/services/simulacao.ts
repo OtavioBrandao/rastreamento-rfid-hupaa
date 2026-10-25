@@ -195,7 +195,10 @@ export function pendencias(layout: LayoutConfig): string[] {
   }
   for (const portal of layout.portais) {
     const lados = new Set(layout.leitores.flatMap((l) => l.antenas.filter((a) => a.portal === portal.chave).map((a) => a.lado)))
-    if (!lados.has('a') || !lados.has('b')) resultado.push(`Portal “${portal.nome}”: falta antena no lado ${!lados.has('a') ? 'A' : 'B'}.`)
+    for (const [lado, zona] of [['a', portal.zona_a], ['b', portal.zona_b]] as const) if (!lados.has(lado)) {
+      const nome = layout.zonas.find((item) => item.chave === zona)?.nome ?? zona
+      resultado.push(`Portal “${portal.nome}”: nenhuma antena no lado ${lado.toUpperCase()} (${nome}), então a passagem por ele nunca é confirmada. Ligue uma antena a esse lado ou remova o portal se essa entrada é vigiada só pelo leitor de área restrita.`)
+    }
   }
   const posicionadas = layout.leitores.flatMap((leitor) => leitor.antenas.filter((antena) => antena.posicao).map((antena) => ({ leitor, antena })))
   posicionadas.forEach(({ leitor, antena }, i) => {
