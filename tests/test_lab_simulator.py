@@ -113,8 +113,9 @@ def test_publicador_falha_quando_puback_demora(monkeypatch):
         publicador.conferir()
 
 
-# Equivalência com o simulador Flet removido: mesmo preset EASY, mesmo raio
-# (16 na escala de x), mesma proporção 880 x 560 e mesmo período de 0,2 s.
+# Preset EASY: mesma proporção 880 x 560 e período de 0,2 s do simulador Flet removido;
+# desde o hotfix, antenas direcionais (visada 270° = para cima, para dentro das salas),
+# alcance 11 na frente e 35% atrás.
 PRESET_EASY = preset("easy")
 ANTENAS = antenas_do_layout(PRESET_EASY)
 PROPORCAO = PRESET_EASY["proporcao"]
@@ -122,16 +123,20 @@ PROPORCAO = PRESET_EASY["proporcao"]
 
 def test_alcance_das_antenas_e_rssi_por_distancia():
     antena_a, antena_b = ANTENAS
-    assert (antena_a.x, antena_a.y, antena_a.alcance) == (28, 66, 16)
+    assert (antena_a.x, antena_a.y, antena_a.alcance, antena_a.orientacao) == (28, 66, 11, 270)
     assert [(a.porta, valor) for a, valor in detectar(antena_a.x, antena_a.y, ANTENAS, PROPORCAO)] == [
         (1, RSSI_PERTO)]
-    borda = detectar(antena_b.x + antena_b.alcance, antena_b.y, ANTENAS, PROPORCAO)
+    # Borda da visada direta (para cima): o mesmo raio em pixels vale mais unidades em y.
+    frente_y = antena_b.alcance * PROPORCAO
+    borda = detectar(antena_b.x, antena_b.y - frente_y, ANTENAS, PROPORCAO)
     assert [(a.porta, valor) for a, valor in borda] == [(2, RSSI_LONGE)]
     assert detectar(50, 20, ANTENAS, PROPORCAO) == []
-    # Alcance circular na tela: o mesmo raio em pixels vale mais unidades em y.
-    raio_y = antena_a.alcance * PROPORCAO
-    assert [a.porta for a, _ in detectar(antena_a.x, antena_a.y - raio_y + 0.5, ANTENAS, PROPORCAO)] == [1]
-    assert detectar(antena_a.x, antena_a.y - raio_y - 0.5, ANTENAS, PROPORCAO) == []
+    assert [a.porta for a, _ in detectar(antena_a.x, antena_a.y - frente_y + 0.5, ANTENAS, PROPORCAO)] == [1]
+    assert detectar(antena_a.x, antena_a.y - frente_y - 0.5, ANTENAS, PROPORCAO) == []
+    # Atrás da antena (para baixo) o alcance é só 35% do da frente.
+    tras_y = antena_a.alcance * antena_a.fator_traseiro * PROPORCAO
+    assert [a.porta for a, _ in detectar(antena_a.x, antena_a.y + tras_y - 0.3, ANTENAS, PROPORCAO)] == [1]
+    assert detectar(antena_a.x, antena_a.y + tras_y + 0.5, ANTENAS, PROPORCAO) == []
     assert math.hypot(antena_a.x - antena_b.x, antena_a.y - antena_b.y) > 2 * antena_a.alcance
 
 
@@ -140,11 +145,11 @@ def test_leituras_seguem_o_periodo_e_a_antena_do_alcance():
     item = {"id": "i1", "epc": PREFIXO_EPC + "1" * 16, "x": antena_a.x, "y": antena_a.y}
     estado = EstadoSessao(1, "x", 1, "sim-l1", PROPORCAO, ANTENAS,
                           {"sim-easy-01": "easy/dev/hupaa/sim-l1/sim-easy-01/readings"}, [item])
-    assert [(porta, rssi) for _, _, porta, rssi in estado.devidas(10.0, 0.2)] == [(1, RSSI_PERTO)]
+    assert [(porta, rssi) for _, _, porta, rssi, _ in estado.devidas(10.0, 0.2)] == [(1, RSSI_PERTO)]
     assert estado.devidas(10.1, 0.2) == []
     assert len(estado.devidas(10.2, 0.2)) == 1
     item.update(x=antena_b.x, y=antena_b.y)
-    assert [porta for _, _, porta, _ in estado.devidas(10.5, 0.2)] == [2]
+    assert [porta for _, _, porta, _, _ in estado.devidas(10.5, 0.2)] == [2]
     item.update(x=50, y=20)
     assert estado.devidas(11.0, 0.2) == []
 

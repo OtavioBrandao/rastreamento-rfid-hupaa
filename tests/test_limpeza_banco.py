@@ -101,7 +101,7 @@ def test_previa_nao_altera_nada(pg_engine, base_experimental):
                          limpeza_banco.previa(conexao, limpeza_banco.planejar(limpeza_banco.ESCOPOS)))
     assert resultado["Leituras brutas"] == 3
     assert resultado["Passagens"] == 1
-    assert resultado["Leitores virtuais (serial SIM-*)"] == 5
+    assert resultado["Leitores virtuais (serial SIM-*)"] == 6  # 1 do EASY + 5 do HUPAA
     assert resultado["Equipamentos de teste"] == 1
     assert _totais(pg_engine) == antes
 
