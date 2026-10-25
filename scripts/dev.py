@@ -132,7 +132,15 @@ def servir_api(modo: str, env_file: str | None, host: str, porta: int,
     comando = [sys.executable, "-m", "uvicorn", "api.main:app", "--host", host, "--port", str(porta)]
     processo = subprocess.Popen(comando, cwd=ROOT)
     try:
-        for mudancas in watch(*(ROOT / pasta for pasta in PASTAS_BACKEND), watch_filter=PythonFilter()):
+        # Acorda a cada 2 s mesmo sem mudança: se a API caiu (ex.: porta ainda ocupada
+        # por um processo antigo), sobe de novo em vez de deixar o site sem API.
+        for mudancas in watch(*(ROOT / pasta for pasta in PASTAS_BACKEND), watch_filter=PythonFilter(),
+                              rust_timeout=2000, yield_on_timeout=True):
+            if not mudancas:
+                if processo.poll() is not None:
+                    print(f"A API parou (código {processo.returncode}); subindo de novo...", flush=True)
+                    processo = subprocess.Popen(comando, cwd=ROOT)
+                continue
             nomes = sorted({Path(caminho).relative_to(ROOT).as_posix() for _, caminho in mudancas})
             print(f"Código alterado ({', '.join(nomes)}): reiniciando a API...", flush=True)
             encerrar(processo)
