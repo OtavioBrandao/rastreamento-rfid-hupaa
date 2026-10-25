@@ -23,6 +23,39 @@ function novaChave(prefixo: string, existentes: string[]) {
   return `${prefixo}-${indice}`
 }
 
+/** Leitor de portal pronto: antena A dentro da zona A, B dentro da zona B, sem alcances sobrepostos. */
+function leitorDoPortal(draft: LayoutConfig, portal: string, a: string, b: string): LeitorLayout {
+  const chave = novaChave('leitor', todasAsChaves(draft))
+  const ids = draft.leitores.map((l) => l.reader_id)
+  let numero = draft.leitores.length + 1
+  while (ids.includes(`sim-${draft.cenario}-${String(numero).padStart(2, '0')}`)) numero++
+  const areaA = draft.zonas.find((z) => z.chave === a)?.area, areaB = draft.zonas.find((z) => z.chave === b)?.area
+  let posicoes: { leitor: Ponto | null; a: Ponto | null; b: Ponto | null } = { leitor: null, a: null, b: null }
+  if (areaA && areaB) {
+    // Escala de x (y dividido pela proporção), a mesma do cálculo de alcance.
+    const p = draft.proporcao
+    const ca = { x: areaA.x + areaA.largura / 2, y: (areaA.y + areaA.altura / 2) / p }
+    const cb = { x: areaB.x + areaB.largura / 2, y: (areaB.y + areaB.altura / 2) / p }
+    const mx = (ca.x + cb.x) / 2, my = (ca.y + cb.y) / 2
+    const dist = Math.hypot(cb.x - ca.x, cb.y - ca.y) || 1
+    const ux = (cb.x - ca.x) / dist, uy = (cb.y - ca.y) / dist
+    const dentro = (x: number, y: number, area: NonNullable<typeof areaA>) => ({
+      x: round(Math.min(area.x + area.largura - 2, Math.max(area.x + 2, x))),
+      y: round(Math.min(area.y + area.altura - 2, Math.max(area.y + 2, y * p))),
+    })
+    const passo = Math.min(7, dist / 2)
+    posicoes = {
+      a: dentro(mx - ux * passo, my - uy * passo, areaA),
+      b: dentro(mx + ux * passo, my + uy * passo, areaB),
+      leitor: { x: round(Math.min(97, Math.max(3, mx - uy * 6))), y: round(Math.min(97, Math.max(3, (my + ux * 6) * p))) },
+    }
+  }
+  const antena = (porta: number, lado: 'a' | 'b', posicao: Ponto | null, zona: string): AntenaLayout =>
+    ({ chave: `${chave}-antena-${porta}`, nome: `Antena ${lado.toUpperCase()}`, porta, posicao, alcance: 5, portal, lado, zona })
+  return { chave, nome: `Leitor ${numero}`, reader_id: `sim-${draft.cenario}-${String(numero).padStart(2, '0')}`, modelo: 'EZ700', posicao: posicoes.leitor,
+    antenas: [antena(1, 'a', posicoes.a, a), antena(2, 'b', posicoes.b, b)] }
+}
+
 function todasAsChaves(config: LayoutConfig) {
   return [...config.zonas.map((z) => z.chave), ...config.portais.map((p) => p.chave), ...config.leitores.map((l) => l.chave),
     ...config.leitores.flatMap((l) => l.antenas.map((a) => a.chave))]
@@ -132,18 +165,55 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
     setSelection(null)
   }
 
-  const desenho = drag?.kind === 'desenho' ? { x: Math.min(drag.inicio.x, drag.atual.x), y: Math.min(drag.inicio.y, drag.atual.y), w: Math.abs(drag.atual.x - drag.inicio.x), h: Math.abs(drag.atual.y - drag.inicio.y) } : null
-  const dica = tool.kind === 'zona' ? 'Clique e arraste na planta para delimitar a zona.' : tool.kind === 'leitor' ? 'Clique na planta para posicionar o novo leitor.' : tool.kind === 'posicionar' ? 'Clique na planta para posicionar o elemento.' : 'Arraste zonas, leitores, antenas e portais. Use a alça no canto da zona para redimensionar.'
+  function removeSelection() {
+    if (!selection || disabled) return
+    if (selection.kind === 'zona') removeZone(selection.chave)
+    else if (selection.kind === 'portal') removePortal(selection.chave)
+    else if (selection.antena) {
+      const leitor = config.leitores.find((l) => l.chave === selection.chave)
+      if (!leitor || leitor.antenas.length <= 1) { setAviso('Um leitor precisa de pelo menos uma antena.'); return }
+      update((d) => { const alvo = leitorDe(d, selection.chave); alvo.antenas = alvo.antenas.filter((a) => a.chave !== selection.antena) })
+      setSelection({ kind: 'leitor', chave: selection.chave })
+    } else { update((d) => { d.leitores = d.leitores.filter((l) => l.chave !== selection.chave) }); setSelection(null) }
+  }
 
-  return <div className="sim-editor">
+  function clearAll() {
+    if (!window.confirm('Apagar todas as zonas, portais, leitores e antenas desta planta? Nada é salvo até você clicar em “Salvar layout”.')) return
+    update((draft) => { draft.zonas = []; draft.portais = []; draft.leitores = [] })
+    setSelection(null); setTool({ kind: 'selecionar' })
+  }
+
+  /** Chip "posicionar": entra no modo de posicionar o primeiro elemento que falta. */
+  function placeMissing(leitor: LeitorLayout) {
+    if (!leitor.posicao) { setSelection({ kind: 'leitor', chave: leitor.chave }); setTool({ kind: 'posicionar', alvo: 'leitor', chave: leitor.chave }); return }
+    const antena = leitor.antenas.find((a) => !a.posicao)
+    if (antena) { setSelection({ kind: 'leitor', chave: leitor.chave, antena: antena.chave }); setTool({ kind: 'posicionar', alvo: 'antena', chave: antena.chave, leitor: leitor.chave }) }
+  }
+
+  const desenho = drag?.kind === 'desenho' ? { x: Math.min(drag.inicio.x, drag.atual.x), y: Math.min(drag.inicio.y, drag.atual.y), w: Math.abs(drag.atual.x - drag.inicio.x), h: Math.abs(drag.atual.y - drag.inicio.y) } : null
+  const alvoPosicionar = tool.kind !== 'posicionar' ? '' : tool.alvo === 'leitor' ? config.leitores.find((l) => l.chave === tool.chave)?.nome
+    : tool.alvo === 'portal' ? `portal ${config.portais.find((p) => p.chave === tool.chave)?.nome ?? ''}`
+      : config.leitores.find((l) => l.chave === tool.leitor)?.antenas.find((a) => a.chave === tool.chave)?.nome
+  const dica = tool.kind === 'zona' ? 'Clique e arraste na planta para delimitar a zona.' : tool.kind === 'leitor' ? 'Clique na planta para posicionar o novo leitor.'
+    : tool.kind === 'posicionar' ? `Clique na planta onde fica: ${alvoPosicionar ?? 'o elemento'} (Esc cancela).` : 'Arraste para mover. Selecione e aperte Delete para remover. A alça no canto redimensiona a zona.'
+
+  return <div className="sim-editor" onKeyDown={(event) => {
+    if ((event.target as HTMLElement).closest('input, select, textarea')) return
+    if (event.key === 'Escape') { setTool({ kind: 'selecionar' }); setSelection(null) }
+    if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeSelection() }
+  }}>
     <div className="sim-toolbar" role="toolbar" aria-label="Ferramentas da planta">
       <button type="button" aria-pressed={tool.kind === 'selecionar'} onClick={() => setTool({ kind: 'selecionar' })}>Selecionar e mover</button>
       <button type="button" aria-pressed={tool.kind === 'zona' && !tool.alvo} disabled={disabled} onClick={() => setTool({ kind: 'zona' })}>Desenhar zona</button>
       <button type="button" aria-pressed={tool.kind === 'leitor'} disabled={disabled} onClick={() => setTool({ kind: 'leitor' })}>Adicionar leitor</button>
-      <NewPortal config={config} disabled={disabled || config.zonas.length < 2} onCreate={(nome, a, b) => update((draft) => {
+      <NewPortal config={config} disabled={disabled || config.zonas.length < 2} onCreate={(nome, a, b, comLeitor) => update((draft) => {
         const chave = novaChave('portal', todasAsChaves(draft))
-        draft.portais.push({ chave, nome, zona_a: a, zona_b: b, posicao: null }); setSelection({ kind: 'portal', chave })
+        const leitor = comLeitor ? leitorDoPortal(draft, chave, a, b) : null
+        const [pa, pb] = [leitor?.antenas[0].posicao, leitor?.antenas[1].posicao]
+        draft.portais.push({ chave, nome, zona_a: a, zona_b: b, posicao: pa && pb ? { x: round((pa.x + pb.x) / 2), y: round((pa.y + pb.y) / 2) } : null })
+        if (leitor) { draft.leitores.push(leitor); setSelection({ kind: 'leitor', chave: leitor.chave }) } else setSelection({ kind: 'portal', chave })
       })}/>
+      <button type="button" className="danger" disabled={disabled || (!config.zonas.length && !config.leitores.length)} onClick={clearAll}>Limpar planta</button>
       <span className="sim-hint" role="status">{dica}</span>
     </div>
     {aviso && <p className="admin-warning" role="alert" onClick={() => setAviso('')}>{aviso}</p>}
@@ -168,7 +238,7 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
         </div>)}
       </SimPlan>
       <aside className="sim-side panel" aria-label="Propriedades">
-        {!selection && <Overview config={config} onSelect={setSelection}/>}
+        {!selection && <Overview config={config} onSelect={setSelection} onPlace={disabled ? undefined : placeMissing}/>}
         {selection?.kind === 'zona' && (() => {
           const zona = config.zonas.find((z) => z.chave === selection.chave)
           if (!zona) return null
@@ -217,21 +287,30 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
   </div>
 }
 
-function Overview({ config, onSelect }: { config: LayoutConfig; onSelect: (selection: Selection) => void }) {
+function Overview({ config, onSelect, onPlace }: { config: LayoutConfig; onSelect: (selection: Selection) => void; onPlace?: (leitor: LeitorLayout) => void }) {
   return <div className="sim-overview">
+    {!config.portais.length && <ol className="sim-steps">
+      <li><strong>Desenhe as zonas</strong> (salas, corredores) com “Desenhar zona”.</li>
+      <li><strong>Crie um portal</strong> entre duas zonas: ele já vem com um leitor e as antenas A e B posicionadas.</li>
+      <li><strong>Ajuste</strong> arrastando o que quiser e clique em “Salvar layout”.</li>
+      <li><strong>Inicie a simulação</strong> e arraste os equipamentos na aba de controle.</li>
+    </ol>}
     <h3>Zonas ({config.zonas.length})</h3>
     <ul>{config.zonas.map((zona) => <li key={zona.chave}><button type="button" className="link-button" onClick={() => onSelect({ kind: 'zona', chave: zona.chave })}><span className="sim-swatch" style={{ background: zona.cor }}/>{zona.nome}</button>{!zona.area && <span className="tag-chip tag-unknown">não delimitada</span>}</li>)}</ul>
     <h3>Portais ({config.portais.length})</h3>
     <ul>{config.portais.map((portal) => <li key={portal.chave}><button type="button" className="link-button" onClick={() => onSelect({ kind: 'portal', chave: portal.chave })}>{portal.nome}</button>{!portal.posicao && <span className="tag-chip tag-unknown">sem marcador</span>}</li>)}</ul>
     <h3>Leitores ({config.leitores.length})</h3>
     <ul>{config.leitores.map((leitor) => <li key={leitor.chave}><button type="button" className="link-button" onClick={() => onSelect({ kind: 'leitor', chave: leitor.chave })}>{leitor.nome} · {leitor.modelo === 'DR_MAX' ? 'DR Max' : 'EZ700'} · {leitor.antenas.length} antena(s)</button>
-      {(!leitor.posicao || leitor.antenas.some((a) => !a.posicao)) && <span className="tag-chip tag-unknown">posicionar</span>}</li>)}</ul>
+      {(!leitor.posicao || leitor.antenas.some((a) => !a.posicao)) && (onPlace
+        ? <button type="button" className="tag-chip tag-unknown sim-chip-action" title="Clique aqui e depois na planta" onClick={() => onPlace(leitor)}>posicionar</button>
+        : <span className="tag-chip tag-unknown">posicionar</span>)}</li>)}</ul>
     <p className="muted-text">Os alcances são ilustrativos. Uma leitura isolada não muda a zona: a passagem é confirmada pelo motor de inferência quando a tag é lida dos dois lados de um portal.</p>
   </div>
 }
 
-function NewPortal({ config, disabled, onCreate }: { config: LayoutConfig; disabled: boolean; onCreate: (nome: string, a: string, b: string) => void }) {
+function NewPortal({ config, disabled, onCreate }: { config: LayoutConfig; disabled: boolean; onCreate: (nome: string, a: string, b: string, comLeitor: boolean) => void }) {
   const [open, setOpen] = useState(false)
+  const [comLeitor, setComLeitor] = useState(true)
   const [a, setA] = useState('')
   const [b, setB] = useState('')
   if (!open) return <button type="button" disabled={disabled} onClick={() => { setOpen(true); setA(config.zonas[0]?.chave ?? ''); setB(config.zonas[1]?.chave ?? '') }}>Novo portal</button>
@@ -240,7 +319,8 @@ function NewPortal({ config, disabled, onCreate }: { config: LayoutConfig; disab
     <select aria-label="Zona do lado A" value={a} onChange={(e) => setA(e.target.value)}>{config.zonas.map((z) => <option key={z.chave} value={z.chave}>{z.nome}</option>)}</select>
     <span aria-hidden="true">↔</span>
     <select aria-label="Zona do lado B" value={b} onChange={(e) => setB(e.target.value)}>{config.zonas.map((z) => <option key={z.chave} value={z.chave}>{z.nome}</option>)}</select>
-    <button type="button" disabled={!a || a === b} onClick={() => { onCreate(`${nome(a)} ↔ ${nome(b)}`, a, b); setOpen(false) }}>Criar</button>
+    <label className="checkbox-label"><input type="checkbox" checked={comLeitor} onChange={(e) => setComLeitor(e.target.checked)}/> com leitor e antenas</label>
+    <button type="button" className="admin-primary" disabled={!a || a === b} onClick={() => { onCreate(`${nome(a)} ↔ ${nome(b)}`, a, b, comLeitor); setOpen(false) }}>Criar portal</button>
     <button type="button" onClick={() => setOpen(false)}>Cancelar</button>
   </span>
 }

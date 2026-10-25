@@ -59,6 +59,35 @@ do mesmo editor, das mesmas sessões e do mesmo motor de publicação
   cadastrado, EPC informado ou sem etiqueta), arrastar, etiquetar/remover
   etiqueta, área de leitura destacada e registro de detecções.
 
+**Teste rápido e facilidades de configuração** (pedido após o primeiro uso: o
+editor era pouco intuitivo e não havia como apagar tudo):
+
+- *Testar agora* (`POST /api/simulacao/teste-rapido`): um clique cria (ou
+  reaproveita) o layout "teste rápido" do cenário, inicia a sessão e coloca
+  quatro equipamentos: **Maca 01** e **Cadeira de rodas 01** já cadastrados
+  (tipo e identificador `LAB-RFID-<EPC>` do launcher, removíveis por
+  `tools.limpeza_banco --escopo laboratorio`), **Monitor portátil** com tag
+  não cadastrada (para testar o cadastro por leitura) e **Bomba de infusão**
+  sem etiqueta. No EASY o layout é o preset; no HUPAA é um layout à parte com
+  posições **ilustrativas** (antenas de cada portal uma em cada zona, sem
+  alcances sobrepostos). O preset HUPAA padrão continua sem posições.
+- *Apagar tudo* (`POST /api/simulacao/apagar-tudo`): encerra as sessões e
+  exclui (arquiva) todos os layouts do cenário. Leituras, passagens e histórico
+  do pipeline ficam; para eles use a limpeza do banco.
+- Editor: *Novo portal* já cria o leitor com as antenas A e B posicionadas,
+  uma em cada zona; *Limpar planta*; *Desfazer* (Ctrl+Z); Delete remove o
+  selecionado e Esc cancela; chips "posicionar" clicáveis; passo a passo na
+  planta vazia; lista do que falta para detectar passagens, atualizada a cada
+  edição (ou "Planta pronta").
+- Controle: botões *+ Maca*, *+ Cadeira de rodas*, *+ Bomba de infusão* (com
+  EPC gerado), demais opções recolhidas, e *Remover todos*.
+- `scripts/dev.py` sobe a API com recarga automática (o frontend já recarrega
+  pelo Vite) e recusa subir com o banco atrás da migration mais recente.
+
+Validado em 25/10/2026 com Mosquitto e ingestor locais: teste rápido HUPAA,
+Maca 01 arrastada da Zona 1 para a Zona 2 → 14 leituras, passagem confirmada
+e última zona "Zona 2".
+
 **Sincronização**: polling de 600 ms com `desde_versao` (resposta curta quando
 nada mudou) no controle e 2 s no painel. Avaliado como suficiente: sem
 infraestrutura nova, funciona atrás de qualquer proxy e recupera a sessão ao

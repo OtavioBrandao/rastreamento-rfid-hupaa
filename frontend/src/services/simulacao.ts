@@ -97,6 +97,9 @@ export const addItem = (codigo: string, item: { nome: string; tipo?: string; epc
 export const updateItem = (codigo: string, id: string, campos: Partial<Pick<ItemVirtual, 'x' | 'y' | 'nome' | 'tipo' | 'epc'>> & { gerar_epc?: boolean; remover_epc?: boolean }) =>
   sendJson<{ codigo: string; versao: number; itens: ItemVirtual[] }>(`/api/simulacao/sessoes/${codigo}/itens/${id}`, 'PATCH', campos)
 export const removeItem = (codigo: string, id: string) => apiRequest<{ codigo: string; versao: number; itens: ItemVirtual[] }>(`/api/simulacao/sessoes/${codigo}/itens/${id}`, { method: 'DELETE' })
+export const quickTest = (cenario: Cenario) => sendJson<Sessao>('/api/simulacao/teste-rapido', 'POST', { cenario })
+export const wipeScenario = (cenario: Cenario) => sendJson<{ sessoes_encerradas: number; layouts_arquivados: number }>('/api/simulacao/apagar-tudo', 'POST', { cenario })
+export const clearItems = (codigo: string) => apiRequest<{ codigo: string; versao: number; itens: ItemVirtual[] }>(`/api/simulacao/sessoes/${codigo}/itens`, { method: 'DELETE' })
 export const getMonitor = (codigo: string, signal?: AbortSignal) => readJson<Monitor>(`/api/simulacao/sessoes/${codigo}/monitor`, signal)
 
 export const controlUrl = (codigo: string) => `${window.location.origin}${window.location.pathname}#/simulador/controle/${codigo}`
@@ -110,4 +113,21 @@ export function inRange(item: Ponto, antenna: AntenaLayout, proporcao: number) {
 export function zoneAt(layout: LayoutConfig, point: Ponto) {
   return layout.zonas.find((zona) => zona.area && point.x >= zona.area.x && point.x <= zona.area.x + zona.area.largura
     && point.y >= zona.area.y && point.y <= zona.area.y + zona.area.altura) ?? null
+}
+
+/** O que ainda falta para a demonstração funcionar (mesmas regras de `avisos` no backend). */
+export function pendencias(layout: LayoutConfig): string[] {
+  const resultado: string[] = []
+  if (!layout.zonas.length) resultado.push('Desenhe pelo menos duas zonas.')
+  for (const zona of layout.zonas) if (!zona.area) resultado.push(`Delimite a zona “${zona.nome}” na planta.`)
+  if (layout.zonas.length >= 2 && !layout.portais.length) resultado.push('Crie um portal entre duas zonas.')
+  for (const leitor of layout.leitores) {
+    if (!leitor.posicao) resultado.push(`Posicione o ${leitor.nome}.`)
+    for (const antena of leitor.antenas) if (!antena.posicao) resultado.push(`Posicione a ${antena.nome} do ${leitor.nome}.`)
+  }
+  for (const portal of layout.portais) {
+    const lados = new Set(layout.leitores.flatMap((l) => l.antenas.filter((a) => a.portal === portal.chave).map((a) => a.lado)))
+    if (!lados.has('a') || !lados.has('b')) resultado.push(`Portal “${portal.nome}”: falta antena no lado ${!lados.has('a') ? 'A' : 'B'}.`)
+  }
+  return resultado
 }

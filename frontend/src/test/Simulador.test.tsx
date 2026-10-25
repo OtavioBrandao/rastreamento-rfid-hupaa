@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LayoutEditor } from '../components/simulador/LayoutEditor'
 import { SimulatorControlPage } from '../pages/SimulatorControlPage'
-import { inRange, zoneAt, type LayoutConfig, type Sessao } from '../services/simulacao'
+import { inRange, pendencias, zoneAt, type LayoutConfig, type Sessao } from '../services/simulacao'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -50,6 +50,39 @@ describe('editor da planta', () => {
     rerender(<LayoutEditor config={config} onChange={onChange}/>)
     expect(screen.getByText(/integração física ao MQTT ainda não foi validada/)).toBeInTheDocument()
   })
+
+  it('portal novo já vem com leitor e antenas A e B, cada uma na sua zona e sem sobreposição', () => {
+    let config: LayoutConfig = { ...structuredClone(easy), portais: [], leitores: [] }
+    const onChange = vi.fn((next: LayoutConfig) => { config = next })
+    const { rerender } = render(<LayoutEditor config={config} onChange={onChange}/>)
+    expect(pendencias(config)).toEqual(['Crie um portal entre duas zonas.'])
+    fireEvent.click(screen.getByRole('button', { name: 'Novo portal' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Criar portal' }))
+    rerender(<LayoutEditor config={config} onChange={onChange}/>)
+    const [leitor] = config.leitores
+    expect(config.portais[0].posicao).not.toBeNull()
+    expect(leitor.reader_id).toBe('sim-easy-01')
+    expect(leitor.antenas.map((a) => [a.lado, a.zona])).toEqual([['a', 'zona-a'], ['b', 'zona-b']])
+    expect(zoneAt(config, leitor.antenas[0].posicao!)?.chave).toBe('zona-a')
+    expect(zoneAt(config, leitor.antenas[1].posicao!)?.chave).toBe('zona-b')
+    expect(inRange(leitor.antenas[1].posicao!, leitor.antenas[0], config.proporcao)).toBe(false)
+    expect(pendencias(config)).toEqual([])
+  })
+
+  it('limpar planta apaga tudo depois de confirmar e mostra o passo a passo', () => {
+    let config = structuredClone(easy)
+    const onChange = vi.fn((next: LayoutConfig) => { config = next })
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    const { rerender } = render(<LayoutEditor config={config} onChange={onChange}/>)
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar planta' }))
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Limpar planta' }))
+    rerender(<LayoutEditor config={config} onChange={onChange}/>)
+    expect([config.zonas, config.portais, config.leitores]).toEqual([[], [], []])
+    expect(screen.getByText('Desenhe as zonas')).toBeInTheDocument()
+    expect(pendencias(config)).toEqual(['Desenhe pelo menos duas zonas.'])
+    vi.restoreAllMocks()
+  })
 })
 
 describe('aba de controle', () => {
@@ -89,6 +122,18 @@ describe('aba de controle', () => {
     const body = JSON.parse(String(calls.find((call) => call.init.method === 'POST')!.init.body))
     expect(body).toMatchObject({ nome: 'Cadeira 2', gerar_epc: false })
     expect(body.epc).toBeUndefined()
+  })
+
+  it('adiciona em um clique e remove todos depois de confirmar', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
+    await screen.findByRole('button', { name: 'Maca 1, sendo lido' })
+    fireEvent.click(screen.getByRole('button', { name: '+ Cadeira de rodas' }))
+    await vi.waitFor(() => expect(calls.some((call) => call.init.method === 'POST')).toBe(true))
+    expect(JSON.parse(String(calls.find((call) => call.init.method === 'POST')!.init.body))).toMatchObject({ tipo: 'Cadeira de rodas', gerar_epc: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Remover todos' }))
+    await vi.waitFor(() => expect(calls.some((call) => call.init.method === 'DELETE' && call.url.pathname.endsWith('/itens'))).toBe(true))
+    vi.restoreAllMocks()
   })
 
   it('perfil de consulta não vê controles de alteração', async () => {

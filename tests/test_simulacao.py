@@ -18,9 +18,10 @@ from api.router_simulacao import obter_config
 from api.simulacao import config as config_simulador
 from api.simulacao import service
 from api.simulacao.esquema import Layout, avisos
-from api.simulacao.geometria import antenas_do_layout
+from api.simulacao.geometria import antenas_do_layout, detectar, distancia
 from api.simulacao.motor import EstadoSessao, MotorSimulacao
-from api.simulacao.presets import preset
+from api.simulacao.presets import ITENS_TESTE_RAPIDO, POSICOES_TESTE_RAPIDO, preset
+from api.simulacao.presets import teste_rapido as layout_teste_rapido
 from api.simulacao.publicador import payload, topico_sintetico
 from db.models import (
     Antena,
@@ -68,6 +69,26 @@ def test_presets_sao_validos_e_hupaa_tem_quatro_leitores_sem_posicao():
     escada = next(zona for zona in hupaa.zonas if zona.restrita)
     assert escada.area is None
     assert any("não foi posicionado" in aviso for aviso in avisos(hupaa))
+
+
+@pytest.mark.parametrize("cenario", ["easy", "hupaa"])
+def test_teste_rapido_vem_pronto_sem_alcances_sobrepostos(cenario):
+    layout = Layout.model_validate(layout_teste_rapido(cenario)).model_dump(mode="json")
+    assert avisos(Layout.model_validate(layout)) == []
+    antenas = antenas_do_layout(layout)
+    for i, uma in enumerate(antenas):
+        for outra in antenas[i + 1:]:
+            assert distancia(uma.x, uma.y, outra.x, outra.y, layout["proporcao"]) >                 uma.alcance + outra.alcance, (uma.chave, outra.chave)
+    # Equipamentos começam dentro da primeira zona e fora de qualquer área de leitura.
+    primeira = layout["zonas"][0]["area"]
+    for x, y in POSICOES_TESTE_RAPIDO[cenario]:
+        assert detectar(x, y, antenas, layout["proporcao"]) == []
+        assert primeira["x"] <= x <= primeira["x"] + primeira["largura"]
+        assert primeira["y"] <= y <= primeira["y"] + primeira["altura"]
+
+
+def test_preset_hupaa_padrao_continua_sem_posicoes():
+    assert all(leitor["posicao"] is None for leitor in preset("hupaa")["leitores"])
 
 
 @pytest.mark.parametrize("mudanca,trecho", [
@@ -346,6 +367,51 @@ def test_layout_com_versao_antiga_e_simulador_desligado(api):
     assert dashboard.get("/api/simulacao/config").json()["habilitado"] is False
 
 
+def test_teste_rapido_cria_tudo_e_reaproveita_na_segunda_vez(api):
+    dashboard, _, estado = api
+    primeira = dashboard.post("/api/simulacao/teste-rapido", json={"cenario": "hupaa"})
+    assert primeira.status_code == 201, primeira.text
+    sessao = primeira.json()
+    assert sessao["estado"] == "em_execucao"
+    assert [item["nome"] for item in sessao["itens"]] == [item["nome"] for item in ITENS_TESTE_RAPIDO]
+    layouts = dashboard.get("/api/simulacao/layouts", params={"cenario": "hupaa"}).json()
+    assert len(layouts) == 1 and layouts[0]["avisos"] == []
+    cadastrados = dashboard.get("/api/cadastro/equipamentos").json()["items"]
+    assert sorted(item["identificador_interno"] for item in cadastrados) == [
+        f"LAB-RFID-{item['epc']}" for item in ITENS_TESTE_RAPIDO if item["cadastrar"]]
+
+    # Segunda vez: mesmo layout, nova sessão com os itens herdados, sem cadastro duplicado.
+    dashboard.patch(f"/api/simulacao/sessoes/{sessao['codigo']}/itens/{sessao['itens'][0]['id']}",
+                    json={"x": 40, "y": 10})
+    segunda = dashboard.post("/api/simulacao/teste-rapido", json={"cenario": "hupaa"}).json()
+    assert segunda["layout_id"] == sessao["layout_id"] and segunda["codigo"] != sessao["codigo"]
+    assert len(segunda["itens"]) == len(ITENS_TESTE_RAPIDO)
+    assert len(dashboard.get("/api/cadastro/equipamentos").json()["items"]) == 2
+
+    estado["config"] = DESABILITADO
+    assert dashboard.post("/api/simulacao/teste-rapido", json={"cenario": "easy"}).status_code == 409
+
+
+def test_remover_todos_os_itens_e_apagar_tudo_do_cenario(api):
+    dashboard, controle, estado = api
+    sessao = dashboard.post("/api/simulacao/teste-rapido", json={"cenario": "easy"}).json()
+    outro = dashboard.post("/api/simulacao/layouts", json={"cenario": "easy"}).json()
+    hupaa = dashboard.post("/api/simulacao/layouts", json={"cenario": "hupaa"}).json()
+    vazia = controle.delete(f"/api/simulacao/sessoes/{sessao['codigo']}/itens").json()
+    assert vazia["itens"] == [] and vazia["versao"] > sessao["versao"]
+
+    resultado = dashboard.post("/api/simulacao/apagar-tudo", json={"cenario": "easy"}).json()
+    assert resultado == {"sessoes_encerradas": 1, "layouts_arquivados": 2}
+    assert dashboard.get("/api/simulacao/layouts", params={"cenario": "easy"}).json() == []
+    assert dashboard.get(f"/api/simulacao/sessoes/{sessao['codigo']}").json()["estado"] == "encerrada"
+    # Outro cenário não é tocado.
+    assert [item["id"] for item in dashboard.get(
+        "/api/simulacao/layouts", params={"cenario": "hupaa"}).json()] == [hupaa["id"]]
+    assert outro["id"] != hupaa["id"]
+    estado["config"] = PRODUCAO
+    assert dashboard.post("/api/simulacao/apagar-tudo", json={"cenario": "easy"}).status_code == 404
+
+
 # --- pipeline real: motor -> MQTT (capturado) -> ingestor -> inferência ------------
 
 
@@ -528,3 +594,15 @@ def test_epc_desconhecido_aparece_na_descoberta_sem_localizacao(pg_engine, tmp_p
         assert painel["tags"][0]["equipamento"] is None
         assert painel["leituras_total"] >= 4
         assert all(not item for item in painel["zonas"].values())
+
+
+def test_teste_rapido_hupaa_confirma_passagem_pelo_pipeline(pg_engine, tmp_path):
+    with Session(pg_engine) as session:
+        sessao = service.teste_rapido(session, "hupaa", None)
+        codigo, zonas = sessao.codigo, dict(sessao.topologia["zonas"])
+        maca = session.scalar(select(Equipamento.id).where(
+            Equipamento.identificador_interno == f"LAB-RFID-{ITENS_TESTE_RAPIDO[0]['epc']}"))
+    # Maca 01 da Zona 1 para a Zona 2 pelo portal 1 ↔ 2 (antenas em x 44 e 58).
+    _simular(pg_engine, tmp_path, codigo, [(44, 15, 0.6), (51, 15, 0.4), (58, 15, 0.6), (70, 15, 0.3)])
+    zona, movimentos, estados = _projecao(pg_engine, maca)
+    assert zona == zonas["zona-2"] and movimentos == 1 and estados == ["confirmed"]

@@ -81,6 +81,12 @@ class SessaoCriar(BaseModel):
     layout_id: int = Field(..., ge=1)
 
 
+class CenarioEscolhido(BaseModel):
+    """Cenário alvo de uma ação de atalho (teste rápido, apagar tudo)."""
+
+    cenario: str = Field(..., pattern="^(easy|hupaa)$")
+
+
 class ItemCriar(BaseModel):
     """Equipamento virtual: EPC informado, gerado (`gerar_epc`) ou nenhum (sem etiqueta)."""
 
@@ -214,6 +220,29 @@ def iniciar(payload: SessaoCriar, db: Session = Depends(get_db),
     return _resposta_sessao(sessao)
 
 
+@router.post("/teste-rapido", status_code=status.HTTP_201_CREATED,
+             summary="Layout pronto, sessão iniciada e equipamentos de demonstração")
+def teste_rapido(payload: CenarioEscolhido, db: Session = Depends(get_db),
+                 sessao_auth: SessaoAutenticada = Depends(_PERMISSAO),
+                 config: config_simulador.ConfigSimulador = Depends(obter_config)) -> dict:
+    """Um clique para testar: reaproveita o layout do teste rápido ou cria um."""
+    _exigir_habilitado(config)
+    try:
+        sessao = service.teste_rapido(db, payload.cenario, sessao_auth.usuario.id or None)
+    except service.SimulacaoRecusada as erro:
+        raise _traduzir(erro) from erro
+    return _resposta_sessao(sessao)
+
+
+@router.post("/apagar-tudo", dependencies=[Depends(_PERMISSAO)],
+             summary="Encerrar sessões e arquivar todos os layouts do cenário")
+def apagar_tudo(payload: CenarioEscolhido, db: Session = Depends(get_db),
+                config: config_simulador.ConfigSimulador = Depends(obter_config)) -> dict:
+    """Recomeça o cenário do zero; dados do pipeline ficam (ver tools.limpeza_banco)."""
+    _fora_de_producao(config)
+    return service.apagar_cenario(db, payload.cenario)
+
+
 @router.get("/sessoes/{codigo}", dependencies=[Depends(_PERMISSAO)], summary="Estado da sessão")
 def obter_sessao(codigo: str, desde_versao: int | None = Query(None, ge=0),
                  db: Session = Depends(get_db)) -> dict:
@@ -248,6 +277,17 @@ def alterar_item(codigo: str, item_id: str, payload: ItemAlterar,
     """Arrastar envia só x/y; etiquetar envia `epc` ou `gerar_epc`."""
     try:
         sessao = service.alterar_item(db, codigo, item_id, payload.model_dump(exclude_unset=True))
+    except service.SimulacaoRecusada as erro:
+        raise _traduzir(erro) from erro
+    return {"codigo": sessao.codigo, "versao": sessao.versao, "itens": sessao.itens}
+
+
+@router.delete("/sessoes/{codigo}/itens", dependencies=[Depends(_PERMISSAO)],
+               summary="Remover todos os equipamentos virtuais")
+def limpar_itens(codigo: str, db: Session = Depends(get_db)) -> dict:
+    """Esvazia a planta da sessão (cadastros no banco não mudam)."""
+    try:
+        sessao = service.limpar_itens(db, codigo)
     except service.SimulacaoRecusada as erro:
         raise _traduzir(erro) from erro
     return {"codigo": sessao.codigo, "versao": sessao.versao, "itens": sessao.itens}

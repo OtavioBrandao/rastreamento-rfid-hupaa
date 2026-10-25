@@ -6,7 +6,7 @@ import { SimPlan } from '../components/simulador/SimPlan'
 import { errorMessage } from '../services/api'
 import { useLiveQuery, useLiveRefresh } from '../services/live'
 import {
-  archiveLayout, controlUrl, createLayout, getLayouts, getMonitor, getSessions, getSimConfig, restorePreset, saveLayout, sessionAction, startSession,
+  archiveLayout, controlUrl, createLayout, getLayouts, getMonitor, getSessions, getSimConfig, pendencias, quickTest, restorePreset, saveLayout, sessionAction, startSession, wipeScenario,
   type Cenario, type LayoutConfig, type LayoutResumo, type Monitor, type SessaoResumo,
 } from '../services/simulacao'
 
@@ -32,6 +32,7 @@ export function SimulatorPage({ canEdit }: { canEdit: boolean }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [view, setView] = useState<'config' | 'monitor'>('config')
+  const [history, setHistory] = useState<LayoutConfig[]>([])
   const config = useLiveQuery('sim:config', getSimConfig)
   const { refresh } = useLiveRefresh()
   const sessions = useLiveQuery('sim:sessions', getSessions)
@@ -44,7 +45,7 @@ export function SimulatorPage({ canEdit }: { canEdit: boolean }) {
       const items = await getLayouts(cenario)
       setLayouts(items)
       const chosen = items.find((item) => item.id === keep) ?? items[0] ?? null
-      setLayoutId(chosen?.id ?? null); setDraft(chosen ? chosen.configuracao : null); setName(chosen?.nome ?? ''); setDirty(false)
+      setLayoutId(chosen?.id ?? null); setDraft(chosen ? chosen.configuracao : null); setName(chosen?.nome ?? ''); setDirty(false); setHistory([])
     } catch (failure) { setError(errorMessage(failure)); setLayouts([]) }
   }, [cenario])
   useEffect(() => { setLayouts(null); void load() }, [load])
@@ -53,8 +54,25 @@ export function SimulatorPage({ canEdit }: { canEdit: boolean }) {
     const chosen = layouts?.find((item) => item.id === id)
     if (!chosen) return
     if (dirty && !window.confirm('Descartar as alterações não salvas?')) return
-    setLayoutId(id); setDraft(chosen.configuracao); setName(chosen.nome); setDirty(false); setNotice('')
+    setLayoutId(id); setDraft(chosen.configuracao); setName(chosen.nome); setDirty(false); setNotice(''); setHistory([])
   }
+
+  function edit(next: LayoutConfig) {
+    if (draft) setHistory((old) => [...old.slice(-49), draft])
+    setDraft(next); setDirty(true)
+  }
+  function undo() {
+    const previous = history.at(-1)
+    if (!previous) return
+    setHistory((old) => old.slice(0, -1)); setDraft(previous); setDirty(true)
+  }
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !(event.target as HTMLElement).closest('input, textarea')) { event.preventDefault(); undo() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   async function run(action: () => Promise<void>) {
     setBusy(true); setError(''); setNotice('')
@@ -76,8 +94,22 @@ export function SimulatorPage({ canEdit }: { canEdit: boolean }) {
     setDraft(saved.configuracao); setDirty(false); setNotice('Configuração predefinida restaurada.')
   })
   const archive = () => run(async () => {
-    if (!current || !window.confirm(`Arquivar o layout “${current.nome}”?`)) return
-    await archiveLayout(current.id); await load(); setNotice('Layout arquivado.')
+    if (!current || !window.confirm(`Excluir o layout “${current.nome}”? Ele sai da lista (o histórico do pipeline fica).`)) return
+    await archiveLayout(current.id); await load(); setNotice('Layout excluído.')
+  })
+  const quick = () => run(async () => {
+    if (dirty && !window.confirm('Descartar as alterações não salvas?')) return
+    const started = await quickTest(cenario)
+    await load(started.layout_id); refresh(); setView('monitor')
+    setNotice('Teste rápido pronto: layout, leitores e quatro equipamentos na planta. Na aba de controle, arraste a “Maca 01” pelo portal.')
+    window.open(controlUrl(started.codigo), '_blank', 'noopener')
+  })
+  const wipe = () => run(async () => {
+    const nome = CENARIOS.find((item) => item.id === cenario)!.nome
+    if (!window.confirm(`Apagar tudo do ${nome}? Encerra as simulações abertas e exclui todos os layouts deste cenário. Leituras e histórico já gravados pelo pipeline não são apagados.`)) return
+    const result = await wipeScenario(cenario)
+    refresh(); setView('config'); await load()
+    setNotice(`Tudo apagado: ${result.layouts_arquivados} layout(s) excluído(s), ${result.sessoes_encerradas} simulação(ões) encerrada(s).`)
   })
   const start = () => run(async () => {
     if (!current || !draft) return
@@ -111,20 +143,29 @@ export function SimulatorPage({ canEdit }: { canEdit: boolean }) {
         onClick={() => { if (dirty && !window.confirm('Descartar as alterações não salvas?')) return; setCenario(item.id); setView('config'); window.location.hash = `#/simulador?cenario=${item.id}` }}>
         <strong>{item.nome}</strong><small>{item.descricao}</small></button>)}
     </div>
+    {canEdit && <section className="panel sim-quick" aria-labelledby="sim-quick-title">
+      <div><h2 id="sim-quick-title">Teste rápido</h2>
+        <p>Um clique: monta a planta {cenario === 'easy' ? 'do laboratório' : 'do HUPAA com posições ilustrativas'}, inicia a simulação e já coloca 4 equipamentos (2 cadastrados, 1 com tag não cadastrada e 1 sem etiqueta). Abre o controle em outra aba.</p></div>
+      <div className="sim-quick-actions">
+        <button type="button" className="admin-primary sim-start" disabled={busy || !sim?.habilitado} onClick={quick}><Icon name="arrow" size={16}/> Testar agora</button>
+        <button type="button" className="danger" disabled={busy || !layouts?.length} onClick={wipe}>Apagar tudo</button>
+      </div>
+    </section>}
     {notice && <p className="admin-success" role="status">{notice}</p>}
     {error && <p className="admin-error" role="alert">{error}</p>}
     {layouts === null && <div className="panel table-skeleton" role="status" aria-label="Carregando layouts"><span/><span/></div>}
-    {layouts?.length === 0 && <div className="empty-panel panel"><h3>Nenhum layout salvo para este cenário</h3><p>Crie um a partir da configuração predefinida e ajuste no editor.</p>
-      {canEdit && <button type="button" className="admin-primary" disabled={busy} onClick={create}>Criar layout padrão</button>}</div>}
+    {layouts?.length === 0 && <div className="empty-panel panel"><h3>Nenhum layout salvo para este cenário</h3><p>Use o teste rápido acima ou crie um layout a partir da configuração predefinida e ajuste no editor.</p>
+      {canEdit && <button type="button" disabled={busy} onClick={create}>Criar layout para editar</button>}</div>}
     {current && draft && <>
       <section className="panel sim-session-bar" aria-label="Layout e sessão">
         <label>Layout<select value={current.id} onChange={(e) => choose(Number(e.target.value))}>{layouts!.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}</select></label>
         <label>Nome<input value={name} maxLength={120} disabled={!canEdit} onChange={(e) => { setName(e.target.value); setDirty(true) }}/></label>
         <div className="sim-session-actions">
           {canEdit && <><button type="button" className="admin-primary" disabled={busy || !dirty} onClick={save}>{dirty ? 'Salvar layout' : 'Salvo'}</button>
+            <button type="button" disabled={!history.length} title="Ctrl+Z" onClick={undo}>Desfazer</button>
             <button type="button" disabled={busy} onClick={restore}>Restaurar predefinido</button>
             <button type="button" disabled={busy} onClick={create}>Novo layout</button>
-            <button type="button" disabled={busy || !!session} onClick={archive}>Arquivar</button></>}
+            <button type="button" className="danger" disabled={busy || !!session} title={session ? 'Encerre a simulação antes' : undefined} onClick={archive}>Excluir layout</button></>}
         </div>
         <div className="sim-session-state">
           {session ? <>
@@ -142,9 +183,13 @@ export function SimulatorPage({ canEdit }: { canEdit: boolean }) {
         <button type="button" role="tab" aria-selected={view === 'monitor'} onClick={() => setView('monitor')}>Monitoramento do pipeline</button>
       </div>}
       {view === 'config' || !session ? <>
-        {current.avisos.length > 0 && !dirty && <details className="sim-warnings"><summary>{current.avisos.length} pendência(s) de configuração</summary><ul>{current.avisos.map((aviso) => <li key={aviso}>{aviso}</li>)}</ul></details>}
+        {(() => {
+          const faltam = pendencias(draft)
+          return faltam.length ? <details className="sim-warnings" open={faltam.length <= 4}><summary>Falta {faltam.length} passo(s) para a simulação detectar passagens</summary><ul>{faltam.map((item) => <li key={item}>{item}</li>)}</ul></details>
+            : <p className="sim-ready" role="status"><Icon name="check" size={16}/> Planta pronta: {dirty ? 'salve e inicie a simulação.' : session ? 'em uso pela simulação.' : 'pode iniciar a simulação.'}</p>
+        })()}
         {session && <p className="muted-text">A simulação em andamento usa a versão salva no início. Salve e use “Reiniciar” para aplicar mudanças.</p>}
-        <LayoutEditor config={draft} disabled={!canEdit} onChange={(next) => { setDraft(next); setDirty(true) }}/>
+        <LayoutEditor config={draft} disabled={!canEdit} onChange={edit}/>
       </> : <SessionMonitor codigo={session.codigo} layout={draft}/>}
     </>}
   </>

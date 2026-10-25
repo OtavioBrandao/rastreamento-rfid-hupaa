@@ -105,3 +105,73 @@ NOMES_PRESET = {"easy": "Laboratório EASY (padrão)", "hupaa": "Hospital HUPAA 
 def preset(cenario: str) -> dict:
     """Cópia independente do preset do cenário."""
     return copy.deepcopy(PRESETS[cenario])
+
+
+# --- teste rápido ---------------------------------------------------------------
+#
+# Layout pronto para iniciar sem passar pelo editor. No EASY é o próprio preset.
+# No HUPAA as posições de leitores, antenas e da escada são ILUSTRATIVAS (só para
+# demonstrar o fluxo), não as do hospital: o preset padrão continua sem posições.
+# Antenas de um mesmo portal ficam uma em cada zona, sem alcances sobrepostos.
+
+
+def _antena(leitor: int, porta: int, portal: str, lado: str, x: float, y: float) -> dict:
+    """Antena posicionada, com alcance ilustrativo 5."""
+    return {"chave": f"leitor-{leitor}-antena-{porta}", "nome": f"Antena {porta}", "porta": porta,
+            "posicao": {"x": x, "y": y}, "alcance": 5, "portal": portal, "lado": lado,
+            "zona": None}
+
+
+def _hupaa_demo() -> dict:
+    """HUPAA com tudo posicionado para uma demonstração imediata."""
+    layout = preset("hupaa")
+    escada = next(z for z in layout["zonas"] if z["chave"] == "circulacao-vertical")
+    escada["area"] = {"x": 1, "y": 33, "largura": 10, "altura": 34}
+    posicoes = {"portal-1-2": (51, 15), "portal-2-3": (56, 60),
+                "portal-3-escada": (11, 70), "portal-1-escada": (11, 30)}
+    for portal in layout["portais"]:
+        x, y = posicoes[portal["chave"]]
+        portal["posicao"] = {"x": x, "y": y}
+    antenas = {
+        1: ((30, 10), [_antena(1, 1, "portal-1-2", "a", 44, 15),
+                       _antena(1, 2, "portal-1-escada", "a", 17, 22)]),
+        2: ((66, 30), [_antena(2, 1, "portal-1-2", "b", 58, 15),
+                       _antena(2, 2, "portal-2-3", "a", 56, 42)]),
+        3: ((38, 90), [_antena(3, 1, "portal-2-3", "b", 56, 78),
+                       _antena(3, 2, "portal-3-escada", "a", 17, 80)]),
+        4: ((6, 50), [_antena(4, 1, "portal-3-escada", "b", 6, 62),
+                      _antena(4, 2, "portal-1-escada", "b", 6, 38)]),
+    }
+    for leitor in layout["leitores"]:
+        numero = int(leitor["chave"].rsplit("-", 1)[1])
+        (x, y), lista = antenas[numero]
+        leitor["posicao"] = {"x": x, "y": y}
+        leitor["antenas"] = lista
+    return layout
+
+
+NOMES_TESTE_RAPIDO = {"easy": "Laboratório EASY (teste rápido)",
+                      "hupaa": "Hospital HUPAA (teste rápido · posições ilustrativas)"}
+
+# Equipamentos já colocados na sessão: dois cadastrados (a zona muda no
+# dashboard), um com tag não cadastrada (testa o cadastro por leitura) e um sem
+# etiqueta (nunca é lido). Os cadastrados usam o tipo e o identificador
+# `LAB-RFID-<EPC>` do launcher, então `tools.limpeza_banco --escopo laboratorio`
+# os remove.
+EPC_DEMO = "E2804C41000000000000D0{:02X}"
+ITENS_TESTE_RAPIDO = [
+    {"nome": "Maca 01", "tipo": "Maca", "epc": EPC_DEMO.format(1), "cadastrar": True},
+    {"nome": "Cadeira de rodas 01", "tipo": "Cadeira de rodas", "epc": EPC_DEMO.format(2),
+     "cadastrar": True},
+    {"nome": "Monitor portátil", "tipo": "Monitor multiparamétrico", "epc": EPC_DEMO.format(3),
+     "cadastrar": False},
+    {"nome": "Bomba de infusão", "tipo": "Bomba de infusão", "epc": None, "cadastrar": False},
+]
+# Fila inicial dentro da primeira zona, fora do alcance das antenas.
+POSICOES_TESTE_RAPIDO = {"easy": [(10, 14), (20, 14), (30, 14), (40, 14)],
+                         "hupaa": [(20, 5), (26, 5), (32, 5), (38, 5)]}
+
+
+def teste_rapido(cenario: str) -> dict:
+    """Layout pronto do teste rápido do cenário."""
+    return preset("easy") if cenario == "easy" else _hupaa_demo()

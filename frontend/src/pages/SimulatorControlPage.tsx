@@ -4,7 +4,7 @@ import { at, pointFromEvent, SimPlan } from '../components/simulador/SimPlan'
 import { errorMessage } from '../services/api'
 import { epcProblem, getRegistrations, type EquipamentoCadastro } from '../services/cadastro'
 import {
-  addItem, getSession, inRange, removeItem, sessionAction, updateItem, zoneAt,
+  addItem, clearItems, getSession, inRange, removeItem, sessionAction, updateItem, zoneAt,
   type ItemVirtual, type MotorEstado, type Sessao,
 } from '../services/simulacao'
 
@@ -155,7 +155,10 @@ export function SimulatorControlPage({ codigo, canEdit }: { codigo: string; canE
           </div>}
           {chosen.epc && <p className="muted-text">Tag ainda não cadastrada? Selecione este EPC em <a href="#/cadastro" target="_blank" rel="noopener">Cadastro → por leitura RFID</a> depois que ele for lido.</p>}
         </section>}
-        <section className="panel" aria-labelledby="sim-items-title"><h2 id="sim-items-title">Equipamentos virtuais ({items.length})</h2>
+        <section className="panel" aria-labelledby="sim-items-title"><div className="sim-items-heading"><h2 id="sim-items-title">Equipamentos virtuais ({items.length})</h2>
+          {canEdit && !closed && items.length > 0 && <button type="button" className="danger" onClick={() => {
+            if (window.confirm(`Remover os ${items.length} equipamentos da planta? Cadastros no banco não mudam.`)) void act(async () => { await clearItems(codigo); setSelected(null) })
+          }}>Remover todos</button>}</div>
           {items.length ? <ul className="sim-item-list">{items.map((item) => <li key={item.id}><button type="button" className="link-button" aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}>{item.nome}</button>
             <span className={`tag-chip ${item.epc ? 'tag-known' : 'tag-unknown'}`}>{item.epc ? 'etiquetado' : 'sem tag'}</span>
             {running && item.epc && (ranges.get(item.id)?.size ?? 0) > 0 && <span className="tag-chip tag-reading">lendo</span>}</li>)}</ul>
@@ -191,7 +194,13 @@ function AddItem({ codigo, onDone, onError }: { codigo: string; onDone: () => vo
       setName(''); setEpc(''); onDone()
     } catch (failure) { onError(errorMessage(failure)) }
   }
+  async function quickAdd(tipo: string) {
+    try { await addItem(codigo, { nome: `${tipo} ${Math.floor(Math.random() * 90 + 10)}`, tipo, gerar_epc: true }); onDone() } catch (failure) { onError(errorMessage(failure)) }
+  }
   return <form className="panel sim-add" onSubmit={submit} aria-labelledby="sim-add-title"><h2 id="sim-add-title">Adicionar equipamento</h2>
+    <div className="sim-quick-add" aria-label="Adicionar com etiqueta gerada">{['Maca', 'Cadeira de rodas', 'Bomba de infusão'].map((tipo) =>
+      <button key={tipo} type="button" onClick={() => { void quickAdd(tipo) }}>+ {tipo}</button>)}</div>
+    <details><summary>Mais opções (nome, EPC, sem etiqueta)</summary>
     <label>Nome<input value={name} maxLength={80} placeholder="Ex.: Maca 1" onChange={(e) => setName(e.target.value)}/></label>
     <label>Tipo<input value={type} maxLength={60} list="sim-tipos" onChange={(e) => setType(e.target.value)}/></label>
     <datalist id="sim-tipos"><option value="Maca"/><option value="Cadeira de rodas"/><option value="Bomba de infusão"/><option value="Monitor multiparamétrico"/></datalist>
@@ -204,5 +213,6 @@ function AddItem({ codigo, onDone, onError }: { codigo: string; onDone: () => vo
     {mode === 'informar' && <label>EPC<input value={epc} maxLength={32} spellCheck={false} onChange={(e) => setEpc(e.target.value.toUpperCase())}/></label>}
     {mode === 'cadastrado' && <label>Equipamento cadastrado<select value={epc} onChange={(e) => setEpc(e.target.value)}><option value="">Selecione…</option>{registered.map((item) => <option key={item.id} value={item.epc ?? ''}>{item.nome} · {item.epc}</option>)}</select></label>}
     <button type="submit" className="admin-primary">Adicionar à planta</button>
+    </details>
   </form>
 }

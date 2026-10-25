@@ -23,7 +23,10 @@ from pydantic import ValidationError
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, aliased
 
+from api import service_cadastro
 from api.epc import EpcInvalido, normalizar_epc
+from api.normalizacao import normalizar_nome
+from api.service_tipos_equipamento import criar as criar_tipo
 from api.timestamps import em_utc
 from db.models import (
     Antena,
@@ -44,11 +47,20 @@ from rfid_location.recency import classify_recency, recency_threshold_from_env
 
 from . import topologia
 from .esquema import Layout, avisos
-from .presets import NOMES_PRESET, preset
+from .presets import (
+    ITENS_TESTE_RAPIDO,
+    NOMES_PRESET,
+    NOMES_TESTE_RAPIDO,
+    POSICOES_TESTE_RAPIDO,
+    preset,
+)
+from .presets import teste_rapido as preset_teste_rapido
 
 MAX_ITENS = 30
 PREFIXO_EPC = "E2804C41"
 ESTADOS_ABERTOS = ("em_execucao", "pausada")
+# Mesmo tipo do launcher (tools/lab_launcher/seed.py) e da limpeza do banco.
+TIPO_SINTETICO_LABORATORIO = "Equipamento sintético de laboratório RFID"
 
 
 class SimulacaoRecusada(ValueError):
@@ -342,6 +354,84 @@ def transicionar(db: Session, codigo: str, acao: str) -> SimulacaoSessao:
     db.commit()
     db.refresh(sessao)
     return sessao
+
+
+def limpar_itens(db: Session, codigo: str) -> SimulacaoSessao:
+    """Tira todos os equipamentos virtuais da planta (cadastros no banco ficam)."""
+    def mudanca(_sessao: SimulacaoSessao, itens: list[dict]) -> None:
+        """Esvazia a lista."""
+        itens.clear()
+    return _alterar(db, codigo, mudanca)
+
+
+def apagar_cenario(db: Session, cenario: str) -> dict:
+    """Encerra as sessões abertas e arquiva todos os layouts do cenário.
+
+    Nada do pipeline é apagado (leituras, passagens, histórico): isso fica com
+    `tools.limpeza_banco`, que tem prévia, backup e travas de produção.
+    """
+    agora = _agora()
+    sessoes = list(db.scalars(select(SimulacaoSessao).where(
+        SimulacaoSessao.cenario == cenario,
+        SimulacaoSessao.estado.in_(ESTADOS_ABERTOS)).with_for_update()))
+    for sessao in sessoes:
+        sessao.estado, sessao.encerrada_em = "encerrada", agora
+        sessao.versao += 1
+    layouts = list(db.scalars(select(SimulacaoLayout).where(
+        SimulacaoLayout.cenario == cenario,
+        SimulacaoLayout.arquivado.is_(False)).with_for_update()))
+    for layout in layouts:
+        layout.arquivado = True
+    db.commit()
+    return {"sessoes_encerradas": len(sessoes), "layouts_arquivados": len(layouts)}
+
+
+def _tipo_laboratorio(db: Session) -> int:
+    """Tipo dos equipamentos sintéticos do launcher (criado se faltar)."""
+    nome = TIPO_SINTETICO_LABORATORIO
+    tipo = db.scalar(select(TipoEquipamento).where(
+        TipoEquipamento.nome_normalizado == normalizar_nome(nome)))
+    return tipo.id if tipo is not None else criar_tipo(db, nome).id
+
+
+def _cadastrar_demo(db: Session, nome: str, epc: str) -> None:
+    """Cadastra o equipamento de demonstração se o EPC ainda não tiver vínculo."""
+    if db.scalar(select(AssociacaoTagEquipamento.id).join(Tag).where(
+            Tag.epc == epc, AssociacaoTagEquipamento.fim.is_(None))):
+        return
+    try:
+        service_cadastro.cadastrar(db, nome=nome, tipo_id=_tipo_laboratorio(db),
+                                   identificador_interno=f"LAB-RFID-{epc}", epc=epc)
+    except (service_cadastro.TagJaAssociada, service_cadastro.IdentificadorDuplicado):
+        db.rollback()  # outra aba cadastrou ao mesmo tempo, ou ficou de um teste anterior
+
+
+def teste_rapido(db: Session, cenario: str, usuario_id: int | None) -> SimulacaoSessao:
+    """Layout pronto + sessão iniciada + equipamentos de demonstração na planta.
+
+    Reaproveita o layout do teste rápido se já existir (sem sobrescrever ajustes);
+    se a sessão vier sem itens, coloca os equipamentos de demonstração.
+    """
+    registro = db.scalar(select(SimulacaoLayout).where(
+        SimulacaoLayout.cenario == cenario, SimulacaoLayout.arquivado.is_(False),
+        SimulacaoLayout.nome == NOMES_TESTE_RAPIDO[cenario]).order_by(SimulacaoLayout.id.desc()))
+    if registro is None:
+        registro = criar_layout(db, nome=NOMES_TESTE_RAPIDO[cenario], cenario=cenario,
+                                configuracao=preset_teste_rapido(cenario))
+    for item in ITENS_TESTE_RAPIDO:
+        if item["cadastrar"]:
+            _cadastrar_demo(db, item["nome"], item["epc"])
+    sessao = iniciar_sessao(db, registro.id, usuario_id)
+    if sessao.itens:
+        return sessao
+
+    def mudanca(_sessao: SimulacaoSessao, itens: list[dict]) -> None:
+        """Coloca os itens de demonstração na fila inicial."""
+        for item, (x, y) in zip(ITENS_TESTE_RAPIDO, POSICOES_TESTE_RAPIDO[cenario]):
+            itens.append({"id": f"it-{secrets.token_hex(4)}", "nome": item["nome"],
+                          "tipo": item["tipo"], "epc": item["epc"],
+                          "x": x, "y": y, "x0": x, "y0": y})
+    return _alterar(db, sessao.codigo, mudanca)
 
 
 def resumo_sessao(sessao: SimulacaoSessao) -> dict:

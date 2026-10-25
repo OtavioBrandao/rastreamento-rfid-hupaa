@@ -40,6 +40,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 LOGS = ROOT / "data" / "dev"
 WINDOWS = os.name == "nt"
+PASTAS_BACKEND = ("api", "db", "rfid_inference", "rfid_ingestion", "rfid_location", "rfid_movement")
 
 TESTES = {
     "1": ("local", "synthetic", "Local com simulador web (dados sintéticos)"),
@@ -120,7 +121,10 @@ def servir_api(modo: str, env_file: str | None, host: str, porta: int,
                  f"  python -m alembic -c config/alembic.ini upgrade head  (com DATABASE_URL do {modo})")
     if simulador:
         os.environ.update(ambiente_simulador(modo, valores))
-    uvicorn.run("api.main:app", host=host, port=porta)
+    # Recarrega ao salvar código do backend (o frontend já recarrega pelo Vite);
+    # o processo filho herda o ambiente montado acima.
+    uvicorn.run("api.main:app", host=host, port=porta, reload=True,
+                reload_dirs=[str(ROOT / pasta) for pasta in PASTAS_BACKEND])
 
 
 def escolher_teste(valor: str | None) -> str:
