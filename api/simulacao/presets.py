@@ -176,9 +176,9 @@ ITENS_TESTE_RAPIDO = [
      "cadastrar": False},
     {"nome": "Bomba de infusão", "tipo": "Bomba de infusão", "epc": None, "cadastrar": False},
 ]
-# Fila inicial dentro da primeira zona, fora do alcance das antenas.
-POSICOES_TESTE_RAPIDO = {"easy": [(10, 14), (20, 14), (30, 14), (40, 14)],
-                         "hupaa": [(20, 5), (26, 5), (32, 5), (38, 5)]}
+# Coluna inicial dentro da primeira zona, fora do alcance das antenas, sem nomes sobrepostos.
+POSICOES_TESTE_RAPIDO = {"easy": [(12, 12), (12, 22), (12, 32), (12, 42)],
+                         "hupaa": [(19, 6), (19, 13), (19, 20), (19, 27)]}
 
 
 def teste_rapido(cenario: str) -> dict:

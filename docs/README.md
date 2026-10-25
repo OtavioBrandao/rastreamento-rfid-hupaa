@@ -52,7 +52,7 @@ use o guia de operação acima; relatórios antigos registram o contexto do ensa
 | Planta e atualização da interface | [Mapa e portais](implementations/iss-023-mapa-portais.md) e [atualização automática](implementations/iss-033-atualizacao-automatica.md) |
 | Correção justificada | [Correções manuais e versão otimista](implementations/iss-025-correcao-manual.md) |
 | Acesso e responsabilização | [Autenticação](implementations/iss-026-usuarios-autenticacao.md), [permissões](implementations/iss-027-perfis-rbac.md) e [auditoria](implementations/iss-028-auditoria.md) |
-| Demonstração sem hardware | [Simulador web EASY/HUPAA](implementations/simulador-web.md) (substitui o [simulador Flet](implementations/simulador-visual-laboratorio.md)) |
+| Demonstração sem hardware | [Simulador web EASY/HUPAA](implementations/simulador-web.md) (substitui o [simulador Flet](implementations/simulador-visual-laboratorio.md); [hotfix MQTT e visada](implementations/simulador-web-hotfix-mqtt-visada.md)) |
 | Cadastro dependente do terminal | [Cadastro de equipamentos e tags pelo dashboard](implementations/cadastro-equipamentos-web.md) |
 | Dados experimentais e hospedagem | [Limpeza segura e preparação para deploy](implementations/limpeza-banco-e-preparacao-deploy.md) |
 

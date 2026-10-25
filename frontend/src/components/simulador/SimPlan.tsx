@@ -81,7 +81,7 @@ export const SimPlan = forwardRef<HTMLDivElement, {
           y2={antena.posicao.y + antena.alcance * 0.55 * Math.sin((antena.orientacao * Math.PI) / 180) * p} vectorEffect="non-scaling-stroke"/>}
       </g>)}
     </svg>
-    {showZoneNames && layout.zonas.map((zona) => zona.area && <span key={`rotulo-${zona.chave}`} className="sim-zone-label" style={{ ...at({ x: zona.area.x, y: zona.area.y }), color: zona.cor }}>{zona.nome}{zona.restrita ? ' · restrita' : ''}</span>)}
+    {showZoneNames && layout.zonas.map((zona) => zona.area && <span key={`rotulo-${zona.chave}`} className="sim-zone-label" style={{ ...at({ x: zona.area.x, y: zona.area.y }), color: zona.cor }}>{zona.nome}{zona.restrita && !/restrit/i.test(zona.nome) ? ' · restrita' : ''}</span>)}
     {children}
   </div>
 })

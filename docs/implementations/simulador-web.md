@@ -116,6 +116,12 @@ Validado em 25/10/2026 com Mosquitto e ingestor locais: teste rápido HUPAA,
 Maca 01 arrastada da Zona 1 para a Zona 2 → 14 leituras, passagem confirmada
 e última zona "Zona 2".
 
+**Hotfix (25/10/2026)**: MQTT pelo tópico autorizado do broker (sem mexer no
+HiveMQ), antena direcional, alcance menor, cinco leitores no HUPAA com DR Max
+de área restrita, planta limpa e arraste confiável. O leitor 4 com "ponto
+único" descrito acima foi substituído pelo leitor 5 de alerta. Detalhes em
+[simulador-web-hotfix-mqtt-visada.md](simulador-web-hotfix-mqtt-visada.md).
+
 **Sincronização**: polling de 600 ms com `desde_versao` (resposta curta quando
 nada mudou) no controle e 2 s no painel. Avaliado como suficiente: sem
 infraestrutura nova, funciona atrás de qualquer proxy e recupera a sessão ao
