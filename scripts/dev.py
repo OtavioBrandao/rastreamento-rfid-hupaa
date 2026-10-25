@@ -72,8 +72,34 @@ def ambiente_simulador(modo: str, valores: dict[str, str]) -> dict[str, str]:
             return {"SIMULADOR_HABILITADO": "false"}
         extras.update({f"SIMULADOR_{chave}": valor for chave, valor in perfil.items()
                        if chave in ("MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_CA_CERT")})
-        extras["SIMULADOR_MQTT_TOPICO_PERMITIDO"] = perfil.get("MQTT_TOPIC", "")
+        # Tópico exato (perfil legado de um leitor) não descreve a ACL dos leitores
+        # virtuais: só um filtro com `+` vira checagem local; senão decide o broker.
+        if "+" in perfil.get("MQTT_TOPIC", ""):
+            extras["SIMULADOR_MQTT_TOPICO_PERMITIDO"] = perfil["MQTT_TOPIC"]
     return extras
+
+
+def migracao_pendente() -> tuple[str, str] | None:
+    """Compara a revisão do banco com a head do Alembic; devolve (banco, head) se diferem."""
+    from alembic.config import Config
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import create_engine
+    from sqlalchemy.exc import OperationalError
+
+    from db.url import get_database_url
+
+    head = ScriptDirectory.from_config(Config(str(ROOT / "config" / "alembic.ini"))).get_current_head()
+    engine = create_engine(get_database_url())
+    try:
+        with engine.connect() as conexao:
+            atual = MigrationContext.configure(conexao).get_current_revision()
+    except OperationalError:
+        # No modo local o Postgres do Docker só sobe depois, pelo launcher.
+        return None
+    finally:
+        engine.dispose()
+    return None if atual == head else (atual or "vazia", head or "?")
 
 
 def servir_api(modo: str, env_file: str | None, host: str, porta: int,
@@ -86,6 +112,12 @@ def servir_api(modo: str, env_file: str | None, host: str, porta: int,
 
     _, valores = carregar(modo, Path(env_file) if env_file else None, interativo=False)
     os.environ.update(valores)
+    pendente = migracao_pendente()
+    if pendente:
+        # Banco atrás do código quebra rotas novas com 500; nunca migra sozinho
+        # (o banco externo é compartilhado), só para e diz o comando.
+        sys.exit(f"Banco na migration {pendente[0]}, código em {pendente[1]}. Aplique antes:\n"
+                 f"  python -m alembic -c config/alembic.ini upgrade head  (com DATABASE_URL do {modo})")
     if simulador:
         os.environ.update(ambiente_simulador(modo, valores))
     uvicorn.run("api.main:app", host=host, port=porta)
