@@ -2479,3 +2479,30 @@ button:disabled { opacity:.55; cursor:default }
 .hu-ev-info { border-left:3px solid #0b6fb8; padding-left:6px }
 .hu-ev-aviso { border-left:3px solid #f2b705; padding-left:6px }
 .hu-ev-alerta { border-left:3px solid #c62828; padding-left:6px; color:#8c1d18; font-weight:600 }
+
+/* Zonas recolhidas/expandidas nos mapas do HU e do EASY. */
+.marker-disponivel { background:var(--available) }
+.marker-nunca_detectado { background:#9aa8b3 }
+.map-marker.marker-collapsed { width:40px; height:40px }
+.marker-count { position:absolute; top:-7px; right:-9px; min-width:20px; height:20px; padding:0 5px; border-radius:999px; background:#102a42; color:#fff;
+  font-size:.72rem; font-weight:700; line-height:20px; text-align:center; border:2px solid #fff }
+.map-marker.marker-individual { width:26px; height:26px; border-width:2px; z-index:5 }
+.map-marker.marker-collapsed.marker-selected { outline:3px solid #102a42; outline-offset:2px }
+.marker-icon { display:grid; place-items:center }
+.map-legend-dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; vertical-align:-1px }
+
+/* Acompanhamento do HU: planta original com mais contraste, limites e leitores por cima. */
+.hu-tracking .floor-background { filter:contrast(1.08) saturate(1.12) }
+.hu-limite { fill:none; stroke:#102a42; stroke-width:2.2; stroke-dasharray:7 4; vector-effect:non-scaling-stroke }
+.hu-limite.restrita { stroke:#7a1f8f; stroke-dasharray:3 3 }
+.hu-cobertura { fill:rgba(223,63,69,.16); stroke:#df3f45; stroke-width:1.2; vector-effect:non-scaling-stroke }
+.hu-tracking .map-marker.marker-reader,.hu-tracking .map-marker.marker-antenna { width:30px; height:30px }
+.hu-tracking .map-marker.marker-reader svg,.hu-tracking .map-marker.marker-antenna svg { width:16px; height:16px }
+.hu-legenda { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:8px 24px; margin:10px 0 4px }
+.hu-cobertura-toggle { display:flex; flex-direction:column; font-size:.86rem; font-weight:600 }
+.hu-cobertura-toggle small { font-weight:400; color:var(--muted) }
+.hu-toasts { position:fixed; top:16px; right:16px; z-index:50; display:grid; gap:8px; max-width:380px }
+.hu-toast { margin:0; display:flex; gap:10px; align-items:flex-start; background:#fdecea; border:1px solid #e9a39e; border-left:5px solid #c62828;
+  color:#8c1d18; border-radius:10px; padding:10px 12px; font-weight:600; font-size:.88rem; box-shadow:0 6px 18px rgba(16,42,66,.18) }
+.hu-toast button { margin-left:auto; border:0; background:transparent; font-size:1.1rem; cursor:pointer; color:inherit }
+.hu-restrita-agora { margin:0 0 8px; color:#8c1d18; font-weight:600; font-size:.88rem }

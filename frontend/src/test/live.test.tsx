@@ -134,11 +134,11 @@ it('atualiza zonas, contagens, portal e leituras do EASY e oferece seleção tex
   fireEvent.click(screen.getByRole('tab', { name: 'Zonas e portais' }))
   expect(screen.getByRole('button', { name: 'Sala A · 0 ativo(s)' })).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Sala A · 0 ativo(s)' }))
-  expect(screen.getByRole('group', { name: 'Equipamentos em Sala A' })).toHaveTextContent('Nenhum equipamento nesta zona agora.')
+  expect(screen.getByRole('region', { name: 'Equipamentos em Sala A' })).toHaveTextContent('Nenhum equipamento nesta zona agora.')
   expect(screen.queryByRole('button', { name: /Maca 1/ })).not.toBeInTheDocument()
   fail = '/portais'; await tick()
   expect(screen.queryByRole('button', { name: /Portal de teste RFID.*Lado A/ })).not.toBeInTheDocument()
-  expect(screen.queryByRole('group', { name: 'Equipamentos em Sala A' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Equipamentos em Sala A' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('tab', { name: /Outras zonas/ }))
   expect(screen.getByRole('button', { name: /Maca 1/ })).toBeInTheDocument()
   fail = ''; calls = []

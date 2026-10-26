@@ -42,6 +42,7 @@ export interface LayoutResumo {
   aplicado_em: string | null
   updated_at: string
   avisos: string[]
+  zonas_ids?: Record<string, number>
 }
 
 export interface PontoTrajeto { x: number; y: number; t: number }
@@ -87,7 +88,7 @@ export interface SimConfig {
 }
 
 export interface EquipamentoZona { id: number; nome: string; tipo: string; epc: string | null; ultima_deteccao_em: string | null; estado_recencia: string }
-export interface AlertaRestrito { epc: string; zona: string; leitor: string; reader_id: string; antena: string; porta: number; leituras: number; primeira_leitura_em: string; ultima_leitura_em: string; recente: boolean; equipamento: { id: number; nome: string } | null }
+export interface AlertaRestrito { epc: string; entrada_em?: string; zona: string; leitor: string; reader_id: string; antena: string; porta: number; leituras: number; primeira_leitura_em: string; ultima_leitura_em: string; recente: boolean; equipamento: { id: number; nome: string } | null }
 export type EstadoAoVivo = 'fora_de_servico' | 'em_transito' | 'atencao' | 'detectado' | 'confirmado' | 'sem_confirmacao' | 'nunca_detectado'
 /** Estado de cada tag/equipamento calculado no backend só com o que o pipeline gravou. */
 export interface EquipamentoAoVivo {
@@ -141,6 +142,10 @@ export const clearItems = (codigo: string) => apiRequest<{ codigo: string; versa
 export const getMonitor = (codigo: string, signal?: AbortSignal) => readJson<Monitor>(`/api/simulacao/sessoes/${codigo}/monitor`, signal)
 export const runPath = (codigo: string, id: string, pontos: PontoTrajeto[]) =>
   sendJson<{ codigo: string; versao: number; itens: ItemVirtual[]; relogio: Relogio }>(`/api/simulacao/sessoes/${codigo}/itens/${id}/trajeto`, 'POST', { pontos })
+export interface DemoHu { layout_id: number; layout: string; sessao: string | null; antigos: number; novos: number }
+export const getDemoHu = (signal?: AbortSignal) => readJson<DemoHu>('/api/simulacao/demo-hu', signal)
+export const prepareDemoHu = () => sendJson<DemoHu>('/api/simulacao/demo-hu/preparar', 'POST')
+export const LAYOUT_DEMO_HU = 'Hospital HUPAA (padrão)'
 export const getClock = (signal?: AbortSignal) => readJson<Relogio>('/api/simulacao/relogio', signal)
 export const setClock = (mudanca: { fator?: number; avancar_s?: number }) => sendJson<Relogio>('/api/simulacao/relogio', 'POST', mudanca)
 

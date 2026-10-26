@@ -1,85 +1,137 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MapaHUAoVivo } from '../components/mapa/MapaHUAoVivo'
-import type { EquipamentoAoVivo, LayoutConfig } from '../services/simulacao'
+import { MapWorkspace, statusDominante } from '../components/mapa/MapWorkspace'
+import { labMainZones } from '../config/mapaConfig'
+import type { BoundZone } from '../services/mapTopology'
+import type { LayoutConfig } from '../services/simulacao'
+import type { AssetStatus, EquipmentItem } from '../types/dashboard'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
+const agora = () => new Date().toISOString()
 
-const layout: LayoutConfig = {
-  cenario: 'hupaa', proporcao: 2, destino: null,
+const config: LayoutConfig = {
+  cenario: 'hupaa', proporcao: 2.05, destino: null,
   zonas: [
-    { chave: 'zona-1', nome: 'Zona 1', cor: '#2f6fb2', area: { x: 5, y: 5, largura: 40, altura: 60 }, referencia_planta: 'zona-1', restrita: false },
-    { chave: 'zona-2', nome: 'Zona 2', cor: '#1f8a70', area: { x: 55, y: 5, largura: 40, altura: 60 }, referencia_planta: 'zona-2', restrita: false },
+    { chave: 'zona-1', nome: 'Zona 1', cor: '#2f6fb2', area: { x: 13, y: 1, largura: 34, altura: 47 }, referencia_planta: null, restrita: false },
+    { chave: 'zona-2', nome: 'Zona 2', cor: '#1f8a70', area: { x: 60, y: 3, largura: 39, altura: 44 }, referencia_planta: null, restrita: false },
+    { chave: 'escada', nome: 'Circulação vertical (escada)', cor: '#7a3fb2', area: { x: 37, y: 54, largura: 12, altura: 15 }, referencia_planta: null, restrita: true },
   ],
-  portais: [{ chave: 'portal-1-2', nome: 'Zona 1 ↔ Zona 2', zona_a: 'zona-1', zona_b: 'zona-2', posicao: { x: 50, y: 30 } }],
-  leitores: [{ chave: 'leitor-1', nome: 'Leitor 1', reader_id: 'sim-hupaa-01', modelo: 'EZ700', posicao: { x: 50, y: 40 }, antenas: [
-    { chave: 'l1-a', nome: 'Antena 1', porta: 1, posicao: { x: 44, y: 30 }, alcance: 4, orientacao: 0, portal: 'portal-1-2', lado: 'a', zona: 'zona-1' },
-    { chave: 'l1-b', nome: 'Antena 2', porta: 2, posicao: { x: 56, y: 30 }, alcance: 4, orientacao: 180, portal: 'portal-1-2', lado: 'b', zona: 'zona-2' },
-  ] }],
+  portais: [{ chave: 'portal-1-2', nome: 'Zona 1 ↔ Zona 2', zona_a: 'zona-1', zona_b: 'zona-2', posicao: { x: 53, y: 24 } }],
+  leitores: [
+    { chave: 'leitor-1', nome: 'Leitor 1', reader_id: 'sim-hupaa-01', modelo: 'EZ700', posicao: { x: 50, y: 30 }, antenas: [
+      { chave: 'l1-a', nome: 'Antena 1', porta: 1, posicao: { x: 45, y: 29 }, alcance: 4, orientacao: 0, portal: 'portal-1-2', lado: 'a', zona: 'zona-1' }] },
+    { chave: 'leitor-4', nome: 'Leitor 4', reader_id: 'sim-hupaa-04', modelo: 'DR_MAX', posicao: { x: 44, y: 60 }, alerta_area_restrita: true, antenas: [
+      { chave: 'l4-a', nome: 'Antena 1', porta: 1, posicao: { x: 43, y: 61 }, alcance: 4, orientacao: null, portal: null, lado: null, zona: 'escada' }] },
+  ],
 }
 
-const agora = () => new Date().toISOString()
-const equipamento = (nome: string, extra: Partial<EquipamentoAoVivo>): EquipamentoAoVivo => ({
-  epc: `E2804C41000000000000${nome.length.toString().padStart(4, '0')}`, equipamento: { id: nome.length, nome, tipo: 'Maca', status: 'ativo' },
-  estado: 'confirmado', condicoes: ['confirmado'], zona_confirmada: null, zona_leitura: null, antena: null, portal: null, area_restrita: false,
-  ultima_leitura_em: null, ultima_deteccao_em: null, recencia: 'recente', ultima_passagem: null, ...extra,
+const equipamento = (id: number, nome: string, status: AssetStatus, zona: number | null): EquipmentItem => ({
+  id, nome, identificador_interno: `DEMO-HU-${id}`, tipo: 'Maca', tipo_id: 1, epc: `E2804C41000000000000A1${String(id).padStart(2, '0')}`, status,
+  ultima_zona: zona ? { id: zona, nome: `Zona ${zona}`, referencia_planta: null, andar: 'HU', setor: 'HU', caminho: `HU / Zona ${zona}` } : null,
+  ultima_deteccao_em: zona ? agora() : null, localizacao_desatualizada: null,
 })
 
-describe('mapa do HU ao vivo no dashboard', () => {
+describe('acompanhamento do HU', () => {
   let monitor: Record<string, unknown>
   let sessoes: unknown[]
   beforeEach(() => {
-    sessoes = [{ codigo: 'abcdef0123456789', layout_id: 1, cenario: 'hupaa', estado: 'em_execucao', versao: 2, itens: 1, iniciada_em: agora() }]
-    monitor = {
-      gerado_em: agora(), leituras_total: 10, tags: [], zonas: {}, leitores: [], alertas_restritos: [],
-      leituras: [{ id: 1, epc: 'X', reader_id: 'sim-hupaa-01', porta: 2, antena: 'l1-b', lido_em: agora(), rssi: null, equipamento: null }],
-      passagens: [{ id: 7, epc: 'E1', portal: 'Zona 1 ↔ Zona 2', direcao: 'a_para_b', direcao_status: 'confirmed', zona_origem: 'Zona 1', zona_destino: 'Zona 2', detectada_em: agora(), equipamento: 'Maca 01' }],
-      equipamentos: [
-        equipamento('Maca 01', { zona_confirmada: 'zona-2', estado: 'confirmado', condicoes: ['confirmado'] }),
-        equipamento('Bomba de infusão 02', { zona_confirmada: 'zona-1', zona_leitura: 'zona-2', antena: 'l1-b', portal: 'portal-1-2', estado: 'em_transito', condicoes: ['em_transito', 'detectado', 'confirmado'], ultima_leitura_em: agora() }),
-        equipamento('Cadeira 03 longa', { zona_confirmada: 'zona-2', estado: 'atencao', condicoes: ['atencao', 'confirmado'], recencia: 'desatualizada' }),
-        equipamento('Monitor 04 inativo xx', { zona_confirmada: 'zona-1', estado: 'fora_de_servico', condicoes: ['fora_de_servico', 'confirmado'] }),
-      ],
-    }
+    sessionStorage.clear()
+    sessoes = [{ codigo: 'abcdef0123456789', layout_id: 1, cenario: 'hupaa', estado: 'em_execucao', versao: 2, itens: 9, iniciada_em: agora() }]
+    monitor = { gerado_em: agora(), leituras_total: 1, tags: [], zonas: {}, leitores: [], alertas_restritos: [], equipamentos: [],
+      leituras: [{ id: 5, epc: 'X', reader_id: 'sim-hupaa-01', porta: 1, antena: 'l1-a', lido_em: agora(), rssi: null, equipamento: null }],
+      passagens: [{ id: 7, epc: 'E1', portal: 'Zona 1 ↔ Zona 2', direcao: 'a_para_b', direcao_status: 'confirmed', zona_origem: 'Zona 1', zona_destino: 'Zona 2', detectada_em: agora(), equipamento: 'Maca HU-03' }] }
     vi.stubGlobal('fetch', vi.fn(async (input: string) => {
       const url = new URL(String(input), 'http://localhost')
-      if (url.pathname === '/api/simulacao/relogio') return json({ agora: agora(), real: agora(), fator: 10, adiantado_s: 1800, acelerado: true, fatores: [1, 10] })
+      if (url.pathname === '/api/simulacao/layouts') return json([{ id: 1, nome: 'Hospital HUPAA (padrão)', cenario: 'hupaa', configuracao: config, versao: 11, arquivado: false,
+        aplicado_em: agora(), updated_at: agora(), avisos: [], zonas_ids: { 'zona-1': 41, 'zona-2': 42, escada: 43 } }])
       if (url.pathname === '/api/simulacao/sessoes') return json(sessoes)
-      if (url.pathname.endsWith('/monitor')) return json(monitor)
-      // A posição virtual do simulador nunca deve aparecer no dashboard.
-      return json({ codigo: 'abcdef0123456789', layout_id: 1, cenario: 'hupaa', estado: 'em_execucao', versao: 2, layout,
-        itens: [{ id: 'v', nome: 'Posição virtual secreta', tipo: 'Maca', epc: 'E2804C4100000000000099AA', x: 70, y: 30, x0: 70, y0: 30 }],
-        iniciada_em: agora(), atualizada_em: agora(), encerrada_em: null, motor: null })
+      if (url.pathname.endsWith('/monitor')) return json(structuredClone(monitor))  // cada consulta é um objeto novo
+      return json({})
     }))
   })
   afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-  it('mostra leitores e antenas configurados, estados do sistema e acelerado visível', async () => {
-    const { container } = render(<MapaHUAoVivo items={[]} onSelect={() => undefined} canControlTime fallback={<p>planta estática</p>}/>)
-    expect(await screen.findByLabelText('Leitor 1 · EZ700')).toBeInTheDocument()
-    expect(screen.getByLabelText('Leitor 1 / Antena 2, lendo agora')).toBeInTheDocument()
-    const bomba = await screen.findByRole('button', { name: /^Bomba de infusão 02: Em trânsito · Detectado agora · Passagem confirmada/ })
-    expect(bomba).toHaveClass('hu-em_transito')
-    expect(screen.getByRole('button', { name: /^Cadeira 03 longa: Atenção/ })).toHaveClass('hu-atencao')
-    expect(screen.getByRole('button', { name: /^Monitor 04 inativo xx: Fora de serviço/ })).toHaveClass('hu-fora_de_servico')
-    expect(screen.queryByText('Posição virtual secreta')).toBeNull()
-    expect(container.querySelector('.sim-clock-selo')?.textContent).toMatch(/acelerado ×10 · \+30 min/)
-    expect(await screen.findByText(/Maca 01: saiu de Zona 1 e entrou em Zona 2/)).toBeInTheDocument()
-  })
+  const itens = [equipamento(1, 'Bomba HU-01', 'atencao', 41), equipamento(2, 'Monitor HU-02', 'atencao', 41), equipamento(3, 'Maca HU-03', 'disponivel', 42)]
+  const topology = { zones: [], portals: [] }
 
-  it('clicar na zona lista os equipamentos dela, sem confirmar quem só foi lido', async () => {
-    render(<MapaHUAoVivo items={[]} onSelect={() => undefined} canControlTime={false} fallback={<p>planta estática</p>}/>)
-    fireEvent.click(await screen.findByRole('button', { name: 'Zona 2: ver equipamentos' }))
-    const painel = screen.getByRole('heading', { name: 'Zona 2' }).closest('section') as HTMLElement
-    expect(within(painel).getByText('Maca 01')).toBeInTheDocument()
-    expect(within(painel).getByText(/Em trânsito · lido aqui, ainda não confirmado/)).toBeInTheDocument()
+  it('zona recolhida em um ícone com a quantidade; clicar expande e clicar de novo (ou fora) recolhe', async () => {
+    const { container } = render(<MapaHUAoVivo topology={topology} items={itens} onSelect={() => undefined}/>)
+    const zona1 = await screen.findByRole('button', { name: /^2 equipamentos em Zona 1, maioria atenção/ })
+    expect(zona1).toHaveClass('marker-atencao')
+    expect(zona1).toHaveTextContent('2')
+    expect(screen.queryByRole('button', { name: /^Bomba HU-01/ })).toBeNull()
+    fireEvent.click(zona1)
+    const bomba = screen.getByRole('button', { name: 'Bomba HU-01: Atenção. Abrir detalhes' })
+    expect(bomba).toHaveClass('marker-individual')
+    expect(screen.getByRole('button', { name: 'Monitor HU-02: Atenção. Abrir detalhes' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^2 equipamentos em Zona 1/ }))
+    expect(screen.queryByRole('button', { name: /^Bomba HU-01/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^2 equipamentos em Zona 1/ }))
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('button', { name: /^Bomba HU-01/ })).toBeNull()
+    // Planta original do HU com limites e leitores por cima; sem controles de tempo nem resumo antigo.
+    expect(screen.getByRole('img', { name: 'Esquema do segundo pavimento do HUPAA' })).toBeInTheDocument()
+    expect(container.querySelectorAll('.hu-limite')).toHaveLength(3)
+    expect(screen.getByRole('button', { name: /^Leitor 4\. DR Max|^Leitor 4\. Identix DR Max/ })).toBeInTheDocument()
+    expect(screen.queryByText(/HU ao vivo/)).toBeNull()
     expect(screen.queryByRole('button', { name: '+30 min' })).toBeNull()
+    expect(screen.queryByLabelText('Velocidade')).toBeNull()
   })
 
-  it('sem simulação do HU aberta, mostra a planta de referência', async () => {
-    sessoes = []
-    render(<MapaHUAoVivo items={[]} onSelect={() => undefined} canControlTime fallback={<p>planta estática</p>}/>)
-    expect(await screen.findByText('planta estática')).toBeInTheDocument()
-    expect(screen.getByRole('note')).toHaveTextContent('Nenhuma simulação do HU em execução')
+  it('mostra as mesmas abas do EASY e as passagens detalhadas; cobertura opcional abaixo da legenda', async () => {
+    const { container } = render(<MapaHUAoVivo topology={topology} items={itens} onSelect={() => undefined}/>)
+    for (const aba of ['Equipamentos detectados', 'Ativos nas salas', 'Zonas e portais', 'Sem zona confirmada', 'Outras zonas'])
+      expect(await screen.findByRole('tab', { name: new RegExp(aba) })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: /Passagens detalhadas/ }))
+    expect(await screen.findByText('Zona 1 → Zona 2')).toBeInTheDocument()
+    expect(screen.queryByText('Entradas, saídas e detecções')).toBeNull()
+    expect(container.querySelector('.hu-cobertura')).toBeNull()
+    const toggle = screen.getByLabelText(/Áreas de cobertura/)
+    expect(toggle.closest('.hu-legenda')).not.toBeNull()
+    fireEvent.click(toggle)
+    expect(container.querySelectorAll('.hu-cobertura')).toHaveLength(2)
+  })
+
+  it('notifica uma vez a entrada confirmada na zona restrita, sem repetir enquanto o item fica lá', { timeout: 15000 }, async () => {
+    const entrada = agora()
+    monitor.alertas_restritos = [{ epc: 'E2804C41000000000000A107', entrada_em: entrada, zona: 'Circulação vertical (escada)', leitor: 'Leitor 4', reader_id: 'sim-hupaa-04',
+      antena: 'Antena 1', porta: 1, leituras: 3, primeira_leitura_em: entrada, ultima_leitura_em: agora(), recente: true, equipamento: { id: 7, nome: 'Maca HU-07' } }]
+    render(<MapaHUAoVivo topology={topology} items={itens} onSelect={() => undefined}/>)
+    expect(await screen.findByText(/Maca HU-07 entrou na área restrita/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Dispensar notificação' }))
+    // Várias consultas depois, o item continua na zona: nenhuma notificação nova.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 3500)) })
+    expect(screen.queryByText(/Maca HU-07 entrou na área restrita/)).toBeNull()
+    // Saiu e voltou: nova entrada, nova notificação (uma só).
+    monitor.alertas_restritos = [{ ...(monitor.alertas_restritos as object[])[0], entrada_em: new Date(Date.now() + 1000).toISOString() }]
+    expect(await screen.findByText(/Maca HU-07 entrou na área restrita/, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.getAllByText(/Maca HU-07 entrou na área restrita/)).toHaveLength(1)
+  })
+})
+
+describe('mapa do EASY também agrupa por zona', () => {
+  afterEach(cleanup)
+  it('ícone único com a cor da maioria e expansão dentro da sala', () => {
+    const zones: BoundZone[] = labMainZones.map((zona, i) => ({ ...zona, zoneId: 10 + i }))
+    const sala = (id: number, status: AssetStatus) => ({ ...equipamento(id, `Item ${id}`, status, null),
+      ultima_zona: { id: 10, nome: 'Sala A', referencia_planta: 'sala-a', andar: 'Lab', setor: 'Lab', caminho: 'Lab / Sala A' }, ultima_deteccao_em: agora() })
+    render(<MapWorkspace mode="lab" zones={zones} portals={[]} items={[sala(1, 'disponivel'), sala(2, 'disponivel'), sala(3, 'fora_de_servico')]} onSelect={() => undefined}/>)
+    const icone = screen.getByRole('button', { name: /^3 equipamentos em Sala A, maioria disponível/ })
+    expect(icone).toHaveClass('marker-disponivel')
+    fireEvent.click(icone)
+    const itens = screen.getAllByRole('button', { name: /^Item \d: / })
+    expect(itens).toHaveLength(3)
+    for (const item of itens) {  // dentro dos limites da Sala A (x 1–50, y 5–65)
+      expect(parseFloat(item.style.left)).toBeGreaterThan(1)
+      expect(parseFloat(item.style.left)).toBeLessThan(50)
+    }
+  })
+
+  it('empate de categorias fica com a de maior alerta', () => {
+    const lista = [equipamento(1, 'A', 'disponivel', 1), equipamento(2, 'B', 'atencao', 1)]
+    expect(statusDominante(lista)).toBe('atencao')
+    expect(statusDominante([...lista, equipamento(3, 'C', 'fora_de_servico', 1), equipamento(4, 'D', 'fora_de_servico', 1)])).toBe('fora_de_servico')
+    expect(statusDominante([equipamento(5, 'E', 'disponivel', 1), equipamento(6, 'F', 'disponivel', 1), equipamento(7, 'G', 'atencao', 1)])).toBe('disponivel')
   })
 })

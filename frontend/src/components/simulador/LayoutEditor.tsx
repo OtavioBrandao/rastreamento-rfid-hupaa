@@ -306,6 +306,17 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
             <label>Nome<input value={zona.nome} maxLength={80} disabled={disabled} onChange={(e) => update((d) => { d.zonas.find((z) => z.chave === zona.chave)!.nome = e.target.value }, `nome-${zona.chave}`)}/></label>
             <label>Cor do contorno<input type="color" value={zona.cor} disabled={disabled} onChange={(e) => update((d) => { d.zonas.find((z) => z.chave === zona.chave)!.cor = e.target.value }, `cor-${zona.chave}`)}/></label>
             <label className="checkbox-label"><input type="checkbox" checked={zona.restrita} disabled={disabled} onChange={(e) => update((d) => { d.zonas.find((z) => z.chave === zona.chave)!.restrita = e.target.checked })}/> Área restrita (você decide qual circulação vertical é a escada)</label>
+            {zona.restrita && <label>Leitor da zona restrita<select value={config.leitores.find((l) => l.alerta_area_restrita && l.antenas.some((a) => a.zona === zona.chave))?.chave ?? ''} disabled={disabled}
+              onChange={(e) => update((d) => {
+                // Um leitor só vigia a zona restrita: todas as antenas dele passam a ler presença nela
+                // (sem portal); uma antena basta e as demais são opcionais. Os outros deixam de alertar.
+                for (const leitor of d.leitores) {
+                  const escolhido = leitor.chave === e.target.value
+                  if (escolhido) { leitor.alerta_area_restrita = true; leitor.antenas.forEach((a) => { a.portal = null; a.lado = null; a.zona = zona.chave }) }
+                  else if (leitor.alerta_area_restrita && leitor.antenas.some((a) => a.zona === zona.chave)) leitor.alerta_area_restrita = false
+                }
+              })}><option value="">Nenhum</option>{config.leitores.map((l) => <option key={l.chave} value={l.chave}>{l.nome} ({l.antenas.length} antena{l.antenas.length === 1 ? '' : 's'})</option>)}</select>
+              <small>Qualquer leitor serve; uma antena basta. A segunda é opcional. Uma leitura gravada nele avisa a entrada.</small></label>}
             {zona.area ? <fieldset className="sim-area-fields" disabled={disabled}><legend>Posição e tamanho (0–100)</legend>
               {(['x', 'y', 'largura', 'altura'] as const).map((campo) => <label key={campo}>{campo === 'x' ? 'Esquerda' : campo === 'y' ? 'Topo' : campo === 'largura' ? 'Largura' : 'Altura'}
                 <input type="number" step={0.5} min={0} max={100} value={zona.area![campo]} onChange={(e) => setArea(campo, Number(e.target.value))}/></label>)}

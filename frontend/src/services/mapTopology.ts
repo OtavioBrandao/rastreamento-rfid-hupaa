@@ -4,7 +4,8 @@ import type { EquipmentItem } from '../types/dashboard'
 export interface RegisteredZone { id: number; nome: string; referencia_planta: string | null; ativo: boolean }
 export interface RegisteredPortal { id: number; nome: string; zona_a_id: number; zona_b_id: number; ativo: boolean }
 export interface MapTopology { zones: RegisteredZone[]; portals: RegisteredPortal[] }
-export interface BoundZone extends MainZone { zoneId: number }
+/** `porId`: zona do layout salvo do HU, ligada pelo id cadastrado (sem referência de planta). */
+export interface BoundZone extends MainZone { zoneId: number; porId?: boolean }
 export interface BoundPortal extends PortalPosition { portalId: number; name: string; detail: string }
 export const emptyTopology: MapTopology = { zones: [], portals: [] }
 
@@ -18,7 +19,7 @@ export function bindZones(config: MainZone[], registered: RegisteredZone[]): Bou
 
 export function belongsToZone(item: EquipmentItem, zone: BoundZone): boolean {
   return item.status !== 'nunca_detectado' && item.ultima_zona?.id === zone.zoneId
-    && item.ultima_zona.referencia_planta === zone.id
+    && (zone.porId || item.ultima_zona.referencia_planta === zone.id)
 }
 
 export function bindPortals(config: PortalPosition[], topology: MapTopology, zones: BoundZone[]): BoundPortal[] {

@@ -6,7 +6,7 @@ import { PlanLegend, SimPlan } from '../components/simulador/SimPlan'
 import { errorMessage } from '../services/api'
 import { useLiveQuery, useLiveRefresh } from '../services/live'
 import {
-  archiveLayout, controlUrl, createLayout, getLayouts, getMonitor, getSessions, getSimConfig, pendencias, quickTest, restorePreset, saveLayout, sessionAction, startSession, wipeScenario,
+  archiveLayout, controlUrl, LAYOUT_DEMO_HU, prepareDemoHu, createLayout, getLayouts, getMonitor, getSessions, getSimConfig, pendencias, quickTest, restorePreset, saveLayout, sessionAction, startSession, wipeScenario,
   type AlertaRestrito, type Cenario, type LayoutConfig, type LayoutResumo, type Monitor, type SessaoResumo,
 } from '../services/simulacao'
 
@@ -124,7 +124,9 @@ export function SimulatorPage({ canEdit }: { canEdit: boolean }) {
     const started = await startSession(current.id)
     refresh()
     setView('monitor')
-    setNotice('Simulação iniciada. Abra o controle em outra aba para movimentar os equipamentos.')
+    setNotice(current.nome === LAYOUT_DEMO_HU && cenario === 'hupaa'
+      ? 'Demonstração do HU iniciada: os seis equipamentos parados e mais três no centro do mapa (nove no total).'
+      : 'Simulação iniciada. Abra o controle em outra aba para movimentar os equipamentos.')
     window.open(controlUrl(started.codigo), '_blank', 'noopener')
   })
   const act = (acao: 'pausar' | 'retomar' | 'reiniciar' | 'encerrar') => run(async () => {
@@ -132,11 +134,19 @@ export function SimulatorPage({ canEdit }: { canEdit: boolean }) {
     if (acao === 'encerrar' && !window.confirm('Encerrar esta simulação? O histórico gerado no pipeline é mantido.')) return
     await sessionAction(session.codigo, acao)
     refresh()
-    setNotice(acao === 'reiniciar' ? 'Simulação reiniciada com o layout salvo; itens voltaram à posição inicial.' : `Simulação ${acao === 'encerrar' ? 'encerrada' : acao === 'pausar' ? 'pausada' : 'retomada'}.`)
+    setNotice(acao === 'reiniciar' ? (demo ? 'Demonstração reiniciada: de volta aos nove equipamentos iniciais, sem duplicar.' : 'Simulação reiniciada com o layout salvo; itens voltaram à posição inicial.') : `Simulação ${acao === 'encerrar' ? 'encerrada' : acao === 'pausar' ? 'pausada' : 'retomada'}.`)
     if (acao === 'encerrar') setView('config')
   })
 
   const sim = config.data
+  const demo = cenario === 'hupaa' && current?.nome === LAYOUT_DEMO_HU
+  const prepare = () => run(async () => {
+    if (!window.confirm('Voltar a demonstração do HU ao início? Encerra a simulação deste layout e deixa só os seis equipamentos parados. Os da rodada anterior recebem baixa lógica (nada é apagado).')) return
+    const estado = await prepareDemoHu()
+    refresh()
+    setView('config')
+    setNotice(`Demonstração preparada: ${estado.antigos} equipamentos parados nas zonas, nenhum em execução. “Iniciar simulação” traz mais três.`)
+  })
   return <>
     <div className="page-heading"><div><p className="eyebrow">SIMULADOR WEB · DADOS SINTÉTICOS</p><h1>Simulador</h1>
       <p className="lead">Configure a planta, os leitores virtuais e os portais; inicie a simulação e movimente os equipamentos em outra aba. As leituras virtuais passam pelo mesmo MQTT, ingestor e motor de inferência do sistema real.</p></div></div>
@@ -180,6 +190,7 @@ export function SimulatorPage({ canEdit }: { canEdit: boolean }) {
               <button type="button" disabled={busy} onClick={() => act('reiniciar')}>Reiniciar</button>
               <button type="button" className="danger" disabled={busy} onClick={() => act('encerrar')}>Encerrar</button></>}
           </> : canEdit && <button type="button" className="admin-primary sim-start" disabled={busy || !sim?.habilitado} onClick={start}><Icon name="arrow" size={16}/> Iniciar simulação</button>}
+          {canEdit && demo && <button type="button" disabled={busy} title="Seis equipamentos parados (em atenção), nada em execução" onClick={prepare}>Preparar demonstração</button>}
         </div>
       </section>
       {session && <div className="map-tabs" role="tablist" aria-label="Visão do simulador">

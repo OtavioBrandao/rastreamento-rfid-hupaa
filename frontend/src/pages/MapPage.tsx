@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react'
-import { MapaHospital } from '../components/mapa/MapaHospital'
 import { MapaHUAoVivo } from '../components/mapa/MapaHUAoVivo'
 import { MapaLaboratorio } from '../components/mapa/MapaLaboratorio'
 import { getAllAssets, getMapTopology } from '../services/dashboard'
@@ -7,13 +6,13 @@ import { emptyTopology } from '../services/mapTopology'
 import { useLiveQuery } from '../services/live'
 import type { EquipmentItem } from '../types/dashboard'
 
-export function MapPage({ onSelect, canControlTime = false }: { onSelect: (item: EquipmentItem) => void; canControlTime?: boolean }) {
+export function MapPage({ onSelect }: { onSelect: (item: EquipmentItem) => void }) {
   const [mode, setMode] = useState<'hospital' | 'lab'>('hospital')
   const [draftEpc, setDraftEpc] = useState('')
   const [epc, setEpc] = useState('')
-  const assets = useLiveQuery(`map-assets:${epc}`, (signal) => getAllAssets({ epc: epc || undefined, somente_ativos: true }, signal))
+  const assets = useLiveQuery(`map-assets:${epc}`, (signal) => getAllAssets({ epc: epc || undefined }, signal))
   const metadata = useLiveQuery('map-topology', getMapTopology)
-  const items = assets.data ?? []
+  const items = (assets.data ?? []).filter((item) => item.status !== 'fora_de_servico' || item.epc)
   const topology = metadata.error ? emptyTopology : metadata.data ?? emptyTopology
   const topologyError = metadata.error
   const phase = assets.loading ? 'loading' : !assets.data && assets.error ? 'error' : 'loaded'
@@ -27,6 +26,6 @@ export function MapPage({ onSelect, canControlTime = false }: { onSelect: (item:
     {topologyError && <p role="alert">Não foi possível validar as zonas e portais da planta. Consulte a lista textual; tentando novamente...</p>}
     {phase === 'loading' && <div className="panel map-skeleton" role="status" aria-label="Carregando mapa"><span/><span/></div>}
     {phase === 'error' && <div className="state-panel error-panel" role="alert"><h2>{errorMessage}</h2>Tentando novamente automaticamente.</div>}
-    {phase === 'loaded' && <>{refreshError && <p role="alert">Não foi possível atualizar as posições. Tentando novamente...</p>}{epc && items.length === 0 && <p role="status">Nenhum ativo associado a este EPC.</p>}{mode === 'hospital' ? <div id="panel-hospital" role="tabpanel" aria-labelledby="tab-hospital"><MapaHUAoVivo items={items} onSelect={onSelect} canControlTime={canControlTime} fallback={<MapaHospital topology={topology} items={items} onSelect={onSelect}/>}/></div> : <div id="panel-lab" role="tabpanel" aria-labelledby="tab-lab"><MapaLaboratorio topology={topology} items={items} epc={epc} onSelect={onSelect}/></div>}</>}
+    {phase === 'loaded' && <>{refreshError && <p role="alert">Não foi possível atualizar as posições. Tentando novamente...</p>}{epc && items.length === 0 && <p role="status">Nenhum ativo associado a este EPC.</p>}{mode === 'hospital' ? <div id="panel-hospital" role="tabpanel" aria-labelledby="tab-hospital"><MapaHUAoVivo topology={topology} items={items} onSelect={onSelect}/></div> : <div id="panel-lab" role="tabpanel" aria-labelledby="tab-lab"><MapaLaboratorio topology={topology} items={items} epc={epc} onSelect={onSelect}/></div>}</>}
   </div>
 }
