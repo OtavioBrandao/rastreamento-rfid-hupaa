@@ -45,14 +45,18 @@ export const SimPlan = forwardRef<HTMLDivElement, {
   onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void
   onPointerMove?: (event: ReactPointerEvent<HTMLDivElement>) => void
   onPointerUp?: (event: ReactPointerEvent<HTMLDivElement>) => void
+  /** Cancelamento e perda de captura; sem eles, cancelar equivale a soltar (editor). */
+  onPointerCancel?: (event: ReactPointerEvent<HTMLDivElement>) => void
+  onLostPointerCapture?: (event: ReactPointerEvent<HTMLDivElement>) => void
   className?: string
   label: string
-}>(function SimPlan({ layout, options = {}, children, onPointerDown, onPointerMove, onPointerUp, className = '', label }, ref) {
+}>(function SimPlan({ layout, options = {}, children, onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onLostPointerCapture, className = '', label }, ref) {
   const { activeAntennas, selected, showCoverage = true, showCables = false, showZoneNames = true } = options
   const p = layout.proporcao
   const antenas = layout.leitores.flatMap((leitor) => leitor.antenas)
   return <div ref={ref} className={`sim-plan sim-plan-${layout.cenario} ${className}`} style={{ aspectRatio: String(p) }}
-    onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+    onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel ?? onPointerUp}
+    onLostPointerCapture={onLostPointerCapture}>
     <svg className="sim-plan-bg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={label}>
       {layout.cenario === 'hupaa' ? <>
         <defs><clipPath id="sim-hospital-clip"><path d={hospitalOutlinePath}/></clipPath></defs>

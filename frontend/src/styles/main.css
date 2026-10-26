@@ -2402,3 +2402,80 @@ button:disabled { opacity:.55; cursor:default }
 .sim-alerts small { display:block; color:var(--muted) }
 .sim-alert-none { color:var(--muted); font-size:.84rem; margin:0 0 10px }
 @media (max-width: 700px) { .sim-view-toggles { margin-left:0 } }
+
+/* Simulador limpo (link separado): planta, zonas e equipamentos; trajeto desenhado e executado. */
+.sim-control-limpo .sim-control-plan { max-width:1180px; margin:0 auto }
+.sim-control-bar { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; max-width:1180px; margin:12px auto 0 }
+.sim-control-bar .sim-add,.sim-control-bar .sim-selected { flex:1 1 320px; margin:0 }
+.sim-remove-all { align-self:center }
+.sim-notice { max-width:1180px; margin:8px auto; color:#24435c; font-size:.86rem }
+.sim-plan-control { cursor:default }
+.sim-path-layer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:2 }
+.sim-path-preview { fill:none; stroke:#0b6fb8; stroke-width:2.5; stroke-dasharray:6 4; stroke-linecap:round; stroke-linejoin:round }
+.sim-path-exec { fill:none; stroke:#0b6fb8; stroke-opacity:.28; stroke-width:2; stroke-linecap:round; stroke-linejoin:round }
+.sim-path-ghost { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; border:2px dashed #0b6fb8; background:rgba(11,111,184,.12); pointer-events:none; z-index:3 }
+.sim-dot { position:absolute; z-index:4; width:24px; height:24px; margin:-12px 0 0 -12px; padding:0; display:grid; place-items:center; border-radius:50%;
+  border:2px solid #fff; background:#24435c; color:#fff; box-shadow:0 1px 3px rgba(16,42,66,.45); cursor:grab; touch-action:none }
+.sim-dot:focus-visible { outline:3px solid #0095da; outline-offset:2px }
+.sim-dot.sim-dot-sem-tag { background:#8a98a5 }
+.sim-dot.selected { box-shadow:0 0 0 3px #0095da }
+.sim-dot.moving { cursor:progress }
+.sim-dot.drawing { cursor:grabbing; opacity:.85 }
+.sim-dot-nome { display:none; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); white-space:nowrap; font-size:.72rem;
+  background:#183449; color:#fff; padding:3px 7px; border-radius:6px; pointer-events:none }
+.sim-dot:hover .sim-dot-nome,.sim-dot:focus-visible .sim-dot-nome,.sim-dot.drawing .sim-dot-nome { display:block }
+
+/* Relógio da simulação: discreto; fica evidente quando acelerado ou adiantado. */
+.sim-clock { display:inline-flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:.8rem; color:#24435c }
+.sim-clock-hora { font-variant-numeric:tabular-nums; font-weight:600 }
+.sim-clock-selo { background:#fff3cd; color:#7a4b00; border:1px solid #f0c75e; border-radius:999px; padding:1px 8px; font-weight:600 }
+.sim-clock-acelerado .sim-clock-hora { color:#7a4b00 }
+.sim-clock-fator { display:inline-flex; align-items:center; gap:4px; font-size:.78rem }
+.sim-clock-fator select { padding:2px 4px; font-size:.78rem }
+.sim-clock-avanco { padding:2px 8px; font-size:.76rem }
+.sim-clock-erro { color:#9b2c27; flex-basis:100% }
+
+/* Dashboard: HU ao vivo. */
+.hu-live-head { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:flex-start; justify-content:space-between }
+.hu-live-head > div:first-child { flex:1 1 420px }
+.hu-live-tools { display:flex; flex-direction:column; align-items:flex-end; gap:6px; font-size:.82rem }
+.hu-live-alert { display:flex; flex-wrap:wrap; gap:8px 16px; background:#fdecea; border:1px solid #e9a39e; color:#8c1d18; border-radius:10px; padding:8px 12px; margin:10px 0; font-weight:600; font-size:.86rem }
+.hu-live-body { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; margin-top:10px }
+.hu-live-side { display:grid; gap:12px; align-content:start }
+.hu-live-side .panel { margin:0 }
+@media (max-width: 1100px) { .hu-live-body { grid-template-columns:1fr } }
+.sim-plan-live { cursor:default }
+.hu-zone-hit { position:absolute; z-index:1; background:transparent; border:0; padding:0; cursor:pointer; border-radius:2px }
+.hu-zone-hit:hover { background:rgba(0,109,159,.06) }
+.hu-zone-hit.selected { background:rgba(0,109,159,.1); outline:2px solid #006d9f }
+.hu-reader,.hu-antenna { position:absolute; z-index:3; display:grid; place-items:center; transform:translate(-50%,-50%) }
+.hu-reader svg { width:20px; height:20px; fill:#365fc4; stroke:#fff; stroke-width:1.6 }
+.hu-reader.restrito svg { fill:#7a3fb2 }
+.hu-antenna svg { width:16px; height:16px; fill:#df3f45; stroke:#fff; stroke-width:1.4; transition:transform .2s }
+.hu-antenna.lendo::after { content:''; position:absolute; inset:-7px; border-radius:50%; border:2px solid #df3f45; animation:hu-pulso 1s ease-out infinite; pointer-events:none }
+@keyframes hu-pulso { from { opacity:.9; transform:scale(.6) } to { opacity:0; transform:scale(1.6) } }
+@media (prefers-reduced-motion: reduce) { .hu-antenna.lendo::after { animation:none; opacity:.8 } }
+.hu-reader:hover .marker-tooltip,.hu-reader:focus-visible .marker-tooltip,.hu-antenna:hover .marker-tooltip,.hu-antenna:focus-visible .marker-tooltip,
+.hu-equip:hover .marker-tooltip,.hu-equip:focus-visible .marker-tooltip { display:block; z-index:10 }
+.hu-equip { position:absolute; z-index:4; width:22px; height:22px; margin:-11px 0 0 -11px; padding:0; display:grid; place-items:center; border-radius:50%;
+  border:2px solid #fff; color:#fff; box-shadow:0 1px 3px rgba(16,42,66,.45); cursor:pointer; transition:left .6s ease, top .6s ease }
+.hu-equip:focus-visible { outline:3px solid #0095da; outline-offset:2px }
+.hu-fora_de_servico { background:#7b8794 }
+.hu-em_transito { background:#0b6fb8 }
+.hu-atencao { background:#f2b705; color:#3d2b00 }
+.hu-detectado { background:#1f9d55 }
+.hu-confirmado { background:#2b5f4f }
+.hu-sem_confirmacao { background:#fff; color:#24435c; border-color:#24435c }
+.hu-nunca_detectado { background:#c3ccd4 }
+.hu-equip.hu-em_transito { box-shadow:0 0 0 3px rgba(11,111,184,.3) }
+.hu-legend { display:flex; flex-wrap:wrap; gap:6px 14px; list-style:none; padding:0; margin:8px 0; font-size:.8rem; color:#24435c }
+.hu-swatch { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:6px; vertical-align:-1px; border:1.5px solid transparent }
+.hu-swatch.hu-sem_confirmacao { border-color:#24435c }
+.hu-list { list-style:none; margin:0; padding:0; display:grid; gap:6px; font-size:.86rem }
+.hu-list small { display:block; color:var(--muted); margin-left:17px }
+.hu-events { list-style:none; margin:0; padding:0; display:grid; gap:6px; font-size:.82rem; max-height:420px; overflow:auto }
+.hu-events time { color:var(--muted); font-variant-numeric:tabular-nums; margin-right:4px }
+.hu-ev-ok { border-left:3px solid #1f9d55; padding-left:6px }
+.hu-ev-info { border-left:3px solid #0b6fb8; padding-left:6px }
+.hu-ev-aviso { border-left:3px solid #f2b705; padding-left:6px }
+.hu-ev-alerta { border-left:3px solid #c62828; padding-left:6px; color:#8c1d18; font-weight:600 }

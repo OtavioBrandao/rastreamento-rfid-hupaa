@@ -44,7 +44,10 @@ export interface LayoutResumo {
   avisos: string[]
 }
 
-export interface ItemVirtual { id: string; nome: string; tipo: string | null; epc: string | null; x: number; y: number; x0: number; y0: number }
+export interface PontoTrajeto { x: number; y: number; t: number }
+/** Trajeto em execução: `inicio` no relógio da simulação; `t` em segundos desde o início do desenho. */
+export interface Trajeto { inicio: string; pontos: PontoTrajeto[]; pausado_em?: string }
+export interface ItemVirtual { id: string; nome: string; tipo: string | null; epc: string | null; x: number; y: number; x0: number; y0: number; trajeto?: Trajeto }
 
 export interface MotorEstado {
   ativo: boolean
@@ -85,8 +88,28 @@ export interface SimConfig {
 
 export interface EquipamentoZona { id: number; nome: string; tipo: string; epc: string | null; ultima_deteccao_em: string | null; estado_recencia: string }
 export interface AlertaRestrito { epc: string; zona: string; leitor: string; reader_id: string; antena: string; porta: number; leituras: number; primeira_leitura_em: string; ultima_leitura_em: string; recente: boolean; equipamento: { id: number; nome: string } | null }
+export type EstadoAoVivo = 'fora_de_servico' | 'em_transito' | 'atencao' | 'detectado' | 'confirmado' | 'sem_confirmacao' | 'nunca_detectado'
+/** Estado de cada tag/equipamento calculado no backend só com o que o pipeline gravou. */
+export interface EquipamentoAoVivo {
+  epc: string
+  equipamento: { id: number; nome: string; tipo: string; status: string } | null
+  estado: EstadoAoVivo
+  condicoes: EstadoAoVivo[]
+  zona_confirmada: string | null
+  zona_leitura: string | null
+  antena: string | null
+  portal: string | null
+  area_restrita: boolean
+  ultima_leitura_em: string | null
+  ultima_deteccao_em: string | null
+  recencia: string | null
+  ultima_passagem: { status: string | null; portal: string | null; zona_origem: string | null; zona_destino: string | null; detectada_em: string } | null
+}
+export interface Relogio { agora: string; real: string; fator: number; adiantado_s: number; acelerado: boolean; fatores: number[] }
 export interface Monitor {
   gerado_em: string
+  equipamentos?: EquipamentoAoVivo[]
+  relogio?: Relogio
   alertas_restritos?: AlertaRestrito[]
   leituras_total: number
   leituras: { id: number; epc: string; reader_id: string; porta: number; antena: string | null; lido_em: string; rssi: number | null; equipamento: { id: number; nome: string } | null }[]
@@ -116,6 +139,34 @@ export const quickTest = (cenario: Cenario) => sendJson<Sessao>('/api/simulacao/
 export const wipeScenario = (cenario: Cenario) => sendJson<{ sessoes_encerradas: number; layouts_arquivados: number }>('/api/simulacao/apagar-tudo', 'POST', { cenario })
 export const clearItems = (codigo: string) => apiRequest<{ codigo: string; versao: number; itens: ItemVirtual[] }>(`/api/simulacao/sessoes/${codigo}/itens`, { method: 'DELETE' })
 export const getMonitor = (codigo: string, signal?: AbortSignal) => readJson<Monitor>(`/api/simulacao/sessoes/${codigo}/monitor`, signal)
+export const runPath = (codigo: string, id: string, pontos: PontoTrajeto[]) =>
+  sendJson<{ codigo: string; versao: number; itens: ItemVirtual[]; relogio: Relogio }>(`/api/simulacao/sessoes/${codigo}/itens/${id}/trajeto`, 'POST', { pontos })
+export const getClock = (signal?: AbortSignal) => readJson<Relogio>('/api/simulacao/relogio', signal)
+export const setClock = (mudanca: { fator?: number; avancar_s?: number }) => sendJson<Relogio>('/api/simulacao/relogio', 'POST', mudanca)
+
+/** Mesma interpolação de api/simulacao/trajeto.py: posição executada no instante simulado `agoraMs`. */
+export function posicaoNoTempo(item: ItemVirtual, agoraMs: number): Ponto {
+  const trajeto = item.trajeto
+  if (!trajeto) return { x: item.x, y: item.y }
+  const limite = trajeto.pausado_em ? Math.min(agoraMs, Date.parse(trajeto.pausado_em)) : agoraMs
+  const decorrido = (limite - Date.parse(trajeto.inicio)) / 1000
+  const pontos = trajeto.pontos
+  if (decorrido <= 0) return { x: pontos[0].x, y: pontos[0].y }
+  const ultimo = pontos[pontos.length - 1]
+  if (decorrido >= ultimo.t) return { x: ultimo.x, y: ultimo.y }
+  let baixo = 0, alto = pontos.length - 1
+  while (alto - baixo > 1) { const meio = (baixo + alto) >> 1; if (pontos[meio].t <= decorrido) baixo = meio; else alto = meio }
+  const a = pontos[baixo], b = pontos[alto]
+  const f = b.t === a.t ? 0 : (decorrido - a.t) / (b.t - a.t)
+  return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }
+}
+
+/** O item ainda percorre o trajeto (pausado conta). */
+export function emTrajeto(item: ItemVirtual, agoraMs: number) {
+  const trajeto = item.trajeto
+  if (!trajeto) return false
+  return !!trajeto.pausado_em || agoraMs < Date.parse(trajeto.inicio) + trajeto.pontos[trajeto.pontos.length - 1].t * 1000
+}
 
 export const controlUrl = (codigo: string) => `${window.location.origin}${window.location.pathname}#/simulador/controle/${codigo}`
 

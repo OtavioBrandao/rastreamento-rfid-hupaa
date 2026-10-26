@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LayoutEditor, redimensionar } from '../components/simulador/LayoutEditor'
 import { SimulatorControlPage } from '../pages/SimulatorControlPage'
-import { aplicarPadroesDeAntena, alcanceNaDirecao, contornoCobertura, inRange, pendencias, zoneAt, type LayoutConfig, type Sessao } from '../services/simulacao'
+import { aplicarPadroesDeAntena, alcanceNaDirecao, contornoCobertura, emTrajeto, inRange, pendencias, posicaoNoTempo, zoneAt, type LayoutConfig, type Sessao } from '../services/simulacao'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -171,92 +171,152 @@ describe('editor da planta', () => {
   })
 })
 
-describe('aba de controle', () => {
+describe('aba de controle (simulador limpo)', () => {
   let session: Sessao
   let calls: { url: URL; init: RequestInit }[]
-  let monitor: Record<string, unknown>
-  let patch: (url: URL, init: RequestInit) => Promise<unknown> | unknown
+  let agoraPerf: number
+  const relogio = () => ({ agora: new Date().toISOString(), real: new Date().toISOString(), fator: 1, adiantado_s: 0, acelerado: false, fatores: [1, 2, 5, 10, 30, 60] })
   beforeEach(() => {
     calls = []
-    monitor = { gerado_em: new Date().toISOString(), leituras_total: 3, leituras: [], tags: [], passagens: [], zonas: {}, leitores: [], alertas_restritos: [] }
-    patch = (_url, init) => json({ codigo: session.codigo, versao: session.versao + 1, itens: session.itens.map((item) => item.id === 'it-1' ? { ...item, ...JSON.parse(String(init.body)) } : item) })
+    agoraPerf = 1000
+    vi.spyOn(performance, 'now').mockImplementation(() => agoraPerf)
     session = { codigo: '0123456789abcdef', layout_id: 1, cenario: 'easy', estado: 'em_execucao', versao: 3, layout: easy,
-      itens: [{ id: 'it-1', nome: 'Maca 1', tipo: 'Maca', epc: 'E2804C4100000000000000A1', x: 28, y: 66, x0: 8, y0: 94 },
-        { id: 'it-2', nome: 'Cadeira', tipo: 'Cadeira', epc: null, x: 72, y: 66, x0: 24, y0: 94 }],
+      itens: [{ id: 'it-1', nome: 'Maca 1', tipo: 'Maca', epc: 'E2804C4100000000000000A1', x: 28, y: 80, x0: 8, y0: 94 },
+        { id: 'it-2', nome: 'Cadeira', tipo: 'Cadeira', epc: null, x: 72, y: 80, x0: 24, y0: 94 }],
       iniciada_em: new Date().toISOString(), atualizada_em: new Date().toISOString(), encerrada_em: null,
       motor: { ativo: true, lider: true, conectado: true, erro: null, destino: 'mqtt://localhost:1883', pendentes: 0, sessao: { publicadas: 12, no_alcance: {}, ultima_deteccao: {}, erro: null } } }
     vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit = {}) => {
       const url = new URL(String(input), 'http://localhost')
       calls.push({ url, init })
-      if (url.pathname.endsWith('/monitor')) return json(monitor)
+      if (url.pathname.endsWith('/relogio')) return json(relogio())
+      if (url.pathname.endsWith('/trajeto')) return json({ codigo: session.codigo, versao: 9, itens: session.itens, relogio: relogio() })
       if (url.pathname.endsWith('/itens') && init.method === 'POST') return json({ ...session, versao: 4 }, 201)
-      if (init.method === 'PATCH') return patch(url, init)
       return json(session)
     }))
   })
-  afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
-  it('mostra leitura só do item etiquetado e publica pelo servidor', async () => {
-    render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
-    expect(await screen.findByRole('button', { name: 'Maca 1, sendo lido' })).toBeInTheDocument()
+  const plano = (container: HTMLElement) => {
+    const el = container.querySelector('.sim-plan') as HTMLElement
+    el.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}) })
+    return el
+  }
+  const envios = () => calls.filter((call) => call.init.method === 'POST' || call.init.method === 'PATCH')
+
+  it('mostra só planta, zonas e equipamentos (sem antenas, leitores nem detecção)', async () => {
+    const { container } = render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
+    expect(await screen.findByRole('button', { name: 'Maca 1' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cadeira (sem etiqueta)' })).toBeInTheDocument()
-    expect(screen.getByText(/12 publicada\(s\)/)).toBeInTheDocument()
-    expect(await screen.findByText(/sem etiqueta: nenhuma leitura/)).toBeInTheDocument()
+    expect(screen.getByText('Zona A')).toBeInTheDocument()
+    expect(container.querySelector('.sim-coverage')).toBeNull()
+    expect(screen.queryByText(/Antena A|Leitor EASY|publicada|passagem/i)).toBeNull()
+    expect(container.querySelectorAll('.sim-dot svg')).toHaveLength(2)
   })
 
-  it('adiciona equipamento sem etiqueta', async () => {
+  it('desenhar não move nem envia nada; pausa com o botão pressionado entra no trajeto; só soltar executa', async () => {
+    const { container } = render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
+    const maca = await screen.findByRole('button', { name: 'Maca 1' })
+    const el = plano(container)
+    fireEvent.pointerDown(maca, { clientX: 28, clientY: 80, button: 0, buttons: 1 })
+    agoraPerf = 1500
+    fireEvent.pointerMove(el, { clientX: 40, clientY: 80, buttons: 1 })
+    agoraPerf = 6500  // 5 s parado com o botão pressionado
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    agoraPerf = 7000
+    fireEvent.pointerMove(el, { clientX: 60, clientY: 80, buttons: 1 })
+    expect(envios()).toHaveLength(0)
+    expect(maca.style.left).toBe('28%')  // posição efetiva intacta durante o planejamento
+    expect(container.querySelector('.sim-path-preview')).not.toBeNull()
+    fireEvent.pointerUp(el, { clientX: 60, clientY: 80 })
+    await vi.waitFor(() => expect(envios()).toHaveLength(1))
+    const [envio] = envios()
+    expect(envio.url.pathname).toBe('/api/simulacao/sessoes/0123456789abcdef/itens/it-1/trajeto')
+    const pontos: { x: number; y: number; t: number }[] = JSON.parse(String(envio.init.body)).pontos
+    expect(pontos[0]).toEqual({ x: 28, y: 80, t: 0 })
+    const parados = pontos.filter((p) => p.x === 40)
+    expect(Math.min(...parados.map((p) => p.t))).toBeCloseTo(0.5)
+    expect(Math.max(...parados.map((p) => p.t))).toBeGreaterThanOrEqual(5.5)  // a pausa foi preservada
+    expect(pontos[pontos.length - 1]).toMatchObject({ x: 60, y: 80 })
+    expect(pontos.every((p, i) => i === 0 || p.t >= pontos[i - 1].t)).toBe(true)
+  })
+
+  it('perda de captura ou janela sem foco cancela sem executar nem prender o item', async () => {
+    const { container } = render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
+    const maca = await screen.findByRole('button', { name: 'Maca 1' })
+    const el = plano(container)
+    fireEvent.pointerDown(maca, { clientX: 28, clientY: 80, button: 0, buttons: 1 })
+    agoraPerf = 1400
+    fireEvent.pointerMove(el, { clientX: 45, clientY: 80, buttons: 1 })
+    fireEvent.lostPointerCapture(el)
+    expect(await screen.findByText(/Desenho cancelado \(o ponteiro perdeu a captura\)/)).toBeInTheDocument()
+    fireEvent.pointerMove(el, { clientX: 60, clientY: 80, buttons: 1 })
+    fireEvent.pointerUp(el, { clientX: 60, clientY: 80 })
+    expect(container.querySelector('.sim-path-preview')).toBeNull()
+    fireEvent.pointerDown(maca, { clientX: 28, clientY: 80, button: 0, buttons: 1 })
+    agoraPerf = 1600
+    fireEvent.pointerMove(el, { clientX: 35, clientY: 80, buttons: 1 })
+    fireEvent(window, new Event('blur'))
+    expect(await screen.findByText(/a janela perdeu o foco/)).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(envios()).toHaveLength(0)
+  })
+
+  it('botão solto fora da janela (movimento sem botão) finaliza o desenho', async () => {
+    const { container } = render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
+    const maca = await screen.findByRole('button', { name: 'Maca 1' })
+    const el = plano(container)
+    fireEvent.pointerDown(maca, { clientX: 28, clientY: 80, button: 0, buttons: 1 })
+    agoraPerf = 1300
+    fireEvent.pointerMove(el, { clientX: 50, clientY: 80, buttons: 1 })
+    fireEvent.pointerMove(el, { clientX: 55, clientY: 80, buttons: 0 })
+    await vi.waitFor(() => expect(envios()).toHaveLength(1))
+  })
+
+  it('item em trajeto aparece no meio do caminho e não aceita outro desenho', async () => {
+    const inicio = new Date(Date.now() - 2000).toISOString()
+    session.itens[0] = { ...session.itens[0], x: 72, trajeto: { inicio, pontos: [{ x: 28, y: 80, t: 0 }, { x: 72, y: 80, t: 4 }] } }
     render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
-    await screen.findByRole('button', { name: 'Maca 1, sendo lido' })
-    fireEvent.change(screen.getByPlaceholderText('Ex.: Maca 1'), { target: { value: 'Cadeira 2' } })
+    const maca = await screen.findByRole('button', { name: 'Maca 1, percorrendo trajeto' })
+    const x = parseFloat(maca.style.left)
+    expect(x).toBeGreaterThan(40)
+    expect(x).toBeLessThan(60)
+    fireEvent.pointerDown(maca, { clientX: x, clientY: 80, button: 0, buttons: 1 })
+    expect(await screen.findByText(/ainda está percorrendo/)).toBeInTheDocument()
+  })
+
+  it('adiciona sem posição (o servidor escolhe fora das zonas) e sem etiqueta', async () => {
+    render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
+    await screen.findByRole('button', { name: 'Maca 1' })
     fireEvent.click(screen.getByLabelText(/Sem etiqueta/))
+    fireEvent.change(screen.getByPlaceholderText('Ex.: Maca 1'), { target: { value: 'Cadeira 2' } })
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar à planta' }))
-    await vi.waitFor(() => expect(calls.some((call) => call.init.method === 'POST')).toBe(true))
-    const body = JSON.parse(String(calls.find((call) => call.init.method === 'POST')!.init.body))
+    await vi.waitFor(() => expect(envios()).toHaveLength(1))
+    const body = JSON.parse(String(envios()[0].init.body))
     expect(body).toMatchObject({ nome: 'Cadeira 2', gerar_epc: false })
+    expect(body.x).toBeUndefined()
     expect(body.epc).toBeUndefined()
   })
 
-  it('adiciona em um clique e remove todos depois de confirmar', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-    render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
-    await screen.findByRole('button', { name: 'Maca 1, sendo lido' })
-    fireEvent.click(screen.getByRole('button', { name: '+ Cadeira de rodas' }))
-    await vi.waitFor(() => expect(calls.some((call) => call.init.method === 'POST')).toBe(true))
-    expect(JSON.parse(String(calls.find((call) => call.init.method === 'POST')!.init.body))).toMatchObject({ tipo: 'Cadeira de rodas', gerar_epc: true })
-    fireEvent.click(screen.getByRole('button', { name: 'Remover todos' }))
-    await vi.waitFor(() => expect(calls.some((call) => call.init.method === 'DELETE' && call.url.pathname.endsWith('/itens'))).toBe(true))
-    vi.restoreAllMocks()
-  })
-
-  it('resposta antiga do arraste não desfaz a posição final', async () => {
-    const respostas: ((valor: unknown) => void)[] = []
-    patch = () => new Promise((resolve) => { respostas.push(resolve) })
-    const { container } = render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
-    const maca = await screen.findByRole('button', { name: 'Maca 1, sendo lido' })
-    const plano = container.querySelector('.sim-plan') as HTMLElement
-    plano.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}) })
-    fireEvent.pointerDown(maca, { clientX: 28, clientY: 66 })
-    fireEvent.pointerMove(plano, { clientX: 40, clientY: 66 })
-    fireEvent.pointerUp(plano, { clientX: 40, clientY: 66 })
-    await vi.waitFor(() => expect(respostas.length).toBe(2))
-    const item = (x: number, versao: number) => json({ codigo: session.codigo, versao, itens: [{ ...session.itens[0], x, y: 66 }, session.itens[1]] })
-    // Chega primeiro a resposta do último envio (x=40) e depois a do primeiro (x=40 também, versão menor).
-    respostas[1](item(40, 6)); respostas[0](item(28, 5))
-    await vi.waitFor(() => expect((container.querySelector('.sim-item.tagged') as HTMLElement).style.left).toBe('40%'))
-  })
-
-  it('mostra o alerta de área restrita vindo do sistema', async () => {
-    monitor.alertas_restritos = [{ epc: 'E2804C4100000000000000A1', zona: 'Escada', leitor: 'Leitor 5 · área restrita', reader_id: 'sim-hupaa-05', antena: 'Antena 1', porta: 1, leituras: 4,
-      primeira_leitura_em: new Date().toISOString(), ultima_leitura_em: new Date().toISOString(), recente: true, equipamento: { id: 1, nome: 'Maca 01' } }]
-    render(<SimulatorControlPage codigo={session.codigo} canEdit/>)
-    expect(await screen.findByText('1 item(ns) na área restrita agora')).toBeInTheDocument()
-    expect(screen.getByText('Maca 01')).toBeInTheDocument()
-  })
-
-  it('perfil de consulta não vê controles de alteração', async () => {
+  it('perfil de consulta não vê controles de alteração nem de tempo', async () => {
     render(<SimulatorControlPage codigo={session.codigo} canEdit={false}/>)
-    await screen.findByRole('button', { name: 'Maca 1, sendo lido' })
+    await screen.findByRole('button', { name: 'Maca 1' })
     expect(screen.queryByRole('button', { name: 'Adicionar à planta' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Pausar' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '+30 min' })).toBeNull()
+  })
+})
+
+describe('trajeto executado', () => {
+  it('interpola igual ao motor, respeitando pausas e o fim', () => {
+    const inicio = '2026-10-26T10:00:00.000Z'
+    const item = { id: 'i', nome: 'Maca', tipo: null, epc: null, x: 50, y: 10, x0: 0, y0: 0,
+      trajeto: { inicio, pontos: [{ x: 10, y: 10, t: 0 }, { x: 30, y: 10, t: 2 }, { x: 30, y: 10, t: 7 }, { x: 50, y: 10, t: 9 }] } }
+    const em = (s: number) => posicaoNoTempo(item, Date.parse(inicio) + s * 1000)
+    expect(em(1)).toEqual({ x: 20, y: 10 })
+    expect(em(4)).toEqual({ x: 30, y: 10 })  // parado: a pausa desenhada
+    expect(em(8)).toEqual({ x: 40, y: 10 })
+    expect(em(99)).toEqual({ x: 50, y: 10 })
+    expect(emTrajeto(item, Date.parse(inicio) + 8000)).toBe(true)
+    expect(emTrajeto(item, Date.parse(inicio) + 9500)).toBe(false)
   })
 })

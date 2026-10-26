@@ -1,12 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { MapaHospital } from '../components/mapa/MapaHospital'
+import { MapaHUAoVivo } from '../components/mapa/MapaHUAoVivo'
 import { MapaLaboratorio } from '../components/mapa/MapaLaboratorio'
 import { getAllAssets, getMapTopology } from '../services/dashboard'
 import { emptyTopology } from '../services/mapTopology'
 import { useLiveQuery } from '../services/live'
 import type { EquipmentItem } from '../types/dashboard'
 
-export function MapPage({ onSelect }: { onSelect: (item: EquipmentItem) => void }) {
+export function MapPage({ onSelect, canControlTime = false }: { onSelect: (item: EquipmentItem) => void; canControlTime?: boolean }) {
   const [mode, setMode] = useState<'hospital' | 'lab'>('hospital')
   const [draftEpc, setDraftEpc] = useState('')
   const [epc, setEpc] = useState('')
@@ -26,6 +27,6 @@ export function MapPage({ onSelect }: { onSelect: (item: EquipmentItem) => void 
     {topologyError && <p role="alert">Não foi possível validar as zonas e portais da planta. Consulte a lista textual; tentando novamente...</p>}
     {phase === 'loading' && <div className="panel map-skeleton" role="status" aria-label="Carregando mapa"><span/><span/></div>}
     {phase === 'error' && <div className="state-panel error-panel" role="alert"><h2>{errorMessage}</h2>Tentando novamente automaticamente.</div>}
-    {phase === 'loaded' && <>{refreshError && <p role="alert">Não foi possível atualizar as posições. Tentando novamente...</p>}{epc && items.length === 0 && <p role="status">Nenhum ativo associado a este EPC.</p>}{mode === 'hospital' ? <div id="panel-hospital" role="tabpanel" aria-labelledby="tab-hospital"><MapaHospital topology={topology} items={items} onSelect={onSelect}/></div> : <div id="panel-lab" role="tabpanel" aria-labelledby="tab-lab"><MapaLaboratorio topology={topology} items={items} epc={epc} onSelect={onSelect}/></div>}</>}
+    {phase === 'loaded' && <>{refreshError && <p role="alert">Não foi possível atualizar as posições. Tentando novamente...</p>}{epc && items.length === 0 && <p role="status">Nenhum ativo associado a este EPC.</p>}{mode === 'hospital' ? <div id="panel-hospital" role="tabpanel" aria-labelledby="tab-hospital"><MapaHUAoVivo items={items} onSelect={onSelect} canControlTime={canControlTime} fallback={<MapaHospital topology={topology} items={items} onSelect={onSelect}/>}/></div> : <div id="panel-lab" role="tabpanel" aria-labelledby="tab-lab"><MapaLaboratorio topology={topology} items={items} epc={epc} onSelect={onSelect}/></div>}</>}
   </div>
 }
