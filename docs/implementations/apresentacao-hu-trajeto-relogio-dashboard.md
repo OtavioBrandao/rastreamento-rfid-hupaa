@@ -195,6 +195,8 @@ descartável local.
 
 ### Dashboard: HU ao vivo (`#/mapa`, aba "Mapa do Hospital")
 
+> **Substituído** em [demonstracao-hu-cenario-e-mapas.md](demonstracao-hu-cenario-e-mapas.md): o HU voltou à planta original, com zonas agrupadas e as abas do EASY; os controles de tempo ficaram só no simulador.
+
 - **Planta, leitores e antenas:** vêm da **configuração salva do HU**, que é o
   layout da sessão HUPAA aberta.
   - Leitores e antenas aparecem maiores e mais legíveis. A antena é um
