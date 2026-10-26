@@ -122,6 +122,13 @@ de área restrita, planta limpa e arraste confiável. O leitor 4 com "ponto
 único" descrito acima foi substituído pelo leitor 5 de alerta. Detalhes em
 [simulador-web-hotfix-mqtt-visada.md](simulador-web-hotfix-mqtt-visada.md).
 
+**Apresentação ao HU (26/10/2026)**: o link de controle passou a mostrar só planta,
+zonas e equipamentos; o movimento é um trajeto desenhado com o botão pressionado e
+executado ao soltar; há um relógio de simulação (acelerar/avançar) comum ao motor, ao
+ingestor e à recência; e o dashboard ganhou o HU ao vivo. Detalhes, investigação do
+ensaio de 25/10 e testes em
+[apresentacao-hu-trajeto-relogio-dashboard.md](apresentacao-hu-trajeto-relogio-dashboard.md).
+
 **Sincronização**: polling de 600 ms com `desde_versao` (resposta curta quando
 nada mudou) no controle e 2 s no painel. Avaliado como suficiente: sem
 infraestrutura nova, funciona atrás de qualquer proxy e recupera a sessão ao
