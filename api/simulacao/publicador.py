@@ -58,13 +58,17 @@ def topico_sintetico(config: dict[str, str], reader_id: str, portal_id: str) -> 
 
 
 def payload(epc: str, porta: int, rssi: int, contador: int,
-            leitor_virtual: str | None = None) -> str:
+            leitor_virtual: str | None = None, lido_em: str | None = None) -> str:
     """JSON compacto na ordem observada no leitor; sem ``readerid`` no corpo.
 
     Via relay (broker com ACL de um tópico só), ``sim_reader_id`` diz ao ingestor
     qual leitor virtual leu; o leitor dono do tópico nunca recebe a leitura.
+    ``sim_lido_em`` leva o instante no relógio da simulação (acelerado ou
+    adiantado); o ingestor só o aceita de leitores virtuais fora de produção.
     """
     corpo = {"epc": epc, "rssi": rssi, "antenna": porta, "timestamp": str(contador)}
+    if lido_em:
+        corpo["sim_lido_em"] = lido_em
     if leitor_virtual:
         # `reader_id` também: um ingestor sem suporte a relay recusa a leitura ("reader_id
         # do payload diverge do tópico") em vez de gravá-la como o leitor dono do tópico.
@@ -155,7 +159,7 @@ class PublicadorMultiLeitor:
             raise RuntimeError(self._erro[0])
 
     def emitir(self, topico: str, epc: str, porta: int, rssi: int,
-               reader_id: str | None = None) -> None:
+               reader_id: str | None = None, lido_em: str | None = None) -> None:
         """Publica uma leitura QoS 1 no tópico do leitor virtual (ou no relay)."""
         if self.contador >= self._fim:
             raise RuntimeError("contador sintético esgotado; reinicie a simulação")
@@ -163,7 +167,7 @@ class PublicadorMultiLeitor:
             raise ValueError("via relay, a leitura precisa do reader_id do leitor virtual")
         result = self._client.publish(
             topico, payload(normalizar_epc(epc), porta, rssi, self.contador,
-                            reader_id if self.relay else None), qos=1)
+                            reader_id if self.relay else None, lido_em), qos=1)
         if result.rc != mqtt.MQTT_ERR_SUCCESS:
             motivo = f" (broker desconectou: {self.motivo_desconexao})" if self.motivo_desconexao else ""
             raise RuntimeError(f"MQTT não enfileirou a leitura para {topico}: "

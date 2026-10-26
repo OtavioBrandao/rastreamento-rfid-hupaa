@@ -153,7 +153,7 @@ def test_item_sem_epc_nao_produz_leitura_e_periodo_e_respeitado():
     com_tag = {"id": "i2", "epc": "E2804C41000000000000ABCD", "x": 72, "y": 66}
     estado = _estado([sem_tag, com_tag])
     leituras = estado.devidas(10.0, 0.2)
-    assert [(porta, epc, leitor) for _, epc, porta, _, leitor in leituras] == [
+    assert [(porta, epc, leitor) for _, epc, porta, _, leitor, _ in leituras] == [
         (2, com_tag["epc"], "sim-easy-01")]
     assert estado.no_alcance == {"i1": ["antena-a"], "i2": ["antena-b"]}
     assert estado.devidas(10.1, 0.2) == []
@@ -529,9 +529,9 @@ class PublicadorCapturado:
     def conectar(self):
         pass
 
-    def emitir(self, topico, epc, porta, rssi, reader_id=None):
+    def emitir(self, topico, epc, porta, rssi, reader_id=None, lido_em=None):
         self.mensagens.append((topico, json.loads(payload(
-            epc, porta, rssi, 1_000_000, reader_id if self.relay else None))))
+            epc, porta, rssi, 1_000_000, reader_id if self.relay else None, lido_em))))
 
     def conferir(self):
         pass
@@ -572,8 +572,12 @@ def _simular(pg_engine, tmp_path, sessao_codigo, percurso, inicio=0.0, relay=Non
     motor = MotorSimulacao(config, pg_engine, fabrica_publicador=PublicadorCapturado)
     receiver, client, factory = _receptor(pg_engine, tmp_path, relay_aceito)
     mid = 0
+    relogio = inicio
+    # O motor carimba cada leitura com o relógio da simulação: aqui, T0 + relogio.
+    relogio_real = patch("api.simulacao.relogio.real_agora",
+                         side_effect=lambda: T0 + timedelta(seconds=relogio))
+    relogio_real.start()
     try:
-        relogio = inicio
         for x, y, duracao in percurso:
             with Session(pg_engine) as session:
                 sessao = service.obter_sessao(session, sessao_codigo)
@@ -594,6 +598,7 @@ def _simular(pg_engine, tmp_path, sessao_codigo, percurso, inicio=0.0, relay=Non
                 relogio = round(relogio + 0.1, 3)
         receiver.flush_debounce()
     finally:
+        relogio_real.stop()
         factory.stop()
         motor.parar()
     return mid

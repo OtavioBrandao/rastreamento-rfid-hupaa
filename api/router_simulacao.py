@@ -8,7 +8,7 @@ e nada é publicado — layouts podem ser editados fora de produção.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -18,6 +18,7 @@ from api.database import get_db
 from api.permissoes import Permissao, exigir_por_metodo
 from api.service_auth import SessaoAutenticada
 from api.simulacao import config as config_simulador
+from api.simulacao import relogio as relogio_sim
 from api.simulacao import service
 from api.simulacao.esquema import MAX_ANTENAS_POR_LEITOR, MODELOS_LEITOR
 from api.simulacao.motor import motor_atual
@@ -34,9 +35,10 @@ def obter_config() -> config_simulador.ConfigSimulador:
     return config_simulador.carregar()
 
 
-def _relogio() -> datetime:
-    """Relógio UTC da requisição."""
-    return datetime.now(UTC)
+def _relogio(db: Session = Depends(get_db)) -> datetime:
+    """Instante da requisição no relógio da simulação (acelerado/adiantado ou real)."""
+    real = relogio_sim.real_agora()
+    return relogio_sim.do_banco(db, real).agora(real)
 
 
 def _traduzir(erro: service.SimulacaoRecusada) -> HTTPException:
@@ -96,6 +98,27 @@ class ItemCriar(BaseModel):
     gerar_epc: bool = False
     x: float | None = Field(None, ge=0, le=100)
     y: float | None = Field(None, ge=0, le=100)
+
+
+class PontoTrajeto(BaseModel):
+    """Ponto do desenho: posição na planta e segundos desde o início do gesto."""
+
+    x: float = Field(..., ge=0, le=100)
+    y: float = Field(..., ge=0, le=100)
+    t: float = Field(..., ge=0)
+
+
+class TrajetoCriar(BaseModel):
+    """Trajeto desenhado, enviado só ao soltar o botão."""
+
+    pontos: list[PontoTrajeto] = Field(..., min_length=2, max_length=4000)
+
+
+class RelogioAlterar(BaseModel):
+    """Acelerar (fator) e/ou avançar o tempo simulado."""
+
+    fator: float | None = None
+    avancar_s: float = Field(0, ge=0)
 
 
 class ItemAlterar(BaseModel):
@@ -304,6 +327,39 @@ def remover_item(codigo: str, item_id: str, db: Session = Depends(get_db)) -> di
     return {"codigo": sessao.codigo, "versao": sessao.versao, "itens": sessao.itens}
 
 
+@router.post("/sessoes/{codigo}/itens/{item_id}/trajeto", dependencies=[Depends(_PERMISSAO)],
+             summary="Executar o trajeto desenhado")
+def executar_trajeto(codigo: str, item_id: str, payload: TrajetoCriar,
+                     db: Session = Depends(get_db),
+                     config: config_simulador.ConfigSimulador = Depends(obter_config)) -> dict:
+    """Só a execução gera leituras; o desenho em si nunca chega ao motor."""
+    _exigir_habilitado(config)
+    try:
+        sessao = service.executar_trajeto(db, codigo, item_id,
+                                          [ponto.model_dump() for ponto in payload.pontos])
+    except service.SimulacaoRecusada as erro:
+        raise _traduzir(erro) from erro
+    return {"codigo": sessao.codigo, "versao": sessao.versao, "itens": sessao.itens,
+            "relogio": relogio_sim.resumo(relogio_sim.do_banco(db))}
+
+
+@router.get("/relogio", dependencies=[Depends(_PERMISSAO)], summary="Relógio da simulação")
+def ler_relogio(db: Session = Depends(get_db)) -> dict:
+    """O mesmo tempo para simulador e dashboard (o relógio do computador não muda)."""
+    return relogio_sim.resumo(relogio_sim.do_banco(db))
+
+
+@router.post("/relogio", dependencies=[Depends(_PERMISSAO)], summary="Acelerar ou avançar o tempo")
+def alterar_relogio(payload: RelogioAlterar, db: Session = Depends(get_db),
+                    config: config_simulador.ConfigSimulador = Depends(obter_config)) -> dict:
+    """Muda o estado real da simulação: leituras, recência e alertas seguem o novo tempo."""
+    _exigir_habilitado(config)
+    try:
+        return service.definir_relogio(db, fator=payload.fator, avancar_s=payload.avancar_s)
+    except service.SimulacaoRecusada as erro:
+        raise _traduzir(erro) from erro
+
+
 @router.post("/sessoes/{codigo}/{acao}", dependencies=[Depends(_PERMISSAO)],
              summary="Pausar, retomar, reiniciar ou encerrar")
 def transicionar(codigo: str, acao: str, db: Session = Depends(get_db),
@@ -329,4 +385,5 @@ def monitorar(codigo: str, db: Session = Depends(get_db),
         sessao = service.obter_sessao(db, codigo)
     except service.SimulacaoRecusada as erro:
         raise _traduzir(erro) from erro
-    return service.monitor(db, sessao, now=agora)
+    return {**service.monitor(db, sessao, now=agora),
+            "relogio": relogio_sim.resumo(relogio_sim.do_banco(db))}

@@ -14,6 +14,7 @@ leituras brutas, passagens e última zona confirmada —, nunca da posição.
 from __future__ import annotations
 
 import copy
+import math
 import random
 import secrets
 from collections.abc import Callable
@@ -45,8 +46,10 @@ from db.models import (
 from rfid_ingestion.reader_status import StatusPolicy, classify
 from rfid_location.recency import classify_recency, recency_threshold_from_env
 
-from . import topologia
+from . import relogio as relogio_sim
+from . import topologia, trajeto
 from .esquema import Layout, avisos
+from .geometria import antenas_do_layout, detectar
 from .presets import (
     ITENS_TESTE_RAPIDO,
     NOMES_PRESET,
@@ -183,17 +186,34 @@ def _agora() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _encerrar(sessao: SimulacaoSessao, agora: datetime) -> None:
+    """Encerra a sessão; o relógio dela segue adiantado, mas no ritmo real."""
+    relogio = relogio_sim.Relogio.de_dict((sessao.topologia or {}).get("relogio"))
+    relogio_sim.gravar(sessao, relogio.com(agora, fator=1))
+    sessao.estado, sessao.encerrada_em = "encerrada", agora
+
+
+def _concluir_trajeto(item: dict, agora_sim: datetime) -> dict:
+    """Item parado onde o trajeto o deixou (sem trajeto pendente)."""
+    x, y = trajeto.posicao(item, agora_sim)
+    novo = {chave: valor for chave, valor in item.items() if chave != "trajeto"}
+    novo["x"], novo["y"] = round(x, 3), round(y, 3)
+    return novo
+
+
 def iniciar_sessao(db: Session, layout_id: int, usuario_id: int | None) -> SimulacaoSessao:
     """Aplica a topologia do layout e abre uma sessão nova (encerrando a anterior)."""
     registro = obter_layout(db, layout_id, travar=True)
     layout = validar_layout(registro.configuracao)
     agora = _agora()
+    relogio = relogio_sim.do_banco(db, agora)
     itens: list = []
     for anterior in db.scalars(select(SimulacaoSessao).where(
             SimulacaoSessao.layout_id == layout_id,
             SimulacaoSessao.estado.in_(ESTADOS_ABERTOS)).with_for_update()):
-        itens = [dict(item, ultima_deteccao=None) for item in anterior.itens]
-        anterior.estado, anterior.encerrada_em = "encerrada", agora
+        itens = [dict(_concluir_trajeto(item, relogio.agora(agora)), ultima_deteccao=None)
+                 for item in anterior.itens]
+        _encerrar(anterior, agora)
     db.flush()
     try:
         vinculos = topologia.aplicar(db, registro, layout)
@@ -204,6 +224,7 @@ def iniciar_sessao(db: Session, layout_id: int, usuario_id: int | None) -> Simul
         codigo=secrets.token_hex(8), layout_id=registro.id, cenario=registro.cenario,
         layout=_layout_dict(layout), topologia=vinculos, itens=itens, estado="em_execucao",
         criada_por=usuario_id, iniciada_em=agora, atualizada_em=agora)
+    relogio_sim.gravar(sessao, relogio)
     db.add(sessao)
     db.commit()
     db.refresh(sessao)
@@ -281,13 +302,53 @@ def adicionar_item(db: Session, codigo: str, *, nome: str, tipo: str | None, epc
             valor = _epc_valido(epc, itens)
         elif gerar_epc:
             valor = _gerar_epc({item["epc"] for item in itens if item["epc"]})
-        # Sem posição informada: fila na borda inferior, longe das antenas do preset.
-        px = _limitar(x if x is not None else 8 + (len(itens) % 6) * 16)
-        py = _limitar(y if y is not None else 94 - (len(itens) // 6 % 4) * 5)
+        if x is None or y is None:
+            # Sem posição: o ponto livre mais perto do centro (fora de toda zona e
+            # de todo alcance), para o item surgir sem ser lido nem "estar" numa zona.
+            px, py = _posicao_livre(_sessao.layout, itens, relogio_sim.do_banco(db).agora(_agora()))
+        else:
+            px, py = _limitar(x), _limitar(y)
         itens.append({"id": f"it-{secrets.token_hex(4)}", "nome": nome.strip()[:80],
                       "tipo": (tipo or "").strip()[:60] or None, "epc": valor,
                       "x": px, "y": py, "x0": px, "y0": py})
     return _alterar(db, codigo, mudanca)
+
+
+MARGEM_ZONA = 1.5
+DISTANCIA_ENTRE_ITENS = 3.0
+
+
+def _dentro(area: dict, x: float, y: float, margem: float = 0.0) -> bool:
+    return (area["x"] - margem <= x <= area["x"] + area["largura"] + margem
+            and area["y"] - margem <= y <= area["y"] + area["altura"] + margem)
+
+
+def _posicao_livre(layout: dict, itens: list[dict], agora_sim: datetime) -> tuple[float, float]:
+    """Ponto mais próximo do centro fora das zonas, do alcance das antenas e dos itens.
+
+    Não presume que o centro esteja livre: procura em espiral e recusa se não
+    houver espaço (em vez de largar o item dentro de uma zona).
+    """
+    areas = [zona["area"] for zona in layout.get("zonas", []) if zona.get("area")]
+    antenas = antenas_do_layout(layout)
+    proporcao = float(layout.get("proporcao") or 1)
+    ocupados = [trajeto.posicao(item, agora_sim) for item in itens]
+    for raio in [0.0] + [passo * 1.5 for passo in range(1, 40)]:
+        voltas = 1 if raio == 0 else max(8, int(2 * math.pi * raio / 1.5))
+        for indice in range(voltas):
+            angulo = 2 * math.pi * indice / voltas
+            x = round(50 + raio * math.cos(angulo) / proporcao, 3)
+            y = round(50 + raio * math.sin(angulo), 3)
+            if not (3 <= x <= 97 and 3 <= y <= 97):
+                continue
+            if any(_dentro(area, x, y, MARGEM_ZONA) for area in areas):
+                continue
+            if detectar(x, y, antenas, proporcao):
+                continue
+            if any(math.dist((x, y), outro) < DISTANCIA_ENTRE_ITENS for outro in ocupados):
+                continue
+            return x, y
+    raise SimulacaoRecusada("sem_espaco", "não há posição livre fora das zonas para um item novo")
 
 
 def alterar_item(db: Session, codigo: str, item_id: str, campos: dict) -> SimulacaoSessao:
@@ -297,6 +358,11 @@ def alterar_item(db: Session, codigo: str, item_id: str, campos: dict) -> Simula
         item = next((item for item in itens if item["id"] == item_id), None)
         if item is None:
             raise SimulacaoRecusada("item_inexistente", "item não encontrado", 404)
+        if (campos.get("x") is not None or campos.get("y") is not None) and \
+                trajeto.em_execucao(item, relogio_sim.do_banco(db).agora(_agora())):
+            raise SimulacaoRecusada("trajeto_em_execucao", "o item ainda está percorrendo o trajeto")
+        if campos.get("x") is not None or campos.get("y") is not None:
+            item.pop("trajeto", None)
         if "x" in campos and campos["x"] is not None:
             item["x"] = _limitar(campos["x"])
         if "y" in campos and campos["y"] is not None:
@@ -312,6 +378,62 @@ def alterar_item(db: Session, codigo: str, item_id: str, campos: dict) -> Simula
         elif campos.get("gerar_epc"):
             item["epc"] = _gerar_epc({outro["epc"] for outro in itens if outro["epc"]})
     return _alterar(db, codigo, mudanca)
+
+
+def executar_trajeto(db: Session, codigo: str, item_id: str, pontos: list[dict]) -> SimulacaoSessao:
+    """Começa a percorrer o trajeto desenhado, no relógio da simulação.
+
+    O primeiro ponto é a posição executada atual do item (o desenho começa
+    nele); a posição final vira ``x``/``y``. Um item em trajeto não aceita outro.
+    """
+    try:
+        normalizados = trajeto.validar(pontos)
+    except trajeto.TrajetoInvalido as erro:
+        raise SimulacaoRecusada("trajeto_invalido", str(erro), 422) from erro
+
+    def mudanca(sessao: SimulacaoSessao, itens: list[dict]) -> None:
+        """Grava o trajeto com início agora (tempo simulado)."""
+        if sessao.estado != "em_execucao":
+            raise SimulacaoRecusada("sessao_pausada", "retome a simulação para executar o trajeto")
+        item = next((item for item in itens if item["id"] == item_id), None)
+        if item is None:
+            raise SimulacaoRecusada("item_inexistente", "item não encontrado", 404)
+        agora_sim = relogio_sim.do_banco(db).agora(_agora())
+        if trajeto.em_execucao(item, agora_sim):
+            raise SimulacaoRecusada("trajeto_em_execucao", "o item ainda está percorrendo o trajeto")
+        x, y = trajeto.posicao(item, agora_sim)
+        normalizados[0].update(x=round(x, 3), y=round(y, 3))
+        item["trajeto"] = {"inicio": agora_sim.isoformat(), "pontos": normalizados}
+        item["x"], item["y"] = normalizados[-1]["x"], normalizados[-1]["y"]
+    return _alterar(db, codigo, mudanca)
+
+
+def definir_relogio(db: Session, *, fator: float | None = None, avancar_s: float = 0) -> dict:
+    """Acelera e/ou avança o tempo simulado de todas as sessões abertas.
+
+    Avançar com item em trajeto pularia as leituras do caminho: é recusado.
+    """
+    if fator is not None and fator not in relogio_sim.FATORES:
+        raise SimulacaoRecusada("fator_invalido", f"use um destes fatores: {relogio_sim.FATORES}", 422)
+    if not 0 <= avancar_s <= relogio_sim.AVANCO_MAX_S:
+        raise SimulacaoRecusada("avanco_invalido", "avanço entre 0 s e 24 h", 422)
+    sessoes = list(db.scalars(select(SimulacaoSessao).where(
+        SimulacaoSessao.estado.in_(ESTADOS_ABERTOS)).with_for_update()))
+    if not sessoes:
+        raise SimulacaoRecusada("sem_sessao", "inicie uma simulação para controlar o tempo")
+    agora = _agora()
+    atual = relogio_sim.do_banco(db, agora)
+    if avancar_s and any(trajeto.em_execucao(item, atual.agora(agora))
+                         for sessao in sessoes for item in sessao.itens):
+        raise SimulacaoRecusada("trajeto_em_execucao",
+                                "aguarde os trajetos terminarem para avançar o tempo")
+    novo = atual.com(agora, fator=fator, avancar_s=avancar_s)
+    for sessao in sessoes:
+        relogio_sim.gravar(sessao, novo)
+        sessao.versao += 1
+        sessao.atualizada_em = agora
+    db.commit()
+    return relogio_sim.resumo(novo, agora)
 
 
 def remover_item(db: Session, codigo: str, item_id: str) -> SimulacaoSessao:
@@ -331,12 +453,20 @@ def transicionar(db: Session, codigo: str, acao: str) -> SimulacaoSessao:
     if sessao.estado == "encerrada":
         raise SimulacaoRecusada("sessao_encerrada", "esta sessão já foi encerrada")
     agora = _agora()
+    relogio_atual = relogio_sim.do_banco(db, agora)
+    agora_sim = relogio_atual.agora(agora)
     if acao == "pausar":
+        # Sem leituras enquanto pausada: o trajeto também para, senão o item
+        # "atravessaria" antenas sem ser lido.
+        sessao.itens = [dict(item, trajeto={**item["trajeto"], "pausado_em": agora_sim.isoformat()})
+                        if trajeto.em_execucao(item, agora_sim) and not item["trajeto"].get("pausado_em")
+                        else item for item in sessao.itens]
         sessao.estado = "pausada"
     elif acao == "retomar":
+        sessao.itens = [_retomar_trajeto(item, agora_sim) for item in sessao.itens]
         sessao.estado = "em_execucao"
     elif acao == "encerrar":
-        sessao.estado, sessao.encerrada_em = "encerrada", agora
+        _encerrar(sessao, agora)
     elif acao == "reiniciar":
         registro = obter_layout(db, sessao.layout_id, travar=True)
         layout = validar_layout(registro.configuracao)
@@ -346,8 +476,10 @@ def transicionar(db: Session, codigo: str, acao: str) -> SimulacaoSessao:
             db.rollback()
             raise SimulacaoRecusada("topologia_recusada", str(erro)) from erro
         sessao.layout = _layout_dict(layout)
-        sessao.itens = [dict(item, x=item["x0"], y=item["y0"]) for item in sessao.itens]
+        sessao.itens = [{**{k: v for k, v in item.items() if k != "trajeto"},
+                         "x": item["x0"], "y": item["y0"]} for item in sessao.itens]
         sessao.estado = "em_execucao"
+        relogio_sim.gravar(sessao, relogio_atual)
     else:
         raise SimulacaoRecusada("acao_invalida", "ação desconhecida", 422)
     sessao.versao += 1
@@ -355,6 +487,17 @@ def transicionar(db: Session, codigo: str, acao: str) -> SimulacaoSessao:
     db.commit()
     db.refresh(sessao)
     return sessao
+
+
+def _retomar_trajeto(item: dict, agora_sim: datetime) -> dict:
+    """Desloca o trajeto pausado pelo tempo da pausa (continua de onde parou)."""
+    pausa = (item.get("trajeto") or {}).get("pausado_em")
+    if not pausa:
+        return item
+    inicio = datetime.fromisoformat(item["trajeto"]["inicio"])
+    deslocado = inicio + (agora_sim - datetime.fromisoformat(pausa))
+    resto = {k: v for k, v in item["trajeto"].items() if k != "pausado_em"}
+    return dict(item, trajeto={**resto, "inicio": deslocado.isoformat()})
 
 
 def limpar_itens(db: Session, codigo: str) -> SimulacaoSessao:
@@ -376,7 +519,7 @@ def apagar_cenario(db: Session, cenario: str) -> dict:
         SimulacaoSessao.cenario == cenario,
         SimulacaoSessao.estado.in_(ESTADOS_ABERTOS)).with_for_update()))
     for sessao in sessoes:
-        sessao.estado, sessao.encerrada_em = "encerrada", agora
+        _encerrar(sessao, agora)
         sessao.versao += 1
     layouts = list(db.scalars(select(SimulacaoLayout).where(
         SimulacaoLayout.cenario == cenario,
@@ -495,6 +638,105 @@ def _alertas_restritos(db: Session, sessao: SimulacaoSessao, vinculo, now: datet
     } for linha in linhas]
 
 
+LEITURA_RECENTE_S = 15
+PRIORIDADE_ESTADO = ("fora_de_servico", "em_transito", "atencao", "sem_confirmacao", "detectado",
+                     "confirmado", "nunca_detectado")
+
+
+def _estado_equipamentos(db: Session, sessao: SimulacaoSessao, vinculo, now: datetime,
+                         limiar: timedelta) -> list[dict]:
+    """Estado de cada equipamento/tag da sessão, só com o que o pipeline gravou.
+
+    - ``em_transito``: com zona confirmada, lido agora por uma antena de outra
+      zona (atravessando um portal, passagem ainda não confirmada);
+    - ``atencao``: última passagem confirmada mais antiga que o limite de recência;
+    - ``detectado``: lido agora, coerente com a zona confirmada;
+    - ``confirmado``: última zona confirmada por passagem, sem leitura agora;
+    - ``sem_confirmacao``: lido, mas nenhuma passagem confirmou zona (tag nova
+      ou não cadastrada): nunca vira zona só porque foi lido;
+    - ``fora_de_servico``: equipamento inativo no cadastro.
+    A posição virtual do simulador nunca entra aqui.
+    """
+    layout, topo = sessao.layout or {}, sessao.topologia or {}
+    ids_antenas = topo.get("antenas", {})
+    zonas_por_id = {zona_id: chave for chave, zona_id in topo.get("zonas", {}).items()}
+    portais_por_id = {portal_id: chave for chave, portal_id in topo.get("portais", {}).items()}
+    antenas = {}
+    for leitor in layout.get("leitores", []):
+        for antena in leitor["antenas"]:
+            if antena["chave"] in ids_antenas:
+                antenas[ids_antenas[antena["chave"]]] = {
+                    "chave": antena["chave"], "zona": antena.get("zona"), "portal": antena.get("portal"),
+                    "lado": antena.get("lado"), "leitor": leitor["chave"],
+                    "alerta": bool(leitor.get("alerta_area_restrita"))}
+    inicio = sessao.iniciada_em
+    ultimas = {linha.epc: linha for linha in db.execute(
+        select(LeituraBruta.epc, LeituraBruta.antena_id, LeituraBruta.lido_em)
+        .distinct(LeituraBruta.epc)
+        .where(LeituraBruta.antena_id.in_(list(antenas) or [0]), LeituraBruta.lido_em >= inicio)
+        .order_by(LeituraBruta.epc, LeituraBruta.lido_em.desc(), LeituraBruta.id.desc())).all()}
+    passagens = {linha.epc: linha for linha in db.execute(
+        select(Passagem.epc, Passagem.portal_id, Passagem.direcao_status, Passagem.detectada_em,
+               Passagem.zona_origem_id, Passagem.zona_destino_id)
+        .distinct(Passagem.epc)
+        .where(Passagem.portal_id.in_(list(portais_por_id) or [0]), Passagem.detectada_em >= inicio)
+        .order_by(Passagem.epc, Passagem.detectada_em.desc(), Passagem.id.desc())).all()}
+    equipamentos = db.execute(
+        select(Equipamento.id, Equipamento.nome, Equipamento.status, Equipamento.ultima_zona_id,
+               Equipamento.ultima_deteccao_em, TipoEquipamento.nome.label("tipo"), Tag.epc)
+        .join(TipoEquipamento, TipoEquipamento.id == Equipamento.tipo_id)
+        .join(AssociacaoTagEquipamento, and_(
+            AssociacaoTagEquipamento.equipamento_id == Equipamento.id,
+            AssociacaoTagEquipamento.fim.is_(None)))
+        .join(Tag, Tag.id == AssociacaoTagEquipamento.tag_id)
+        .where((Tag.epc.in_(list(ultimas) or [""]))
+               | Equipamento.ultima_zona_id.in_(list(zonas_por_id) or [0]))).all()
+    por_epc = {linha.epc: linha for linha in equipamentos}
+    saida = []
+    for epc in sorted(set(ultimas) | set(por_epc)):
+        eq, leitura, passagem = por_epc.get(epc), ultimas.get(epc), passagens.get(epc)
+        antena = antenas.get(leitura.antena_id) if leitura else None
+        zona_conf = zonas_por_id.get(eq.ultima_zona_id) if eq else None
+        recente = bool(leitura and now - leitura.lido_em <= timedelta(seconds=LEITURA_RECENTE_S))
+        recencia = classify_recency(eq.ultima_deteccao_em, now, limiar) if eq else None
+        condicoes = []
+        if eq is not None and eq.status != "ativo":
+            condicoes.append("fora_de_servico")
+        if recente and antena and zona_conf and antena["zona"] != zona_conf:
+            condicoes.append("em_transito")
+        if recencia == "desatualizada":
+            condicoes.append("atencao")
+        if recente:
+            condicoes.append("detectado")
+        if zona_conf:
+            condicoes.append("confirmado")
+        elif leitura:
+            condicoes.append("sem_confirmacao")
+        if not condicoes:
+            condicoes.append("nunca_detectado")
+        saida.append({
+            "epc": epc,
+            "equipamento": ({"id": eq.id, "nome": eq.nome, "tipo": eq.tipo, "status": eq.status}
+                            if eq else None),
+            "estado": next(estado for estado in PRIORIDADE_ESTADO if estado in condicoes),
+            "condicoes": condicoes,
+            "zona_confirmada": zona_conf,
+            "zona_leitura": antena["zona"] if recente and antena else None,
+            "antena": antena["chave"] if antena else None,
+            "portal": antena["portal"] if antena else None,
+            "area_restrita": bool(recente and antena and antena["alerta"]),
+            "ultima_leitura_em": em_utc(leitura.lido_em) if leitura else None,
+            "ultima_deteccao_em": em_utc(eq.ultima_deteccao_em) if eq else None,
+            "recencia": recencia,
+            "ultima_passagem": ({
+                "status": passagem.direcao_status, "portal": portais_por_id.get(passagem.portal_id),
+                "zona_origem": zonas_por_id.get(passagem.zona_origem_id),
+                "zona_destino": zonas_por_id.get(passagem.zona_destino_id),
+                "detectada_em": em_utc(passagem.detectada_em)} if passagem else None),
+        })
+    return saida
+
+
 def monitor(db: Session, sessao: SimulacaoSessao, *, now: datetime,
             policy: StatusPolicy | None = None, limite: int = 25) -> dict:
     """Leituras, passagens, leitores e zonas confirmadas desde o início da sessão."""
@@ -591,6 +833,7 @@ def monitor(db: Session, sessao: SimulacaoSessao, *, now: datetime,
 
     return {
         "gerado_em": em_utc(now),
+        "equipamentos": _estado_equipamentos(db, sessao, vinculo, now, limiar),
         "alertas_restritos": _alertas_restritos(db, sessao, vinculo, now),
         "leituras_total": total_leituras,
         "leituras": [{

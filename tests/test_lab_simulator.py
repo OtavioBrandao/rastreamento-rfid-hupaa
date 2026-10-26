@@ -145,11 +145,11 @@ def test_leituras_seguem_o_periodo_e_a_antena_do_alcance():
     item = {"id": "i1", "epc": PREFIXO_EPC + "1" * 16, "x": antena_a.x, "y": antena_a.y}
     estado = EstadoSessao(1, "x", 1, "sim-l1", PROPORCAO, ANTENAS,
                           {"sim-easy-01": "easy/dev/hupaa/sim-l1/sim-easy-01/readings"}, [item])
-    assert [(porta, rssi) for _, _, porta, rssi, _ in estado.devidas(10.0, 0.2)] == [(1, RSSI_PERTO)]
+    assert [(porta, rssi) for _, _, porta, rssi, _, _ in estado.devidas(10.0, 0.2)] == [(1, RSSI_PERTO)]
     assert estado.devidas(10.1, 0.2) == []
     assert len(estado.devidas(10.2, 0.2)) == 1
     item.update(x=antena_b.x, y=antena_b.y)
-    assert [porta for _, _, porta, _, _ in estado.devidas(10.5, 0.2)] == [2]
+    assert [porta for _, _, porta, _, _, _ in estado.devidas(10.5, 0.2)] == [2]
     item.update(x=50, y=20)
     assert estado.devidas(11.0, 0.2) == []
 

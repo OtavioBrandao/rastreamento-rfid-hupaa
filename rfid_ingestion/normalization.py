@@ -114,6 +114,20 @@ def normalize(payload, topic, raw, settings, *, received_at_utc=None):
                 else datetime.now(timezone.utc).isoformat()
             )
             timestamp_format = "received_at_utc"
+        if "sim_lido_em" in payload:
+            # Simulador web com o tempo acelerado/adiantado: o instante vem do relógio
+            # da simulação. Só de leitores virtuais, fora de produção e nunca antes
+            # do recebimento (não serve para reescrever o passado).
+            if not READER_ID_VIRTUAL.fullmatch(reader_id):
+                raise ValueError("sim_lido_em só vale para leitores virtuais (sim-...)")
+            if getattr(settings, "app_env", "development") == "production":
+                raise ValueError("sim_lido_em recusado em produção")
+            simulado = utc_timestamp(payload["sim_lido_em"])
+            recebido = received_at_utc or datetime.now(timezone.utc).isoformat()
+            if (datetime.fromisoformat(simulado.replace("Z", "+00:00"))
+                    < datetime.fromisoformat(recebido.replace("Z", "+00:00")) - timedelta(seconds=120)):
+                raise ValueError("sim_lido_em anterior ao recebimento")
+            timestamp, epoch_ms, timestamp_format = simulado, False, "sim_clock"
         timestamp = utc_timestamp(timestamp, epoch_ms=epoch_ms)
         identity = b"rfid-v1\0" + topic.encode() + b"\0" + adapter.encode() + b"\0" + timestamp_format.encode() + b"\0" + raw
         event = dict(event_id="sha256:" + hashlib.sha256(identity).hexdigest(),

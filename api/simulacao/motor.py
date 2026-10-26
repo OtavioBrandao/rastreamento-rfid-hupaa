@@ -19,13 +19,16 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.orm import Session
 
 from api.logging_config import registrar_evento
 
+from . import relogio as relogio_sim
+from . import trajeto
 from .config import ConfigSimulador
 from .geometria import AntenaVirtual, antenas_do_layout, detectar
 from .publicador import PublicadorMultiLeitor
@@ -52,28 +55,56 @@ class EstadoSessao:
     ultima_deteccao: dict[str, str] = field(default_factory=dict)
     publicadas: int = 0
     erro_topologia: str | None = None
+    # Último instante simulado já avaliado e, por item/antena, a leitura mais
+    # recente ainda não publicada (o período limita a taxa, não o que foi visto).
+    sim_avaliado: datetime | None = None
+    pendentes: dict[tuple[str, str], tuple[datetime, AntenaVirtual, int, str]] = field(
+        default_factory=dict)
 
-    def devidas(self, agora: float, periodo: float) -> list[tuple[str, str, int, int, str]]:
-        """Leituras a publicar agora: (tópico, EPC, porta, RSSI, reader_id)."""
-        saida = []
+    def devidas(self, agora: float, periodo: float, sim_agora: datetime | None = None,
+                ) -> list[tuple[str, str, int, int, str, str | None]]:
+        """Leituras a publicar agora: (tópico, EPC, porta, RSSI, reader_id, lido_em).
+
+        Em trajeto, avalia vários instantes entre o ciclo anterior e este (no
+        relógio da simulação), para não pular antena em movimento rápido nem
+        com o tempo acelerado; cada leitura leva o instante em que a tag estava
+        no alcance. Parado, avalia só o instante atual (como antes).
+
+        Com ``sim_agora`` a leitura leva esse instante: duas antenas cruzadas no
+        mesmo ciclo chegariam ao ingestor juntas e, pelo horário de recebimento,
+        ficariam sem ordem (a passagem não seria confirmada).
+        """
+        fim = sim_agora or relogio_sim.real_agora()
+        inicio = self.sim_avaliado if self.sim_avaliado and self.sim_avaliado < fim else fim
+        self.sim_avaliado = fim
         self.no_alcance = {}
-        instante = datetime.now(timezone.utc).isoformat()
+        vivos = set()
         for item in self.itens:
-            alcance = detectar(item["x"], item["y"], self.antenas, self.proporcao)
-            if not alcance:
+            alcance = []
+            for instante, x, y in trajeto.amostras(item, inicio, fim):
+                alcance = detectar(x, y, self.antenas, self.proporcao)
+                if item.get("epc"):  # sem etiqueta: está no alcance, mas não há o que ler
+                    for antena, valor in alcance:
+                        self.pendentes[(item["id"], antena.chave)] = (instante, antena, valor,
+                                                                       item["epc"])
+            if item.get("epc"):
+                vivos.add((item["id"], item["epc"]))
+            if alcance:
+                self.no_alcance[item["id"]] = [antena.chave for antena, _ in alcance]
+        saida = []
+        for chave, (instante, antena, valor, epc) in sorted(self.pendentes.items(),
+                                                            key=lambda par: par[1][0]):
+            if (chave[0], epc) not in vivos:
+                del self.pendentes[chave]  # item removido ou etiqueta trocada
                 continue
-            self.no_alcance[item["id"]] = [antena.chave for antena, _ in alcance]
-            if not item.get("epc"):
-                continue  # sem etiqueta: está no alcance, mas não há o que ler
-            for antena, valor in alcance:
-                chave = (item["id"], antena.chave)
-                anterior = self.ultima_leitura.get(chave)
-                # Tolerância: o ciclo não cai exatamente no período.
-                if anterior is None or agora - anterior >= periodo - 0.01:
-                    self.ultima_leitura[chave] = agora
-                    self.ultima_deteccao[item["id"]] = instante
-                    saida.append((self.topicos[antena.reader_id], item["epc"], antena.porta, valor,
-                                  antena.reader_id))
+            anterior = self.ultima_leitura.get(chave)
+            # Tolerância: o ciclo não cai exatamente no período.
+            if anterior is None or agora - anterior >= periodo - 0.01:
+                del self.pendentes[chave]
+                self.ultima_leitura[chave] = agora
+                self.ultima_deteccao[chave[0]] = instante.isoformat()
+                saida.append((self.topicos[antena.reader_id], epc, antena.porta, valor,
+                              antena.reader_id, instante.isoformat() if sim_agora else None))
         return saida
 
     def publico(self) -> dict:
@@ -199,8 +230,16 @@ class MotorSimulacao:
                     estado.ultima_leitura = anterior.ultima_leitura
                     estado.ultima_deteccao = anterior.ultima_deteccao
                     estado.publicadas = anterior.publicadas
+                    estado.sim_avaliado = anterior.sim_avaliado
+                    estado.pendentes = anterior.pendentes
                 self._sessoes[linha.id] = estado
             return list(self._sessoes.values())
+
+    def _relogio(self) -> datetime:
+        """Instante simulado deste ciclo (o mesmo que API e telas usam)."""
+        real = relogio_sim.real_agora()
+        with Session(self.engine) as db:
+            return relogio_sim.do_banco(db, real).agora(real)
 
     def ciclo(self, agora: float) -> None:
         """Um passo: carrega sessões, publica o que é devido, confere PUBACKs."""
@@ -220,6 +259,7 @@ class MotorSimulacao:
             self._publicador = publicador
             self.conectado = True
             registrar_evento(logger, "simulador_conectado", destino=publicador.destino)
+        sim_agora = self._relogio()
         for sessao in sessoes:
             try:
                 for antena in sessao.antenas:
@@ -230,9 +270,9 @@ class MotorSimulacao:
             except ValueError as erro:
                 sessao.erro_topologia = str(erro)
                 continue
-            for topico, epc, porta, rssi, reader_id in sessao.devidas(
-                    agora, self.config.periodo_leitura_s):
-                self._publicador.emitir(topico, epc, porta, rssi, reader_id)
+            for topico, epc, porta, rssi, reader_id, lido_em in sessao.devidas(
+                    agora, self.config.periodo_leitura_s, sim_agora):
+                self._publicador.emitir(topico, epc, porta, rssi, reader_id, lido_em)
                 sessao.publicadas += 1
         self._publicador.conferir()
 

@@ -14,7 +14,7 @@ Mapeamento de erro:
 - payload inválido                           -> 422, direto pelo Pydantic
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -29,6 +29,8 @@ from api.schemas_equipamento import (
     EquipamentoResposta,
 )
 from api.schemas_movimentacao import MovimentacaoPagina, MovimentacaoResposta
+from api.simulacao import config as config_simulador
+from api.simulacao import relogio as relogio_sim
 from api.timestamps import em_utc
 from db.models import Equipamento
 from rfid_location.recency import classify_recency, recency_threshold_from_env
@@ -80,9 +82,21 @@ def listar_movimentacoes(
     )
 
 
-def get_recency_context() -> tuple[datetime, timedelta]:
-    """Relógio UTC e configuração da API, capturados uma vez por request."""
-    return datetime.now(timezone.utc), recency_threshold_from_env()
+def get_recency_context(db: Session = Depends(get_db)) -> tuple[datetime, timedelta]:
+    """Relógio UTC e configuração da API, capturados uma vez por request.
+
+    Com o simulador web ligado (nunca em produção), "agora" é o relógio da
+    simulação: avançar o tempo na demonstração deixa os equipamentos
+    desatualizados de verdade, pela mesma regra de recência.
+    """
+    agora = relogio_sim.real_agora()
+    try:
+        habilitado = config_simulador.carregar().habilitado
+    except ValueError:
+        habilitado = False
+    if habilitado:
+        agora = relogio_sim.do_banco(db, agora).agora(agora)
+    return agora, recency_threshold_from_env()
 
 
 def para_resposta(
