@@ -27,6 +27,11 @@ const TONS: { tom: Evento['tom']; rotulo: string }[] = [
   { tom: 'ok', rotulo: 'Passagem confirmada' }, { tom: 'aviso', rotulo: 'Passagem sem confirmação' },
   { tom: 'info', rotulo: 'Detectado no portal, aguardando confirmação' }, { tom: 'alerta', rotulo: 'Zona restrita' },
 ]
+/** Cores da planta (mapaConfig), como o hospital as lê; o marrom fica de fora. */
+const LEGENDA_PLANTA = [
+  { cor: '#00E820', nome: 'Circulação vertical' }, { cor: '#12BCE8', nome: 'Sala de aula' },
+  { cor: '#67008F', nome: 'Corredores' }, { cor: '#FFCA08', nome: 'Pacientes' }, { cor: '#F31217', nome: 'Serviço' },
+]
 const hora = (ms: number) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 type Notificacao = { chave: string; texto: string }
@@ -173,19 +178,27 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
       label: `${leitor.nome} · ${antena.nome}`, detail: `Porta ${antena.porta}${antena.portal ? ` · ${config.portais.find((p) => p.chave === antena.portal)?.nome ?? ''} lado ${antena.lado?.toUpperCase()}` : ''}${lendo.has(antena.chave) ? ' · lendo agora' : ''}`,
       pulse: lendo.has(antena.chave), pulseKey: lendo.get(antena.chave) }] : []),
   ])
+  const naRestrita = (monitor?.alertas_restritos ?? []).filter((alerta) => alerta.recente)
   const svgExtras = <>
     {cobertura && config.leitores.flatMap((leitor) => leitor.antenas).map((antena) => antena.posicao && <path key={`cob-${antena.chave}`} className="hu-cobertura" d={contornoCobertura(antena, config.proporcao)}/>)}
-    {config.zonas.map((zona) => zona.area && <rect key={`lim-${zona.chave}`} className={`hu-limite${zona.restrita ? ' restrita' : ''}`} x={zona.area.x} y={zona.area.y} width={zona.area.largura} height={zona.area.altura}/>)}
+    {/* Contorno claro por baixo e tracejado escuro por cima: a zona aparece sobre qualquer cor da planta. */}
+    {config.zonas.map((zona) => zona.area && <g key={`lim-${zona.chave}`}>
+      <rect className={`hu-zona-fundo${zona.restrita ? ' restrita' : ''}${zona.restrita && naRestrita.length ? ' alerta' : ''}`} x={zona.area.x} y={zona.area.y} width={zona.area.largura} height={zona.area.altura}/>
+      <rect className="hu-limite-halo" x={zona.area.x} y={zona.area.y} width={zona.area.largura} height={zona.area.altura}/>
+      <rect className={`hu-limite${zona.restrita ? ' restrita' : ''}`} x={zona.area.x} y={zona.area.y} width={zona.area.largura} height={zona.area.altura}/>
+    </g>)}
   </>
   const contagem = (status: AssetStatus) => items.filter((item) => item.status === status && zones.some((z) => item.ultima_zona?.id === z.zoneId)).length
-  const naRestrita = (monitor?.alertas_restritos ?? []).filter((alerta) => alerta.recente)
 
   return <div className="map-main hu-tracking">
     {notificacoes.length > 0 && <div className="hu-toasts" role="alert">{notificacoes.map((n) => <p key={n.chave} className="hu-toast">⚠ {n.texto}
       <button type="button" aria-label="Dispensar notificação" onClick={() => setNotificacoes((velhas) => velhas.filter((v) => v.chave !== n.chave))}>×</button></p>)}</div>}
-    {naRestrita.length > 0 && <p className="hu-restrita-agora" role="status">Na área restrita agora: {naRestrita.map((a) => a.equipamento?.nome ?? `Tag …${a.epc.slice(-4)}`).join(', ')}</p>}
+    {naRestrita.length > 0 && <p className="hu-restrita-agora" role="status"><strong>Atividade suspeita</strong> — na zona restrita agora: {naRestrita.map((a) => a.equipamento?.nome ?? `Tag …${a.epc.slice(-4)}`).join(', ')}</p>}
     <MapWorkspace mode="hospital" zones={zones} portals={[]} items={items} onSelect={onSelect} markers={markers} areas={hospitalContextAreas} svgExtras={svgExtras}
       below={<div className="hu-legenda">
+        <ul className="hu-legend" aria-label="Cores da planta do HU">{LEGENDA_PLANTA.map((item) =>
+          <li key={item.nome}><span className="hu-planta-cor" style={{ background: item.cor }}/>{item.nome}</li>)}
+          <li><span className="hu-planta-cor hu-planta-zona"/>Limite de zona</li><li><span className="hu-planta-cor hu-planta-restrita"/>Zona restrita</li></ul>
         <ul className="hu-legend" aria-label="Cores dos equipamentos, da maior para a menor prioridade de alerta">{PRIORIDADE_ALERTA.map((status) =>
           <li key={status}><span className={`map-legend-dot marker-${status}`}/>{ROTULO_STATUS[status]} ({contagem(status)})</li>)}</ul>
         <label className="hu-cobertura-toggle"><input type="checkbox" checked={cobertura} onChange={(e) => setCobertura(e.target.checked)}/> Áreas de cobertura

@@ -50,8 +50,11 @@ def test_seis_antes_nove_ao_iniciar_onze_depois_do_cadastro_e_reinicio_previsive
 
         sessao = cenario_demo.iniciar(session, None)
         assert len(_ativos(session)) == 9
-        novos = [e for e in _ativos(session) if e.ultima_zona_id is None]
-        assert len(novos) == 3 and all(e.ultima_deteccao_em is None for e in novos)
+        # Os três novos vieram de outro andar (elevador central): zona fora da planta, chegada recente.
+        novos = [e for e in _ativos(session) if e.ultima_zona is not None and e.ultima_zona.nome == cenario_demo.ZONA_OUTRO_ANDAR]
+        assert len(novos) == 3
+        agora = relogio.do_banco(session).agora(datetime.now(UTC))
+        assert {classify_recency(e.ultima_deteccao_em, agora, limiar) for e in novos} == {"recente"}
         layout = sessao.layout
         restrita = next(z for z in layout["zonas"] if z["restrita"])
         antenas = antenas_do_layout(layout)

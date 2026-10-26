@@ -101,6 +101,11 @@ describe('acompanhamento do HU', () => {
       antena: 'Antena 1', porta: 1, leituras: 3, primeira_leitura_em: entrada, ultima_leitura_em: agora(), recente: true, equipamento: { id: 7, nome: 'Maca HU-07' } }]
     render(<MapaHUAoVivo topology={topology} items={itens} onSelect={() => undefined}/>)
     expect(await screen.findByText(/Maca HU-07 entrou na área restrita/)).toBeInTheDocument()
+    // No mapa, a zona restrita pisca e o aviso diz que é atividade suspeita.
+    expect(document.querySelector('.hu-zona-fundo.restrita.alerta')).not.toBeNull()
+    expect(screen.getByText('Atividade suspeita')).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: 'Cores da planta do HU' })).toHaveTextContent(/Circulação vertical.*Sala de aula.*Corredores.*Pacientes.*Serviço/)
+    expect(screen.getByRole('list', { name: 'Cores da planta do HU' })).not.toHaveTextContent(/Administrativo/)
     fireEvent.click(screen.getByRole('button', { name: 'Dispensar notificação' }))
     // Várias consultas depois, o item continua na zona: nenhuma notificação nova.
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 3500)) })

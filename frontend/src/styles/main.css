@@ -2510,3 +2510,19 @@ button:disabled { opacity:.55; cursor:default }
 .hu-ev-swatch.hu-ev-ok { border-color:#1f9d55 } .hu-ev-swatch.hu-ev-info { border-color:#0b6fb8 }
 .hu-ev-swatch.hu-ev-aviso { border-color:#f2b705 } .hu-ev-swatch.hu-ev-alerta { border-color:#c62828 }
 .sim-portal-regra { font-size:.84rem; margin:4px 0 }
+/* Avisos do simulador sem deslocar o mapa (o desenho do trajeto depende da posição). */
+.sim-mensagens { position:fixed; left:16px; bottom:16px; z-index:40; display:grid; gap:6px; max-width:min(520px, calc(100vw - 32px)); pointer-events:none }
+.sim-mensagens > p { margin:0; pointer-events:auto; box-shadow:0 6px 18px rgba(16,42,66,.18); background:#fff; border-radius:8px; padding:8px 12px }
+/* Zonas bem visíveis sobre a planta e alerta piscando na zona restrita. */
+.hu-zona-fundo { fill:rgba(255,255,255,.18); stroke:none }
+.hu-zona-fundo.restrita { fill:rgba(122,31,143,.12) }
+.hu-zona-fundo.alerta { animation:hu-pisca 1s steps(2, start) infinite }
+@keyframes hu-pisca { 0% { fill:rgba(198,40,40,.55) } 100% { fill:rgba(198,40,40,.08) } }
+@media (prefers-reduced-motion: reduce) { .hu-zona-fundo.alerta { animation:none; fill:rgba(198,40,40,.4) } }
+.hu-limite-halo { fill:none; stroke:#fff; stroke-width:6; vector-effect:non-scaling-stroke; stroke-opacity:.9 }
+.hu-limite { stroke-width:3 !important }
+.hu-planta-cor { display:inline-block; width:14px; height:14px; border-radius:3px; margin-right:6px; vertical-align:-2px; border:1px solid rgba(16,42,66,.25) }
+.hu-planta-zona { background:#fff; border:2px dashed #102a42 }
+.hu-planta-restrita { background:rgba(198,40,40,.35); border:2px dashed #7a1f8f }
+.hu-restrita-agora { animation:hu-texto-pisca 1s steps(2, start) infinite }
+@keyframes hu-texto-pisca { 0% { color:#c62828 } 100% { color:#5c0f0b } }

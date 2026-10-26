@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LayoutEditor, redimensionar } from '../components/simulador/LayoutEditor'
-import { SimulatorControlPage } from '../pages/SimulatorControlPage'
+import { SimulatorControlPage, uniformizar, VELOCIDADE } from '../pages/SimulatorControlPage'
 import { aplicarPadroesDeAntena, alcanceNaDirecao, contornoCobertura, emTrajeto, inRange, pendencias, posicaoNoTempo, zoneAt, type LayoutConfig, type Sessao } from '../services/simulacao'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
@@ -233,9 +233,11 @@ describe('aba de controle (simulador limpo)', () => {
     expect(envio.url.pathname).toBe('/api/simulacao/sessoes/0123456789abcdef/itens/it-1/trajeto')
     const pontos: { x: number; y: number; t: number }[] = JSON.parse(String(envio.init.body)).pontos
     expect(pontos[0]).toEqual({ x: 28, y: 80, t: 0 })
+    // Velocidade constante (o mouse andou 12 unidades em 0,5 s; o item anda a VELOCIDADE),
+    // mas a parada de 5 s com o botão pressionado continua no trajeto.
     const parados = pontos.filter((p) => p.x === 40)
-    expect(Math.min(...parados.map((p) => p.t))).toBeCloseTo(0.5)
-    expect(Math.max(...parados.map((p) => p.t))).toBeGreaterThanOrEqual(5.5)  // a pausa foi preservada
+    expect(Math.min(...parados.map((p) => p.t))).toBeCloseTo(0.5 + 12 / VELOCIDADE)  // 0,5 s parado antes de mover também é parada
+    expect(Math.max(...parados.map((p) => p.t)) - Math.min(...parados.map((p) => p.t))).toBeGreaterThanOrEqual(5)
     expect(pontos[pontos.length - 1]).toMatchObject({ x: 60, y: 80 })
     expect(pontos.every((p, i) => i === 0 || p.t >= pontos[i - 1].t)).toBe(true)
   })
@@ -307,6 +309,11 @@ describe('aba de controle (simulador limpo)', () => {
 })
 
 describe('trajeto executado', () => {
+  it('anda em velocidade constante, sem depender da pressa do mouse, e mantém as paradas', () => {
+    const rapido = uniformizar([{ x: 10, y: 10, t: 0 }, { x: 30, y: 10, t: 0.05 }, { x: 30, y: 10, t: 3.05 }, { x: 30, y: 50, t: 3.1 }], 2)
+    expect(rapido.map((p) => p.t)).toEqual([0, 20 / VELOCIDADE, 20 / VELOCIDADE + 3, 20 / VELOCIDADE + 3 + 20 / VELOCIDADE])
+  })
+
   it('interpola igual ao motor, respeitando pausas e o fim', () => {
     const inicio = '2026-10-26T10:00:00.000Z'
     const item = { id: 'i', nome: 'Maca', tipo: null, epc: null, x: 50, y: 10, x0: 0, y0: 0,

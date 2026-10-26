@@ -35,10 +35,12 @@ from api.service_tipos_equipamento import criar as criar_tipo
 from db.models import (
     AssociacaoTagEquipamento,
     Equipamento,
+    Setor,
     SimulacaoLayout,
     SimulacaoSessao,
     Tag,
     TipoEquipamento,
+    Zona,
 )
 from rfid_location.recency import recency_threshold_from_env
 from rfid_location.service import corrigir_localizacao
@@ -198,12 +200,54 @@ def preparar(db: Session, *, encerrar_sessoes: bool = True) -> dict:
     return estado(db)
 
 
+ZONA_OUTRO_ANDAR = "Outro andar (elevador)"
+SETOR_OUTRO_ANDAR = "Chegada por elevador"
+JUSTIFICATIVA_CHEGADA = "Cenário de demonstração do HU: chegou de outro andar pelo elevador central"
+
+
+def _zona_outro_andar(db: Session, zona_do_hu: int) -> int:
+    """Zona fora da planta ("Outro andar"), num setor próprio do mesmo andar do HU.
+
+    Fica fora do setor do layout de propósito: aplicar o layout desativa as zonas
+    do setor que não estão no desenho.
+    """
+    andar_id = db.scalar(select(Setor.andar_id).join(Zona, Zona.setor_id == Setor.id).where(Zona.id == zona_do_hu))
+    setor = db.scalar(select(Setor).where(Setor.andar_id == andar_id,
+                                         Setor.nome_normalizado == normalizar_nome(SETOR_OUTRO_ANDAR)))
+    if setor is None:
+        setor = Setor(andar_id=andar_id, nome=SETOR_OUTRO_ANDAR, nome_normalizado=normalizar_nome(SETOR_OUTRO_ANDAR))
+        db.add(setor)
+        db.flush()
+    zona = db.scalar(select(Zona).where(Zona.setor_id == setor.id,
+                                       Zona.nome_normalizado == normalizar_nome(ZONA_OUTRO_ANDAR)))
+    if zona is None:
+        zona = Zona(setor_id=setor.id, nome=ZONA_OUTRO_ANDAR, nome_normalizado=normalizar_nome(ZONA_OUTRO_ANDAR),
+                    descricao="Equipamentos que chegaram de outro andar pelo elevador central")
+        db.add(zona)
+        db.flush()
+    zona.ativo = setor.ativo = True
+    return zona.id
+
+
 def _cadastrar_novos(db: Session) -> None:
-    """Os três que chegam ao iniciar (cadastrados, ainda sem zona)."""
+    """Os três que chegam ao iniciar: cadastrados e vindos de outro andar (elevador).
+
+    A última localização deles é "Outro andar (elevador)", há instantes: acabaram de
+    chegar ao centro do mapa e ainda não passaram por nenhum portal deste andar.
+    """
     ativos = _ativos_do_cenario(db)
+    registro = layout_padrao(db)
+    zona_hu = next(iter((registro.vinculos or {}).get("zonas", {}).values()), None)
+    chegada = relogio_sim.do_banco(db).agora(service._agora()) - timedelta(seconds=30)
     for indice, (nome, tipo, epc) in enumerate(EQUIPAMENTOS_NOVOS, start=len(EQUIPAMENTOS_ANTIGOS) + 1):
-        if _identificador(indice) not in ativos:
-            _cadastrar(db, indice, nome, tipo, epc)
+        if _identificador(indice) in ativos:
+            continue
+        equipamento = _cadastrar(db, indice, nome, tipo, epc)
+        if zona_hu is not None:
+            corrigir_localizacao(db.connection(), equipment_id=equipamento.id,
+                                 destination_zone_id=_zona_outro_andar(db, zona_hu),
+                                 movimentada_em=chegada, justificativa=JUSTIFICATIVA_CHEGADA)
+            db.commit()
 
 
 def _itens(db: Session, layout: dict) -> list[dict]:

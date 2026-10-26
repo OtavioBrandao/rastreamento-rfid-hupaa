@@ -156,6 +156,35 @@ ser a configuração das apresentações. Outros layouts continuam como antes.
 - O portal de baixo do layout salvo no Neon é renomeado para "Portal para
   Zona 3" depois que os ajustes manuais forem salvos no site.
 
+### Ajustes para a gravação do vídeo
+
+- **Movimento em velocidade constante:**
+  - O item percorre o caminho desenhado a **5 unidades de largura da planta
+    por segundo**, sem depender da pressa do mouse.
+  - As paradas desenhadas, com o botão pressionado e o mouse parado, continuam
+    no trajeto.
+  - **Motivo:** no ensaio de 26/10, das 25 passagens 6 ficaram "ambíguas", todas
+    no portal Zona 1 ↔ Zona 2, porque as duas antenas foram lidas a menos de
+    100 ms uma da outra (`RFID_DIRECTION_AMBIGUITY_MS`). Os itens atravessavam o
+    portal em frações de segundo, como se teletransportassem.
+- **Mensagens sem deslocar o mapa:** "Executando o trajeto", erros e avisos do
+  simulador flutuam no canto inferior da tela. Antes eles empurravam o mapa
+  durante o desenho e o mouse caía em outro lugar.
+- **Mapa do HU:**
+  - **Zonas mais visíveis:** contorno branco por baixo e tracejado escuro por
+    cima, com um leve fundo.
+  - **Legenda das cores da planta:** circulação vertical, sala de aula,
+    corredores, pacientes e serviço; o marrom ficou de fora.
+  - **Alerta da zona restrita:** enquanto há item lá, a zona **pisca em
+    vermelho** e o aviso "Atividade suspeita" mostra quem está nela. A
+    notificação de entrada continua aparecendo uma vez por entrada.
+- **Itens do centro vêm de outro andar:**
+  - Os três que surgem ao iniciar ficam com última localização **"Outro andar
+    (elevador)"**, uma zona fora da planta, num setor próprio, registrada há
+    instantes por correção justificada.
+  - Eles aparecem na aba "Outras zonas" como recém-chegados.
+  - A próxima passagem confirmada leva cada um para a zona do portal.
+
 ## Validação
 
 - `tests/test_cenario_demo.py`:

@@ -29,6 +29,27 @@ function registrarParada(desenho: Desenho) {
   else desenho.pontos.push({ x: desenho.ultimo.x, y: desenho.ultimo.y, t })
 }
 
+/** Velocidade de caminhada no trajeto executado, em unidades de largura da planta por segundo. */
+export const VELOCIDADE = 5
+
+/**
+ * Refaz os tempos do desenho em velocidade constante: o caminho e as paradas (botão
+ * pressionado com o mouse parado) são os desenhados, mas o andamento não depende da
+ * pressa do mouse. Movimento brusco faria as antenas lerem quase juntas e a passagem
+ * ficar ambígua. A distância usa a escala real da planta (y dividido pela proporção).
+ */
+export function uniformizar(pontos: PontoTrajeto[], proporcao: number): PontoTrajeto[] {
+  const saida: PontoTrajeto[] = [{ x: pontos[0].x, y: pontos[0].y, t: 0 }]
+  let t = 0
+  for (let i = 1; i < pontos.length; i++) {
+    const a = pontos[i - 1], b = pontos[i]
+    const distancia = Math.hypot(b.x - a.x, (b.y - a.y) / proporcao)
+    t += distancia < 1e-6 ? Math.max(0, b.t - a.t) : distancia / VELOCIDADE
+    saida.push({ x: b.x, y: b.y, t: Math.round(t * 1000) / 1000 })
+  }
+  return saida
+}
+
 function comprimento(pontos: PontoTrajeto[]) {
   let total = 0
   for (let i = 1; i < pontos.length; i++) total += Math.hypot(pontos[i].x - pontos[i - 1].x, pontos[i].y - pontos[i - 1].y)
@@ -151,7 +172,7 @@ export function SimulatorControlPage({ codigo, canEdit }: { codigo: string; canE
     pararPausa()
     soltarCaptura(pointerId)
     registrarParada(atual)
-    const pontos = atual.pontos
+    const pontos = uniformizar(atual.pontos, session?.layout.proporcao ?? 1)
     if (comprimento(pontos) < 0.5) { setPreview(null); return }  // clique: só seleciona
     setNotice('Executando o trajeto desenhado…')
     try {
@@ -184,10 +205,13 @@ export function SimulatorControlPage({ codigo, canEdit }: { codigo: string; canE
           : <button type="button" className="admin-primary" onClick={() => act(() => sessionAction(codigo, 'retomar'))}>Retomar</button>)}
       </div>
     </header>
-    {error && <p className="admin-error" role="alert">{error}</p>}
-    {(motor?.erro || motor?.sessao?.erro) && <p className="admin-error" role="alert">Falha na publicação das leituras: {motor?.erro ?? motor?.sessao?.erro}</p>}
-    {closed && <p className="admin-warning" role="note">Esta sessão foi encerrada. Inicie outra no painel do simulador.</p>}
-    {notice && <p className="sim-notice" role="status">{notice}</p>}
+    {/* Mensagens flutuam sobre a página: nunca empurram o mapa enquanto se desenha um trajeto. */}
+    <div className="sim-mensagens">
+      {error && <p className="admin-error" role="alert">{error}</p>}
+      {(motor?.erro || motor?.sessao?.erro) && <p className="admin-error" role="alert">Falha na publicação das leituras: {motor?.erro ?? motor?.sessao?.erro}</p>}
+      {closed && <p className="admin-warning" role="note">Esta sessão foi encerrada. Inicie outra no painel do simulador.</p>}
+      {notice && <p className="sim-notice" role="status">{notice}</p>}
+    </div>
     <div className="sim-control-plan">
       <SimPlan ref={planRef} layout={session.layout} label="Planta do hospital com os equipamentos da simulação" options={{ showCoverage: false }}
         className="sim-plan-control" onPointerMove={onMove} onPointerUp={(event) => { void finalizar(event.pointerId) }}
