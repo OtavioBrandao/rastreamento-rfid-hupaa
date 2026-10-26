@@ -273,7 +273,7 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
           </div>}
           {desenho && <div className="sim-drawing" style={{ left: `${desenho.x}%`, top: `${desenho.y}%`, width: `${desenho.w}%`, height: `${desenho.h}%` }}/>}
           {config.portais.map((portal) => portal.posicao && <Marcador key={portal.chave} tipo="portal" posicao={portal.posicao} titulo={`Portal ${portal.nome}`}
-            linhas={[`${config.zonas.find((z) => z.chave === portal.zona_a)?.nome ?? '?'} (A) ↔ ${config.zonas.find((z) => z.chave === portal.zona_b)?.nome ?? '?'} (B)`]}
+            linhas={[`Entre ${config.zonas.find((z) => z.chave === portal.zona_a)?.nome ?? '?'} (lado A) e ${config.zonas.find((z) => z.chave === portal.zona_b)?.nome ?? '?'} (lado B)`]}
             rotulo={ver.nomes ? portal.nome : null} selecionado={selection?.chave === portal.chave}
             onPointerDown={(e) => startDrag(e, { kind: 'portal', chave: portal.chave, grupo: novoGrupo(), original: config }, { kind: 'portal', chave: portal.chave })}/>)}
           {config.leitores.map((leitor) => <div key={leitor.chave}>
@@ -306,7 +306,7 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
             <label>Nome<input value={zona.nome} maxLength={80} disabled={disabled} onChange={(e) => update((d) => { d.zonas.find((z) => z.chave === zona.chave)!.nome = e.target.value }, `nome-${zona.chave}`)}/></label>
             <label>Cor do contorno<input type="color" value={zona.cor} disabled={disabled} onChange={(e) => update((d) => { d.zonas.find((z) => z.chave === zona.chave)!.cor = e.target.value }, `cor-${zona.chave}`)}/></label>
             <label className="checkbox-label"><input type="checkbox" checked={zona.restrita} disabled={disabled} onChange={(e) => update((d) => { d.zonas.find((z) => z.chave === zona.chave)!.restrita = e.target.checked })}/> Área restrita (você decide qual circulação vertical é a escada)</label>
-            {zona.restrita && <label>Leitor da zona restrita<select value={config.leitores.find((l) => l.alerta_area_restrita && l.antenas.some((a) => a.zona === zona.chave))?.chave ?? ''} disabled={disabled}
+            {zona.restrita && <label>Portal de zona restrita (leitor)<select value={config.leitores.find((l) => l.alerta_area_restrita && l.antenas.some((a) => a.zona === zona.chave))?.chave ?? ''} disabled={disabled}
               onChange={(e) => update((d) => {
                 // Um leitor só vigia a zona restrita: todas as antenas dele passam a ler presença nela
                 // (sem portal); uma antena basta e as demais são opcionais. Os outros deixam de alertar.
@@ -316,7 +316,7 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
                   else if (leitor.alerta_area_restrita && leitor.antenas.some((a) => a.zona === zona.chave)) leitor.alerta_area_restrita = false
                 }
               })}><option value="">Nenhum</option>{config.leitores.map((l) => <option key={l.chave} value={l.chave}>{l.nome} ({l.antenas.length} antena{l.antenas.length === 1 ? '' : 's'})</option>)}</select>
-              <small>Qualquer leitor serve; uma antena basta. A segunda é opcional. Uma leitura gravada nele avisa a entrada.</small></label>}
+              <small>Qualquer leitor serve; uma antena basta (a segunda é opcional). Com uma antena ele não é portal de passagem: é o portal de zona restrita, e uma leitura gravada nele avisa a entrada.</small></label>}
             {zona.area ? <fieldset className="sim-area-fields" disabled={disabled}><legend>Posição e tamanho (0–100)</legend>
               {(['x', 'y', 'largura', 'altura'] as const).map((campo) => <label key={campo}>{campo === 'x' ? 'Esquerda' : campo === 'y' ? 'Topo' : campo === 'largura' ? 'Largura' : 'Altura'}
                 <input type="number" step={0.5} min={0} max={100} value={zona.area![campo]} onChange={(e) => setArea(campo, Number(e.target.value))}/></label>)}
@@ -342,6 +342,10 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
             })}>{config.zonas.map((z) => <option key={z.chave} value={z.chave}>{z.nome}</option>)}</select></label>
             {portal.zona_a === portal.zona_b && <small className="field-error">O portal precisa ligar duas zonas diferentes.</small>}
             <p className="muted-text">Antenas: {config.leitores.flatMap((l) => l.antenas.filter((a) => a.portal === portal.chave).map((a) => `${l.nome}/${a.nome} (${(a.lado ?? '?').toUpperCase()})`)).join(', ') || 'nenhuma'}</p>
+            <p className="sim-portal-regra" role="note">{config.leitores.some((l) => new Set(l.antenas.filter((a) => a.portal === portal.chave).map((a) => a.lado)).size === 2)
+              ? 'Portal completo: um leitor com pelo menos duas antenas, uma de cada lado.'
+              : 'Ainda não conta como portal: um portal é um leitor com pelo menos duas antenas, uma de cada lado. (Leitor com uma antena só é portal de zona restrita.)'}</p>
+            <small className="muted-text">Dica de nome: “Portal para a {config.zonas.find((z) => z.chave === portal.zona_b)?.nome ?? 'zona'}” — pela zona de destino, sem setas de direção.</small>
             <div className="sim-form-actions"><button type="button" disabled={disabled} onClick={() => setTool({ kind: 'posicionar', alvo: 'portal', chave: portal.chave })}>{portal.posicao ? 'Reposicionar marcador' : 'Posicionar no mapa'}</button>
               <button type="button" className="danger" disabled={disabled} onClick={() => removePortal(portal.chave)}>Remover portal</button></div>
             <button type="button" className="link-button" onClick={() => setSelection(null)}>← Visão geral</button>
@@ -379,7 +383,7 @@ function Overview({ config, onSelect, onPlace, onDefaults }: { config: LayoutCon
     <ul>{config.portais.map((portal) => <li key={portal.chave}><button type="button" className="link-button" onClick={() => onSelect({ kind: 'portal', chave: portal.chave })}>{portal.nome}</button>{!portal.posicao && <span className="tag-chip tag-unknown">sem marcador</span>}</li>)}</ul>
     <h3>Leitores ({config.leitores.length})</h3>
     <ul>{config.leitores.map((leitor) => <li key={leitor.chave}><button type="button" className="link-button" onClick={() => onSelect({ kind: 'leitor', chave: leitor.chave })}>{leitor.nome} · {leitor.modelo === 'DR_MAX' ? 'DR Max' : 'EZ700'} · {leitor.antenas.length} antena(s)</button>
-      {(leitor.alerta_area_restrita || zonaRestritaDoLeitor(config, leitor)) && <span className="tag-chip tag-restricted" title="Detecta a presença na área restrita">zona restrita</span>}
+      {(leitor.alerta_area_restrita || zonaRestritaDoLeitor(config, leitor)) && <span className="tag-chip tag-restricted" title="Leitor de uma antena que detecta a presença na zona restrita">portal de zona restrita</span>}
       {(!leitor.posicao || leitor.antenas.some((a) => !a.posicao)) && (onPlace
         ? <button type="button" className="tag-chip tag-unknown sim-chip-action" title="Clique aqui e depois na planta" onClick={() => onPlace(leitor)}>posicionar</button>
         : <span className="tag-chip tag-unknown">posicionar</span>)}</li>)}</ul>
@@ -396,10 +400,10 @@ function NewPortal({ config, disabled, onCreate }: { config: LayoutConfig; disab
   const nome = (chave: string) => config.zonas.find((z) => z.chave === chave)?.nome ?? '?'
   return <span className="sim-new-portal">
     <select aria-label="Zona do lado A" value={a} onChange={(e) => setA(e.target.value)}>{config.zonas.map((z) => <option key={z.chave} value={z.chave}>{z.nome}</option>)}</select>
-    <span aria-hidden="true">↔</span>
+    <span>e</span>
     <select aria-label="Zona do lado B" value={b} onChange={(e) => setB(e.target.value)}>{config.zonas.map((z) => <option key={z.chave} value={z.chave}>{z.nome}</option>)}</select>
     <label className="checkbox-label"><input type="checkbox" checked={comLeitor} onChange={(e) => setComLeitor(e.target.checked)}/> com leitor e antenas</label>
-    <button type="button" className="admin-primary" disabled={!a || a === b} onClick={() => { onCreate(`${nome(a)} ↔ ${nome(b)}`, a, b, comLeitor); setOpen(false) }}>Criar portal</button>
+    <button type="button" className="admin-primary" disabled={!a || a === b} onClick={() => { onCreate(`Portal para a ${nome(b)}`, a, b, comLeitor); setOpen(false) }}>Criar portal</button>
     <button type="button" onClick={() => setOpen(false)}>Cancelar</button>
   </span>
 }
@@ -447,10 +451,10 @@ function ReaderForm({ config, leitor, focus, disabled, onChange, onPosition, onR
       l.alerta_area_restrita = e.target.checked
       const zona = config.zonas.find((z) => z.restrita)?.chave
       if (e.target.checked && zona) l.antenas.forEach((a) => { if (!a.portal) a.zona = zona })
-    })}/> Alerta de área restrita (uma antena basta)</label>
-    {(leitor.alerta_area_restrita || restrita) && <p className="sim-restricted-note" role="note"><strong>Leitor da área restrita.</strong> {leitor.alerta_area_restrita
+    })}/> Portal de zona restrita (uma antena basta)</label>
+    {(leitor.alerta_area_restrita || restrita) && <p className="sim-restricted-note" role="note"><strong>Portal de zona restrita.</strong> {leitor.alerta_area_restrita
       ? 'Cada leitura gravada pelo sistema numa antena dele vira alerta, sem precisar de lado A nem de passagem. A antena fica dentro da zona monitorada, sem portal.'
-      : `Ele detecta a entrada em “${restrita!.nome}” pelos portais (lado B). Marque “Alerta de área restrita” para avisar já na primeira leitura.`}</p>}
+      : `Ele detecta a entrada em “${restrita!.nome}” pelos portais (lado B). Marque “Portal de zona restrita” para avisar já na primeira leitura.`}</p>}
     <div className="sim-form-actions"><button type="button" disabled={disabled} onClick={() => onPosition('leitor', leitor.chave)}>{leitor.posicao ? 'Reposicionar leitor' : 'Posicionar leitor'}</button></div>
     <h4>Antenas ({leitor.antenas.length}/{MAX_ANTENAS})</h4>
     {leitor.antenas.map((antena) => <fieldset key={antena.chave} className={`sim-antenna-form ${focus === antena.chave ? 'focused' : ''}`} disabled={disabled}>

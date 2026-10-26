@@ -329,7 +329,7 @@ def test_ponto_unico_e_avisos_de_sobreposicao_consideram_a_visada():
 def test_leitor_de_area_restrita_sem_zona_restrita_gera_aviso():
     configuracao = layout_teste_rapido("hupaa")
     next(z for z in configuracao["zonas"] if z["restrita"])["restrita"] = False
-    assert any("avisa área restrita" in t for t in avisos(Layout.model_validate(configuracao)))
+    assert any("é portal de zona restrita" in t for t in avisos(Layout.model_validate(configuracao)))
 
 
 def test_antena_direcional_le_mais_na_frente_que_atras():

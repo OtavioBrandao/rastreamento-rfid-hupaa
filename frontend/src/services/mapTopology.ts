@@ -31,6 +31,6 @@ export function bindPortals(config: PortalPosition[], topology: MapTopology, zon
       && (position.portalId !== undefined ? portal.id === position.portalId : portal.nome === position.portalName)
       && portal.zona_a_id === a.zoneId && portal.zona_b_id === b.zoneId)
     return matches.length === 1 ? [{ ...position, portalId: matches[0].id, name: matches[0].nome,
-      detail: `Lado A: ${a.name} ↔ Lado B: ${b.name}` }] : []
+      detail: `Entre ${a.name} (lado A) e ${b.name} (lado B)` }] : []
   })
 }

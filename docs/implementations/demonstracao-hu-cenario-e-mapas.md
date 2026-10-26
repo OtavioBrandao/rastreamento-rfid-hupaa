@@ -126,6 +126,27 @@ ser a configuração das apresentações. Outros layouts continuam como antes.
    - Recriar, em vez de "voltar no tempo", impede que passagens antigas sejam
      reprojetadas nos equipamentos.
 
+### Nomenclatura dos portais e passagens detalhadas (pedido seguinte)
+
+- **Portal = um leitor com pelo menos duas antenas**, uma de cada lado. O painel
+  do portal no editor diz se ele está completo. Lados em leitores diferentes
+  continuam funcionando, mas aparecem como "ainda não conta como portal". Isso
+  é informação, não bloqueia salvar.
+- **Leitor com uma antena** que vigia a zona restrita passa a se chamar **portal
+  de zona restrita**: no editor, nos avisos e na linha do tempo.
+- **Nomes pelo destino:** portais novos se chamam **"Portal para a Zona N"**,
+  pela zona do lado B, e os do preset do HU também ("Portal para a Zona 2",
+  "Portal para a Zona 3"). Os textos de passagem não usam setas nem "lado A →
+  B": dizem de qual zona o equipamento saiu, em qual entrou e por qual portal.
+- **Passagens detalhadas:** voltou a ser a linha do tempo, agora dentro da aba.
+  Cada linha traz o horário, uma frase e a cor do tipo:
+  - verde: passagem confirmada;
+  - amarelo: passagem sem confirmação;
+  - azul: detectado no portal, aguardando confirmação;
+  - vermelho: entrada na zona restrita.
+- Os portais do layout salvo no Neon **não foram renomeados**: o ajuste final
+  da planta é manual, no simulador.
+
 ## Validação
 
 - `tests/test_cenario_demo.py`:

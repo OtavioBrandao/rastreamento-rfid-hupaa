@@ -94,9 +94,9 @@ _HUPAA = {
          "cor": "#c2413b", "referencia_planta": None, "area": None, "restrita": True},
     ],
     "portais": [
-        {"chave": "portal-1-2", "nome": "Zona 1 ↔ Zona 2", "zona_a": "zona-1",
+        {"chave": "portal-1-2", "nome": "Portal para a Zona 2", "zona_a": "zona-1",
          "zona_b": "zona-2", "posicao": None},
-        {"chave": "portal-2-3", "nome": "Zona 2 ↔ Zona 3", "zona_a": "zona-2",
+        {"chave": "portal-2-3", "nome": "Portal para a Zona 3", "zona_a": "zona-2",
          "zona_b": "zona-3", "posicao": None},
     ],
     "leitores": [

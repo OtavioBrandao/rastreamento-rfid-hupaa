@@ -253,7 +253,7 @@ export function pendencias(layout: LayoutConfig): string[] {
     const lados = new Set(layout.leitores.flatMap((l) => l.antenas.filter((a) => a.portal === portal.chave).map((a) => a.lado)))
     for (const [lado, zona] of [['a', portal.zona_a], ['b', portal.zona_b]] as const) if (!lados.has(lado)) {
       const nome = layout.zonas.find((item) => item.chave === zona)?.nome ?? zona
-      resultado.push(`Portal “${portal.nome}”: nenhuma antena no lado ${lado.toUpperCase()} (${nome}), então a passagem por ele nunca é confirmada. Ligue uma antena a esse lado ou remova o portal se essa entrada é vigiada só pelo leitor de área restrita.`)
+      resultado.push(`Portal “${portal.nome}”: nenhuma antena no lado ${lado.toUpperCase()} (${nome}), então a passagem por ele nunca é confirmada. Ligue uma antena a esse lado ou remova o portal se essa entrada é vigiada só pelo portal de zona restrita.`)
     }
   }
   const posicionadas = layout.leitores.flatMap((leitor) => leitor.antenas.filter((antena) => antena.posicao).map((antena) => ({ leitor, antena })))
@@ -268,6 +268,6 @@ export function pendencias(layout: LayoutConfig): string[] {
   })
   const restritas = new Set(layout.zonas.filter((zona) => zona.restrita).map((zona) => zona.chave))
   for (const leitor of layout.leitores) if (leitor.alerta_area_restrita && !leitor.antenas.some((antena) => antena.zona && restritas.has(antena.zona)))
-    resultado.push(`${leitor.nome} avisa área restrita, mas nenhuma antena dele está numa zona marcada como restrita.`)
+    resultado.push(`${leitor.nome} é portal de zona restrita, mas nenhuma antena dele está numa zona marcada como restrita.`)
   return resultado
 }

@@ -141,9 +141,9 @@ describe('editor da planta', () => {
       { chave: 'l4-a2', nome: 'Antena 2', porta: 2, posicao: { x: 10, y: 85 }, alcance: 3, portal: null, lado: null, zona: 'escada' }] })
     config.leitores[0].antenas.push({ chave: 'antena-c', nome: 'Antena C', porta: 3, posicao: { x: 10, y: 45 }, alcance: 3, portal: 'p-escada', lado: 'a', zona: 'zona-a' })
     render(<LayoutEditor config={config} onChange={vi.fn()}/>)
-    expect(screen.getByText('zona restrita')).toBeInTheDocument()
+    expect(screen.getByText('portal de zona restrita')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Leitor 4 · DR Max/ }))
-    expect(screen.getByText('Leitor da área restrita.')).toBeInTheDocument()
+    expect(screen.getByText('Portal de zona restrita.')).toBeInTheDocument()
     // Antena sem portal no mesmo ponto: aviso. Lado B de dois portais no mesmo ponto: ponto único válido.
     expect(pendencias(config).join(' ')).toMatch(/Antena 1 e Leitor 4 \/ Antena 2 estão no mesmo ponto/)
     config.portais.push({ chave: 'p-escada-2', nome: 'Zona B ↔ Escada', zona_a: 'zona-b', zona_b: 'escada', posicao: null })

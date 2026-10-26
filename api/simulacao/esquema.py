@@ -269,15 +269,15 @@ def avisos(layout: Layout) -> list[str]:
                     f"portal '{portal.nome}': nenhuma antena no lado {lado.upper()} "
                     f"({nomes_zonas.get(zona, zona)}), então a passagem por ele nunca é "
                     "confirmada; ligue uma antena a esse lado ou remova o portal se essa "
-                    "entrada é vigiada só pelo leitor de área restrita")
+                    "entrada é vigiada só pelo portal de zona restrita")
     for zona in layout.zonas:
         if zona.area is None:
             resultado.append(f"zona '{zona.nome}' ainda não foi delimitada na planta")
     restritas = {zona.chave for zona in layout.zonas if zona.restrita}
     for leitor in layout.leitores:
         if leitor.alerta_area_restrita and not any(a.zona in restritas for a in leitor.antenas):
-            resultado.append(f"{leitor.nome} avisa área restrita, mas nenhuma antena dele está "
-                             "numa zona marcada como restrita")
+            resultado.append(f"{leitor.nome} é portal de zona restrita, mas nenhuma antena dele "
+                             "está numa zona marcada como restrita")
     posicionadas = [(leitor, antena) for leitor in layout.leitores for antena in leitor.antenas
                     if antena.posicao is not None]
     for i, (leitor, antena) in enumerate(posicionadas):

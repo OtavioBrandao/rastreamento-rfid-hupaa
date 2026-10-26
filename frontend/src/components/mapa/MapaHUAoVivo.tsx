@@ -6,7 +6,7 @@ import {
   type LayoutResumo, type Monitor, type SessaoResumo,
 } from '../../services/simulacao'
 import type { AssetStatus, EquipmentItem } from '../../types/dashboard'
-import { ageLabel, detectionLabel } from '../DashboardParts'
+import { detectionLabel } from '../DashboardParts'
 import type { MapMarker } from './FloorMap'
 import { MapaHospital } from './MapaHospital'
 import { MapWorkspace, PRIORIDADE_ALERTA, ROTULO_STATUS } from './MapWorkspace'
@@ -19,7 +19,15 @@ const PULSO_MS = 3000
 /** Uma entrada na área restrita gera UMA notificação; recarregar a página não a repete. */
 const VISTOS = 'hu-entradas-restritas-notificadas'
 const NOTIFICACAO_MS = 15000
-const DIRECAO: Record<string, string> = { confirmed: 'confirmada', ambiguous: 'ambígua', unknown: 'desconhecida' }
+const MAX_EVENTOS = 60
+
+/** Linha do tempo das passagens: horário, frase e cor pelo tipo do que o sistema registrou. */
+type Evento = { id: string; em: number; texto: string; tom: 'ok' | 'info' | 'aviso' | 'alerta' }
+const TONS: { tom: Evento['tom']; rotulo: string }[] = [
+  { tom: 'ok', rotulo: 'Passagem confirmada' }, { tom: 'aviso', rotulo: 'Passagem sem confirmação' },
+  { tom: 'info', rotulo: 'Detectado no portal, aguardando confirmação' }, { tom: 'alerta', rotulo: 'Zona restrita' },
+]
+const hora = (ms: number) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
 type Notificacao = { chave: string; texto: string }
 
@@ -48,6 +56,8 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
   const [cobertura, setCobertura] = useState(false)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const primeira = useRef(true)
+  const [eventos, setEventos] = useState<Evento[]>([])
+  const anterior = useRef<{ estados: Map<string, string>; passagens: Set<number>; entradas: Set<string> } | null>(null)
 
   useEffect(() => {
     let vivo = true
@@ -76,6 +86,37 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
 
   const config = layout?.configuracao
   const restritas = useMemo(() => new Set(config?.zonas.filter((z) => z.restrita).map((z) => z.nome) ?? []), [config])
+
+  // Passagens detalhadas: diferenças entre consultas do que o pipeline gravou (nada vem do simulador).
+  useEffect(() => {
+    if (!monitor) return
+    const antes = anterior.current
+    const estados = new Map((monitor.equipamentos ?? []).map((item) => [item.epc, item.estado]))
+    const passagensVistas = new Set(monitor.passagens.map((item) => item.id))
+    const entradas = new Set((monitor.alertas_restritos ?? []).map((a) => `${a.epc}|${a.entrada_em ?? a.primeira_leitura_em}`))
+    anterior.current = { estados, passagens: passagensVistas, entradas }
+    const novos: Evento[] = []
+    for (const p of [...monitor.passagens.filter((item) => !antes?.passagens.has(item.id))].reverse()) {
+      const nome = p.equipamento ?? `Tag …${p.epc.slice(-4)} (não cadastrada)`
+      novos.push(p.direcao_status === 'confirmed'
+        ? { id: `p${p.id}`, em: Date.parse(p.detectada_em), tom: 'ok', texto: `${nome} saiu da ${p.zona_origem} e entrou na ${p.zona_destino} pelo ${p.portal} — passagem confirmada` }
+        : { id: `p${p.id}`, em: Date.parse(p.detectada_em), tom: 'aviso', texto: `${nome} foi lido no ${p.portal}, mas a passagem não foi confirmada (leituras insuficientes para saber a zona)` })
+    }
+    const agoraMs = Date.parse(monitor.gerado_em)
+    if (antes) for (const item of monitor.equipamentos ?? []) {
+      if (antes.estados.get(item.epc) === item.estado || item.estado !== 'em_transito') continue
+      const nome = item.equipamento?.nome ?? `Tag …${item.epc.slice(-4)}`
+      const portal = config?.portais.find((p) => p.chave === item.portal)?.nome ?? 'portal'
+      novos.push({ id: `t${item.epc}${agoraMs}`, em: agoraMs, tom: 'info', texto: `${nome} detectado no ${portal}, aguardando a confirmação da passagem` })
+    }
+    for (const alerta of monitor.alertas_restritos ?? []) {
+      const chave = `${alerta.epc}|${alerta.entrada_em ?? alerta.primeira_leitura_em}`
+      if (antes?.entradas.has(chave)) continue
+      const em = Date.parse(alerta.entrada_em ?? alerta.primeira_leitura_em)
+      novos.push({ id: `r${chave}`, em, tom: 'alerta', texto: `${alerta.equipamento?.nome ?? `Tag …${alerta.epc.slice(-4)}`} entrou na zona restrita (${alerta.zona}) — portal de zona restrita` })
+    }
+    if (novos.length) setEventos((velhos) => [...novos, ...velhos].sort((a, b) => b.em - a.em).slice(0, MAX_EVENTOS))
+  }, [monitor, config])
 
   // Notificação da entrada confirmada na zona restrita: uma por entrada, nunca contínua.
   useEffect(() => {
@@ -137,7 +178,6 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
     {config.zonas.map((zona) => zona.area && <rect key={`lim-${zona.chave}`} className={`hu-limite${zona.restrita ? ' restrita' : ''}`} x={zona.area.x} y={zona.area.y} width={zona.area.largura} height={zona.area.altura}/>)}
   </>
   const contagem = (status: AssetStatus) => items.filter((item) => item.status === status && zones.some((z) => item.ultima_zona?.id === z.zoneId)).length
-  const passagens = monitor?.passagens ?? []
   const naRestrita = (monitor?.alertas_restritos ?? []).filter((alerta) => alerta.recente)
 
   return <div className="map-main hu-tracking">
@@ -151,15 +191,11 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
         <label className="hu-cobertura-toggle"><input type="checkbox" checked={cobertura} onChange={(e) => setCobertura(e.target.checked)}/> Áreas de cobertura
           <small>Indicação visual aproximada do alcance das antenas; não é medição física.</small></label>
       </div>}
-      extraTabs={[{ id: 'passagens', label: 'Passagens detalhadas', count: passagens.length, content: <section className="panel inventory-panel" aria-label="Passagens detalhadas">
+      extraTabs={[{ id: 'passagens', label: 'Passagens detalhadas', count: eventos.length, content: <section className="panel inventory-panel" aria-label="Passagens detalhadas">
         <div className="panel-heading"><h2>Passagens detalhadas</h2></div>
-        {passagens.length ? <div className="table-wrap"><table className="equipment-table">
-          <thead><tr><th>Quando</th><th>Equipamento</th><th>Portal</th><th>Direção</th><th>De → para</th></tr></thead>
-          <tbody>{passagens.map((p) => <tr key={p.id}><td>{detectionLabel(p.detectada_em)}<small>{ageLabel(p.detectada_em, agora)}</small></td>
-            <td>{p.equipamento ?? `Tag …${p.epc.slice(-4)} (não cadastrada)`}</td><td>{p.portal}</td>
-            <td>{p.direcao_status ? DIRECAO[p.direcao_status] ?? p.direcao_status : 'em análise'}</td>
-            <td>{p.zona_origem && p.zona_destino ? `${p.zona_origem} → ${p.zona_destino}` : 'sem zona confirmada'}</td></tr>)}</tbody>
-        </table></div> : <p className="map-table-empty">{codigo ? 'Nenhuma passagem gravada nesta sessão ainda.' : 'Nenhuma simulação do HU em execução.'}</p>}
+        <ul className="hu-legend" aria-label="Cores das passagens">{TONS.map((t) => <li key={t.tom}><span className={`hu-ev-swatch hu-ev-${t.tom}`}/>{t.rotulo}</li>)}</ul>
+        {eventos.length ? <ol className="hu-events" aria-live="polite">{eventos.map((evento) => <li key={evento.id} className={`hu-ev-${evento.tom}`}><time>{hora(evento.em)}</time> {evento.texto}</li>)}</ol>
+          : <p className="map-table-empty">{codigo ? `Nenhuma passagem gravada desde ${detectionLabel(new Date(agora).toISOString())}.` : 'Nenhuma simulação do HU em execução.'}</p>}
       </section> }]}/>
   </div>
 }

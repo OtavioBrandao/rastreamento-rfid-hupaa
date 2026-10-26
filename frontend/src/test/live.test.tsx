@@ -126,7 +126,7 @@ it('atualiza detalhes e histórico enquanto o painel permanece aberto', async ()
 it('atualiza zonas, contagens, portal e leituras do EASY e oferece seleção textual', async () => {
   window.location.hash = '#/mapa'; await mount()
   await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Laboratório de Testes (EASY)' })) })
-  expect(screen.getByRole('button', { name: /Portal de teste RFID.*Lado A/ })).toHaveAttribute('data-portal-id', '907')
+  expect(screen.getByRole('button', { name: /Portal de teste RFID.*lado A/ })).toHaveAttribute('data-portal-id', '907')
   expect(screen.getByRole('button', { name: /1 equipamento.*Sala A/ })).toBeInTheDocument()
   revision = 1; await tick()
   expect(screen.queryByRole('button', { name: /1 equipamento.*Sala A/ })).not.toBeInTheDocument()
@@ -137,14 +137,14 @@ it('atualiza zonas, contagens, portal e leituras do EASY e oferece seleção tex
   expect(screen.getByRole('region', { name: 'Equipamentos em Sala A' })).toHaveTextContent('Nenhum equipamento nesta zona agora.')
   expect(screen.queryByRole('button', { name: /Maca 1/ })).not.toBeInTheDocument()
   fail = '/portais'; await tick()
-  expect(screen.queryByRole('button', { name: /Portal de teste RFID.*Lado A/ })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Portal de teste RFID.*lado A/ })).not.toBeInTheDocument()
   expect(screen.queryByRole('region', { name: 'Equipamentos em Sala A' })).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('tab', { name: /Outras zonas/ }))
   expect(screen.getByRole('button', { name: /Maca 1/ })).toBeInTheDocument()
   fail = ''; calls = []
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Atualizar todos os dados' })) })
   expect(calls).toEqual(expect.arrayContaining(['/api/ativos', '/portais', '/localizacoes/arvore', '/api/laboratorio/leituras']))
-  expect(screen.getByRole('button', { name: /Portal de teste RFID.*Lado A/ })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /Portal de teste RFID.*lado A/ })).toBeInTheDocument()
 })
 
 it('consulta todas as páginas de portais', async () => {

@@ -2506,3 +2506,7 @@ button:disabled { opacity:.55; cursor:default }
   color:#8c1d18; border-radius:10px; padding:10px 12px; font-weight:600; font-size:.88rem; box-shadow:0 6px 18px rgba(16,42,66,.18) }
 .hu-toast button { margin-left:auto; border:0; background:transparent; font-size:1.1rem; cursor:pointer; color:inherit }
 .hu-restrita-agora { margin:0 0 8px; color:#8c1d18; font-weight:600; font-size:.88rem }
+.hu-ev-swatch { display:inline-block; width:14px; height:10px; margin-right:6px; border-left:4px solid transparent }
+.hu-ev-swatch.hu-ev-ok { border-color:#1f9d55 } .hu-ev-swatch.hu-ev-info { border-color:#0b6fb8 }
+.hu-ev-swatch.hu-ev-aviso { border-color:#f2b705 } .hu-ev-swatch.hu-ev-alerta { border-color:#c62828 }
+.sim-portal-regra { font-size:.84rem; margin:4px 0 }
