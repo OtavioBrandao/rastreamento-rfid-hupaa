@@ -420,7 +420,8 @@ def test_duas_abas_compartilham_a_mesma_sessao(api):
 def test_sessoes_de_layouts_diferentes_ficam_isoladas(api):
     dashboard, _, _ = api
     easy = dashboard.post("/api/simulacao/layouts", json={"cenario": "easy"}).json()
-    hupaa = dashboard.post("/api/simulacao/layouts", json={"cenario": "hupaa"}).json()
+    hupaa = dashboard.post("/api/simulacao/layouts", json={"cenario": "hupaa", "nome": "HU ensaio"}).json()
+    # (o layout "Hospital HUPAA (padrão)" monta o cenário de demonstração: ver test_cenario_demo)
     s1 = dashboard.post("/api/simulacao/sessoes", json={"layout_id": easy["id"]}).json()
     s2 = dashboard.post("/api/simulacao/sessoes", json={"layout_id": hupaa["id"]}).json()
     dashboard.post(f"/api/simulacao/sessoes/{s1['codigo']}/itens", json={"nome": "Maca"})

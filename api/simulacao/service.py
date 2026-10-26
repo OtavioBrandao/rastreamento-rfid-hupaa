@@ -101,6 +101,8 @@ def resumo_layout(registro: SimulacaoLayout) -> dict:
         "configuracao": registro.configuracao, "versao": registro.versao,
         "arquivado": registro.arquivado, "aplicado_em": em_utc(registro.aplicado_em),
         "updated_at": em_utc(registro.updated_at),
+        # Ids das zonas cadastradas por chave: o mapa do HU liga equipamentos às zonas do layout.
+        "zonas_ids": (registro.vinculos or {}).get("zonas", {}),
         "avisos": avisos(Layout.model_validate(registro.configuracao)),
     }
 
@@ -594,6 +596,8 @@ def resumo_sessao(sessao: SimulacaoSessao) -> dict:
 
 
 ALERTA_RECENTE_S = 10
+# Sem leitura na área restrita por mais que isto, a próxima leitura é uma nova entrada.
+ENTRADA_SILENCIO_S = 30
 
 
 def _alertas_restritos(db: Session, sessao: SimulacaoSessao, vinculo, now: datetime) -> list[dict]:
@@ -627,7 +631,21 @@ def _alertas_restritos(db: Session, sessao: SimulacaoSessao, vinculo, now: datet
         .group_by(LeituraBruta.epc, LeituraBruta.antena_id, Equipamento.id, Equipamento.nome)
         .order_by(func.max(LeituraBruta.lido_em).desc())
     ).all()
+    # Início da permanência atual: a primeira leitura depois de um silêncio maior que
+    # ENTRADA_SILENCIO_S. Notificar por este instante avisa cada entrada uma vez só.
+    anterior = func.lag(LeituraBruta.lido_em).over(
+        partition_by=(LeituraBruta.epc, LeituraBruta.antena_id), order_by=LeituraBruta.lido_em)
+    sequencia = (select(LeituraBruta.epc, LeituraBruta.antena_id, LeituraBruta.lido_em,
+                        anterior.label("anterior"))
+                 .where(LeituraBruta.antena_id.in_(list(vigiadas)),
+                        LeituraBruta.lido_em >= sessao.iniciada_em).subquery())
+    entradas = {(linha.epc, linha.antena_id): linha.entrada for linha in db.execute(
+        select(sequencia.c.epc, sequencia.c.antena_id, func.max(sequencia.c.lido_em).label("entrada"))
+        .where((sequencia.c.anterior.is_(None))
+               | (sequencia.c.lido_em - sequencia.c.anterior > timedelta(seconds=ENTRADA_SILENCIO_S)))
+        .group_by(sequencia.c.epc, sequencia.c.antena_id))}
     return [{
+        "entrada_em": em_utc(entradas.get((linha.epc, linha.antena_id), linha.primeira)),
         "epc": linha.epc, "zona": vigiadas[linha.antena_id][4],
         "leitor": vigiadas[linha.antena_id][0], "reader_id": vigiadas[linha.antena_id][1],
         "antena": vigiadas[linha.antena_id][2], "porta": vigiadas[linha.antena_id][3],

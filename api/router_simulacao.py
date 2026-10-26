@@ -17,9 +17,9 @@ from sqlalchemy.orm import Session
 from api.database import get_db
 from api.permissoes import Permissao, exigir_por_metodo
 from api.service_auth import SessaoAutenticada
+from api.simulacao import cenario_demo, service
 from api.simulacao import config as config_simulador
 from api.simulacao import relogio as relogio_sim
-from api.simulacao import service
 from api.simulacao.esquema import MAX_ANTENAS_POR_LEITOR, MODELOS_LEITOR
 from api.simulacao.motor import motor_atual
 from api.simulacao.presets import NOMES_PRESET
@@ -237,7 +237,10 @@ def iniciar(payload: SessaoCriar, db: Session = Depends(get_db),
     """Aplica a topologia do layout e devolve a sessão com o código do link de controle."""
     _exigir_habilitado(config)
     try:
-        sessao = service.iniciar_sessao(db, payload.layout_id, sessao_auth.usuario.id or None)
+        usuario = sessao_auth.usuario.id or None
+        # O layout padrão do HU é o das apresentações: iniciar monta o cenário de demonstração.
+        sessao = (cenario_demo.iniciar(db, usuario) if cenario_demo.e_layout_padrao(db, payload.layout_id)
+                  else service.iniciar_sessao(db, payload.layout_id, usuario))
     except service.SimulacaoRecusada as erro:
         raise _traduzir(erro) from erro
     return _resposta_sessao(sessao)
@@ -343,6 +346,27 @@ def executar_trajeto(codigo: str, item_id: str, payload: TrajetoCriar,
             "relogio": relogio_sim.resumo(relogio_sim.do_banco(db))}
 
 
+@router.get("/demo-hu", dependencies=[Depends(_PERMISSAO)], summary="Cenário de demonstração do HU")
+def demo_hu(db: Session = Depends(get_db)) -> dict:
+    """Quantos equipamentos do cenário existem e se ele está em execução."""
+    try:
+        return cenario_demo.estado(db)
+    except service.SimulacaoRecusada as erro:
+        raise _traduzir(erro) from erro
+
+
+@router.post("/demo-hu/preparar", dependencies=[Depends(_PERMISSAO)],
+             summary="Voltar ao início: seis equipamentos antigos, nada em execução")
+def preparar_demo_hu(db: Session = Depends(get_db),
+                     config: config_simulador.ConfigSimulador = Depends(obter_config)) -> dict:
+    """Antes da apresentação: o dashboard passa a mostrar os seis equipamentos parados."""
+    _fora_de_producao(config)
+    try:
+        return cenario_demo.preparar(db)
+    except service.SimulacaoRecusada as erro:
+        raise _traduzir(erro) from erro
+
+
 @router.get("/relogio", dependencies=[Depends(_PERMISSAO)], summary="Relógio da simulação")
 def ler_relogio(db: Session = Depends(get_db)) -> dict:
     """O mesmo tempo para simulador e dashboard (o relógio do computador não muda)."""
@@ -370,7 +394,10 @@ def transicionar(codigo: str, acao: str, db: Session = Depends(get_db),
     if acao in ("retomar", "reiniciar"):
         _exigir_habilitado(config)
     try:
-        sessao = service.transicionar(db, codigo, acao)
+        atual = service.obter_sessao(db, codigo)
+        sessao = (cenario_demo.reiniciar(db, codigo)
+                  if acao == "reiniciar" and cenario_demo.e_layout_padrao(db, atual.layout_id)
+                  else service.transicionar(db, codigo, acao))
     except service.SimulacaoRecusada as erro:
         raise _traduzir(erro) from erro
     return _resposta_sessao(sessao)

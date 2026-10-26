@@ -331,3 +331,24 @@ def test_api_de_trajeto_e_relogio_valida_e_recusa_o_que_pularia_leituras(api):  
     assert dashboard.post(f"/api/simulacao/sessoes/{codigo}/encerrar").status_code == 200
     # Encerrada a sessão, o relógio volta ao ritmo real (adiantamento, se houver, fica).
     assert controle.get("/api/simulacao/relogio").json()["fator"] == 1
+
+
+def test_area_restrita_com_uma_antena_marca_cada_entrada_uma_vez(pg_engine, hu, tmp_path):
+    """Leitor 5 (uma antena, sem portal) na escada: a permanência tem um só início;
+    sair e voltar depois de um silêncio gera uma nova entrada (nova notificação)."""
+    def entradas():
+        with Session(pg_engine) as session:
+            painel = service.monitor(session, service.obter_sessao(session, hu["codigo"]), now=hu["relogio"].agora)
+            return {a["entrada_em"] for a in painel["alertas_restritos"]}, painel["alertas_restritos"]
+
+    _executar(pg_engine, hu, "Maca 01", [(30, 15, 0), (19, 27, 1), (6, 44, 2), (6, 44, 6)])
+    _rodar(pg_engine, tmp_path, hu, 6.5)
+    primeira, alertas = entradas()
+    assert len(primeira) == 1 and alertas[0]["equipamento"]["nome"] == "Maca 01"
+    _rodar(pg_engine, tmp_path, hu, 2.0)  # continua lá: mesma entrada
+    assert entradas()[0] == primeira
+    # Sai, fica longe mais que o silêncio de entrada e volta.
+    _executar(pg_engine, hu, "Maca 01", [(6, 44, 0), (30, 15, 2), (30, 15, service.ENTRADA_SILENCIO_S + 5), (6, 44, service.ENTRADA_SILENCIO_S + 8)])
+    _rodar(pg_engine, tmp_path, hu, service.ENTRADA_SILENCIO_S + 9, passo=0.5)
+    segunda, _ = entradas()
+    assert len(segunda) == 1 and segunda != primeira and max(segunda) > max(primeira)
