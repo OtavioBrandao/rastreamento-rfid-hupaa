@@ -1,10 +1,10 @@
 """Consultas da projeção. A decisão de recência ocorre somente após lock."""
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import aliased
 
-from db.models import Equipamento, HistoricoMovimentacao, Passagem
+from db.models import AssociacaoTagEquipamento, Equipamento, HistoricoMovimentacao, Passagem, Tag
 
 
 def lock_equipment(connection: Connection, equipment_id: int):
@@ -53,9 +53,20 @@ def pending_ids(engine: Engine, *, limit: int = 100, after_id: int = 0) -> tuple
         .where(
             Passagem.direcao_status == "confirmed", Passagem.id > after_id,
             or_(
-                movement.id.is_(None),
-                Equipamento.ultima_deteccao_em.is_(None),
-                movement.movimentada_em > Equipamento.ultima_deteccao_em,
+                # Sem movimento: só volta quando o EPC tem associação vigente no
+                # instante da passagem (a mesma regra de rfid_movement). Tag não
+                # cadastrada não tem o que reconciliar; repetir a tentativa a cada
+                # ciclo custava ~1 s por passagem no banco remoto e atrasava toda a
+                # inferência (sessão de 25/10/2026: 11–21 s de atraso).
+                and_(movement.id.is_(None), exists().where(
+                    AssociacaoTagEquipamento.tag_id == Tag.id, Tag.epc == Passagem.epc,
+                    AssociacaoTagEquipamento.inicio <= Passagem.detectada_em,
+                    or_(AssociacaoTagEquipamento.fim.is_(None),
+                        AssociacaoTagEquipamento.fim > Passagem.detectada_em))),
+                and_(movement.id.is_not(None), or_(
+                    Equipamento.ultima_deteccao_em.is_(None),
+                    movement.movimentada_em > Equipamento.ultima_deteccao_em,
+                )),
             ),
         )
         .order_by(Passagem.id).limit(limit)
