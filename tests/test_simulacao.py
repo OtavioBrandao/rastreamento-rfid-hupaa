@@ -332,6 +332,22 @@ def test_leitor_de_area_restrita_sem_zona_restrita_gera_aviso():
     assert any("é portal de zona restrita" in t for t in avisos(Layout.model_validate(configuracao)))
 
 
+def test_portal_para_a_zona_restrita_vigiada_nao_gera_pendencia():
+    """A escada vigiada pelo portal de zona restrita não precisa de antena de portal;
+    um portal comum sem um dos lados continua sendo pendência."""
+    configuracao = layout_teste_rapido("hupaa")
+    restrita = next(z for z in configuracao["zonas"] if z["restrita"])["chave"]
+    configuracao["portais"].append({"chave": "portal-1-escada", "nome": "Zona 1 ↔ Escada",
+                                    "zona_a": "zona-1", "zona_b": restrita, "posicao": None})
+    configuracao["portais"].append({"chave": "portal-1-3", "nome": "Zona 1 ↔ Zona 3",
+                                    "zona_a": "zona-1", "zona_b": "zona-3", "posicao": None})
+    textos = avisos(Layout.model_validate(configuracao))
+    assert not any("lado B (Escada" in t for t in textos)  # o lado da zona restrita não é pendência
+    assert any("'Zona 1 ↔ Zona 3'" in t for t in textos)
+    nomes = {p["chave"]: p["nome"] for p in preset("hupaa")["portais"]}
+    assert nomes == {"portal-1-2": "Zona 1 ↔ Zona 2", "portal-2-3": "Portal para Zona 3"}
+
+
 def test_antena_direcional_le_mais_na_frente_que_atras():
     from api.simulacao.geometria import AntenaVirtual
 

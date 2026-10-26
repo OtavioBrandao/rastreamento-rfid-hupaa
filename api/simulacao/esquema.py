@@ -262,9 +262,12 @@ def avisos(layout: Layout) -> list[str]:
             if antena.portal and antena.lado:
                 lados[antena.portal].add(antena.lado)
     nomes_zonas = {zona.chave: zona.nome for zona in layout.zonas}
+    # A zona restrita vigiada por um portal de zona restrita não precisa de antena de portal.
+    vigiadas = {antena.zona for leitor in layout.leitores if leitor.alerta_area_restrita
+                for antena in leitor.antenas}
     for portal in layout.portais:
         for lado, zona in (("a", portal.zona_a), ("b", portal.zona_b)):
-            if lado not in lados[portal.chave]:
+            if lado not in lados[portal.chave] and zona not in vigiadas:
                 resultado.append(
                     f"portal '{portal.nome}': nenhuma antena no lado {lado.upper()} "
                     f"({nomes_zonas.get(zona, zona)}), então a passagem por ele nunca é "

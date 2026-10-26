@@ -134,18 +134,27 @@ ser a configuração das apresentações. Outros layouts continuam como antes.
   é informação, não bloqueia salvar.
 - **Leitor com uma antena** que vigia a zona restrita passa a se chamar **portal
   de zona restrita**: no editor, nos avisos e na linha do tempo.
-- **Nomes pelo destino:** portais novos se chamam **"Portal para a Zona N"**,
-  pela zona do lado B, e os do preset do HU também ("Portal para a Zona 2",
-  "Portal para a Zona 3"). Os textos de passagem não usam setas nem "lado A →
-  B": dizem de qual zona o equipamento saiu, em qual entrou e por qual portal.
+- **Nomes dos dois portais do HU:**
+  - O de cima continua **"Zona 1 ↔ Zona 2"**: é a junção entre as duas zonas, e
+    o equipamento pode vir de qualquer lado. Por isso o nome não aponta para um
+    destino.
+  - O de baixo é o **"Portal para Zona 3"**.
+  - O preset segue esses nomes, e o editor continua sugerindo "Zona A ↔ Zona B"
+    para um portal novo.
+  - Os textos de passagem não usam "lado A → B": dizem de qual zona o
+    equipamento saiu, em qual entrou e por qual portal.
+- **Zona restrita sem pendência:** se a zona restrita é vigiada por um portal de
+  zona restrita, um portal ligado a ela sem antena desse lado não conta mais
+  como pendência ("Falta N passos"). A zona restrita é a área vigiada, não uma
+  zona de passagem.
 - **Passagens detalhadas:** voltou a ser a linha do tempo, agora dentro da aba.
   Cada linha traz o horário, uma frase e a cor do tipo:
   - verde: passagem confirmada;
   - amarelo: passagem sem confirmação;
   - azul: detectado no portal, aguardando confirmação;
   - vermelho: entrada na zona restrita.
-- Os portais do layout salvo no Neon **não foram renomeados**: o ajuste final
-  da planta é manual, no simulador.
+- O portal de baixo do layout salvo no Neon é renomeado para "Portal para
+  Zona 3" depois que os ajustes manuais forem salvos no site.
 
 ## Validação
 

@@ -249,9 +249,11 @@ export function pendencias(layout: LayoutConfig): string[] {
     if (!leitor.posicao) resultado.push(`Posicione o ${leitor.nome}.`)
     for (const antena of leitor.antenas) if (!antena.posicao) resultado.push(`Posicione a ${antena.nome} do ${leitor.nome}.`)
   }
+  // A zona restrita vigiada por um portal de zona restrita não precisa de antena de portal.
+  const vigiadas = new Set(layout.leitores.filter((l) => l.alerta_area_restrita).flatMap((l) => l.antenas.map((a) => a.zona)))
   for (const portal of layout.portais) {
     const lados = new Set(layout.leitores.flatMap((l) => l.antenas.filter((a) => a.portal === portal.chave).map((a) => a.lado)))
-    for (const [lado, zona] of [['a', portal.zona_a], ['b', portal.zona_b]] as const) if (!lados.has(lado)) {
+    for (const [lado, zona] of [['a', portal.zona_a], ['b', portal.zona_b]] as const) if (!lados.has(lado) && !vigiadas.has(zona)) {
       const nome = layout.zonas.find((item) => item.chave === zona)?.nome ?? zona
       resultado.push(`Portal “${portal.nome}”: nenhuma antena no lado ${lado.toUpperCase()} (${nome}), então a passagem por ele nunca é confirmada. Ligue uma antena a esse lado ou remova o portal se essa entrada é vigiada só pelo portal de zona restrita.`)
     }

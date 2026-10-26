@@ -345,7 +345,6 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
             <p className="sim-portal-regra" role="note">{config.leitores.some((l) => new Set(l.antenas.filter((a) => a.portal === portal.chave).map((a) => a.lado)).size === 2)
               ? 'Portal completo: um leitor com pelo menos duas antenas, uma de cada lado.'
               : 'Ainda não conta como portal: um portal é um leitor com pelo menos duas antenas, uma de cada lado. (Leitor com uma antena só é portal de zona restrita.)'}</p>
-            <small className="muted-text">Dica de nome: “Portal para a {config.zonas.find((z) => z.chave === portal.zona_b)?.nome ?? 'zona'}” — pela zona de destino, sem setas de direção.</small>
             <div className="sim-form-actions"><button type="button" disabled={disabled} onClick={() => setTool({ kind: 'posicionar', alvo: 'portal', chave: portal.chave })}>{portal.posicao ? 'Reposicionar marcador' : 'Posicionar no mapa'}</button>
               <button type="button" className="danger" disabled={disabled} onClick={() => removePortal(portal.chave)}>Remover portal</button></div>
             <button type="button" className="link-button" onClick={() => setSelection(null)}>← Visão geral</button>
@@ -403,7 +402,7 @@ function NewPortal({ config, disabled, onCreate }: { config: LayoutConfig; disab
     <span>e</span>
     <select aria-label="Zona do lado B" value={b} onChange={(e) => setB(e.target.value)}>{config.zonas.map((z) => <option key={z.chave} value={z.chave}>{z.nome}</option>)}</select>
     <label className="checkbox-label"><input type="checkbox" checked={comLeitor} onChange={(e) => setComLeitor(e.target.checked)}/> com leitor e antenas</label>
-    <button type="button" className="admin-primary" disabled={!a || a === b} onClick={() => { onCreate(`Portal para a ${nome(b)}`, a, b, comLeitor); setOpen(false) }}>Criar portal</button>
+    <button type="button" className="admin-primary" disabled={!a || a === b} onClick={() => { onCreate(`${nome(a)} ↔ ${nome(b)}`, a, b, comLeitor); setOpen(false) }}>Criar portal</button>
     <button type="button" onClick={() => setOpen(false)}>Cancelar</button>
   </span>
 }

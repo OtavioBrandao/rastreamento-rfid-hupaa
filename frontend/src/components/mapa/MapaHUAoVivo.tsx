@@ -99,15 +99,15 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
     for (const p of [...monitor.passagens.filter((item) => !antes?.passagens.has(item.id))].reverse()) {
       const nome = p.equipamento ?? `Tag …${p.epc.slice(-4)} (não cadastrada)`
       novos.push(p.direcao_status === 'confirmed'
-        ? { id: `p${p.id}`, em: Date.parse(p.detectada_em), tom: 'ok', texto: `${nome} saiu da ${p.zona_origem} e entrou na ${p.zona_destino} pelo ${p.portal} — passagem confirmada` }
-        : { id: `p${p.id}`, em: Date.parse(p.detectada_em), tom: 'aviso', texto: `${nome} foi lido no ${p.portal}, mas a passagem não foi confirmada (leituras insuficientes para saber a zona)` })
+        ? { id: `p${p.id}`, em: Date.parse(p.detectada_em), tom: 'ok', texto: `${nome} saiu da ${p.zona_origem} e entrou na ${p.zona_destino} pelo portal “${p.portal}” — passagem confirmada` }
+        : { id: `p${p.id}`, em: Date.parse(p.detectada_em), tom: 'aviso', texto: `${nome} foi lido no portal “${p.portal}”, mas a passagem não foi confirmada (leituras insuficientes para saber a zona)` })
     }
     const agoraMs = Date.parse(monitor.gerado_em)
     if (antes) for (const item of monitor.equipamentos ?? []) {
       if (antes.estados.get(item.epc) === item.estado || item.estado !== 'em_transito') continue
       const nome = item.equipamento?.nome ?? `Tag …${item.epc.slice(-4)}`
       const portal = config?.portais.find((p) => p.chave === item.portal)?.nome ?? 'portal'
-      novos.push({ id: `t${item.epc}${agoraMs}`, em: agoraMs, tom: 'info', texto: `${nome} detectado no ${portal}, aguardando a confirmação da passagem` })
+      novos.push({ id: `t${item.epc}${agoraMs}`, em: agoraMs, tom: 'info', texto: `${nome} detectado no portal “${portal}”, aguardando a confirmação da passagem` })
     }
     for (const alerta of monitor.alertas_restritos ?? []) {
       const chave = `${alerta.epc}|${alerta.entrada_em ?? alerta.primeira_leitura_em}`
