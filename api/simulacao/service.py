@@ -319,6 +319,7 @@ DISTANCIA_ENTRE_ITENS = 3.0
 
 
 def _dentro(area: dict, x: float, y: float, margem: float = 0.0) -> bool:
+    """O ponto está na área retangular da zona (com margem)?"""
     return (area["x"] - margem <= x <= area["x"] + area["largura"] + margem
             and area["y"] - margem <= y <= area["y"] + area["altura"] + margem)
 

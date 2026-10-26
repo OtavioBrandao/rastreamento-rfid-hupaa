@@ -55,6 +55,7 @@ def validar(pontos: list[dict]) -> list[dict]:
 
 
 def _instante(texto: str | None) -> datetime | None:
+    """Lê o instante ISO guardado no trajeto (None se ausente)."""
     return datetime.fromisoformat(texto) if texto else None
 
 
