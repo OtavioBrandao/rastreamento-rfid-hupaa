@@ -28,7 +28,8 @@ from api.simulacao.motor import MotorSimulacao
 from api.simulacao.presets import ITENS_TESTE_RAPIDO
 from db.models import Equipamento, HistoricoMovimentacao, LeituraBruta, Passagem
 from rfid_location.recency import classify_recency, recency_threshold_from_env
-from tests.test_simulacao import HABILITADO, T0, PublicadorCapturado, _receptor, api  # noqa: F401
+from tests.test_simulacao import HABILITADO, T0, PublicadorCapturado, _receptor
+from tests.test_simulacao import api as api  # noqa: F401  (fixture reaproveitada)
 
 
 class RelogioFalso:
@@ -303,7 +304,7 @@ def test_estado_ao_vivo_distingue_transito_confirmado_sem_confirmacao_e_fora_de_
         assert "em_transito" in estados["Maca 01"]["condicoes"]  # os detalhes continuam acessíveis
 
 
-def test_api_de_trajeto_e_relogio_valida_e_recusa_o_que_pularia_leituras(api):
+def test_api_de_trajeto_e_relogio_valida_e_recusa_o_que_pularia_leituras(api):  # noqa: F811
     dashboard, controle, _ = api
     codigo = controle.post("/api/simulacao/teste-rapido", json={"cenario": "hupaa"}).json()["codigo"]
     item = controle.post(f"/api/simulacao/sessoes/{codigo}/itens",
