@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MapaHUAoVivo } from '../components/mapa/MapaHUAoVivo'
 import { MapWorkspace, statusDominante } from '../components/mapa/MapWorkspace'
@@ -79,9 +79,19 @@ describe('acompanhamento do HU', () => {
     expect(screen.queryByLabelText('Velocidade')).toBeNull()
   })
 
+  it('item só lido (sem transição) fica perto da antena como zona não confirmada, fora da contagem da zona', async () => {
+    const lido = { ...equipamento(9, 'Maca nova', 'nunca_detectado', null), ultima_leitura: { em: agora(), leitor: 'sim-hupaa-01', porta: 1, zona: 'Zona 1' } }
+    render(<MapaHUAoVivo topology={topology} items={[...itens, lido]} onSelect={() => undefined}/>)
+    const marcador = await screen.findByRole('button', { name: 'Maca nova: zona não confirmada, visto perto da antena. Abrir detalhes' })
+    expect(marcador).toHaveClass('marker-nao-confirmado')
+    expect(screen.getByRole('button', { name: /^2 equipamentos em Zona 1/ })).toBeInTheDocument()  // não entrou na Zona 1
+    fireEvent.click(screen.getByRole('tab', { name: /Zona não confirmada/ }))
+    expect(within(screen.getByRole('tabpanel', { name: /Zona não confirmada/ })).getByText(/Zona não confirmada · visto perto da Zona 1/)).toBeInTheDocument()
+  })
+
   it('mostra as mesmas abas do EASY e as passagens detalhadas; cobertura opcional abaixo da legenda', async () => {
     const { container } = render(<MapaHUAoVivo topology={topology} items={itens} onSelect={() => undefined}/>)
-    for (const aba of ['Equipamentos detectados', 'Ativos nas salas', 'Zonas e portais', 'Sem zona confirmada', 'Outras zonas'])
+    for (const aba of ['Equipamentos detectados', 'Ativos nas salas', 'Zonas e portais', 'Zona não confirmada', 'Outras zonas'])
       expect(await screen.findByRole('tab', { name: new RegExp(aba) })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: /Passagens detalhadas/ }))
     const linha = await screen.findByText(/Maca HU-03 saiu da Zona 1 e entrou na Zona 2 pelo .* — passagem confirmada/)

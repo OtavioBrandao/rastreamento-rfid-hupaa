@@ -352,3 +352,25 @@ def test_area_restrita_com_uma_antena_marca_cada_entrada_uma_vez(pg_engine, hu, 
     _rodar(pg_engine, tmp_path, hu, service.ENTRADA_SILENCIO_S + 9, passo=0.5)
     segunda, _ = entradas()
     assert len(segunda) == 1 and segunda != primeira and max(segunda) > max(primeira)
+
+
+def test_historico_mostra_visto_perto_sem_confirmar_zona(pg_engine, hu, tmp_path):
+    """Leitura sem transição entra no histórico como "visto perto da Zona X" e não
+    confirma zona; a transição confirma, e a leitura que é a evidência dela não se repete."""
+    from api.service_vistos import visitas
+
+    _executar(pg_engine, hu, "Maca 01", [(30, 15, 0), (43, 15, 1), (43, 15, 3), (30, 15, 4)])
+    _rodar(pg_engine, tmp_path, hu, 4.5)
+    assert _estado(pg_engine, hu, "Maca 01") == (None, 0)  # só leitura: zona não confirmada
+    with Session(pg_engine) as session:
+        [visto] = visitas(session, hu["equipamentos"]["Maca 01"])
+    assert visto["zona"] == "Zona 1" and visto["zona_confirmada_no_momento"] is None and visto["leituras"] >= 3
+
+    hu["relogio"].agora += timedelta(seconds=120)
+    _executar(pg_engine, hu, "Maca 01", ZONA_1_PARA_2)
+    _rodar(pg_engine, tmp_path, hu, 3.5)
+    assert _estado(pg_engine, hu, "Maca 01") == (hu["zonas"]["zona-2"], 1)
+    with Session(pg_engine) as session:
+        zonas = [v["zona"] for v in visitas(session, hu["equipamentos"]["Maca 01"])]
+    assert "Zona 2" not in zonas  # a leitura do lado B é a própria transição confirmada
+    assert zonas.count("Zona 1") == 2  # a visita antiga e o lado A da travessia, antes da confirmação

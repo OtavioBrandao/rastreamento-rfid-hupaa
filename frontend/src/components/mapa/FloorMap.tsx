@@ -23,6 +23,8 @@ export interface MapMarker {
   count?: number
   /** Equipamento individual (zona expandida): símbolo do tipo, marcador menor. */
   symbol?: TipoSimbolo
+  /** Lido perto da antena, sem transição: marca tracejada, fora da ocupação da zona. */
+  nonConfirmed?: boolean
   /** Visada da antena em graus da tela (seta); ausente = sem direção. */
   rotation?: number | null
 }
@@ -60,7 +62,7 @@ export function FloorMap({ mode, zones = [], mainZones = [], selectedZoneId = ''
     {mode === 'lab' && <div className="room-layer">{mainZones.filter((zone) => zone.area).map((zone) => <button key={zone.id} type="button" className={`room-hit ${selectedZoneId === zone.id ? 'room-hit-selected' : ''}`} style={{ left: `${zone.area!.x}%`, top: `${zone.area!.y}%`, width: `${zone.area!.width}%`, height: `${zone.area!.height}%` }} aria-label={`${zone.name}: clique para ver os equipamentos`} title="Clique para ver os equipamentos" aria-pressed={selectedZoneId === zone.id} onClick={() => onZoneClick?.(zone.id)}/>)}</div>}
     {mode === 'hospital' && <div className="sector-layer" aria-label="Zonas do HU">{mainZones.map((zone) => <button key={zone.id} type="button" className={`sector-pin ${selectedZoneId === zone.id ? 'sector-pin-selected' : ''}`} style={position(zone.x, zone.y)} aria-label={`${zone.name}: ${zone.description}`} title="Clique para ver os equipamentos" aria-pressed={selectedZoneId === zone.id} onClick={() => onZoneClick?.(zone.id)}>{zone.name}</button>)}</div>}
     <div className="marker-layer">{markers.map((marker) => <button key={`${marker.id}-${marker.pulseKey ?? 0}`} type="button" data-portal-id={marker.portalId} data-zone-member={marker.symbol || marker.count !== undefined ? '' : undefined}
-      className={`map-marker marker-${marker.kind} ${marker.status ? `marker-${marker.status}` : ''} ${marker.dimmed ? 'marker-dimmed' : ''} ${marker.pulse ? 'marker-pulse' : ''} ${marker.selected ? 'marker-selected' : ''} ${marker.symbol ? 'marker-individual' : ''} ${marker.count !== undefined ? 'marker-collapsed' : ''}`}
+      className={`map-marker marker-${marker.kind} ${marker.status ? `marker-${marker.status}` : ''} ${marker.dimmed ? 'marker-dimmed' : ''} ${marker.pulse ? 'marker-pulse' : ''} ${marker.selected ? 'marker-selected' : ''} ${marker.symbol ? 'marker-individual' : ''} ${marker.count !== undefined ? 'marker-collapsed' : ''} ${marker.nonConfirmed ? 'marker-nao-confirmado' : ''}`}
       style={position(marker.x, marker.y)} aria-label={marker.ariaLabel ?? `${marker.label}. ${marker.detail}`} aria-pressed={marker.selected === undefined ? undefined : marker.selected}
       aria-expanded={marker.count !== undefined ? !!marker.selected : undefined} onClick={(event) => { event.stopPropagation(); onMarkerClick(marker) }}>
       {marker.symbol ? <EquipIcon tipo={marker.symbol} size={13}/>

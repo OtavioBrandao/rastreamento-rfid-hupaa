@@ -50,9 +50,16 @@ export function PresenceBadge({ reading }: { reading: LastReading | null | undef
 }
 
 /** "Nunca detectado" só vale sem zona confirmada E sem nenhuma leitura bruta. */
+/** Sem transição confirmada, mas lido: onde foi visto (perto da antena), não onde está. */
+export function zonaNaoConfirmada(item: EquipmentItem) {
+  if (item.ultima_zona || !item.ultima_leitura) return null
+  const perto = item.ultima_leitura.zona ? `perto da ${item.ultima_leitura.zona}` : 'perto de uma antena'
+  return `Zona não confirmada · visto ${perto} (${detectionLabel(item.ultima_leitura.em)})`
+}
+
 export function AssetStatusBadge({ item }: { item: EquipmentItem }) {
   if (item.status === 'nunca_detectado' && item.ultima_leitura) {
-    return <span className="status-badge status-sem_zona">Sem zona confirmada</span>
+    return <span className="status-badge status-sem_zona" title="Lido por uma antena, mas a zona só é confirmada por transição">Zona não confirmada</span>
   }
   return <StatusBadge status={item.status}/>
 }

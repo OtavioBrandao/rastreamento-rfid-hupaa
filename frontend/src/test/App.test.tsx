@@ -146,8 +146,8 @@ describe('integração da busca', () => {
   it('filtra EPC nos dois modos e não plota ativo nunca detectado', async () => {
     await renderApp()
     fireEvent.click(screen.getByRole('link', { name: 'Mapa / Planta' }))
-    fireEvent.click(await screen.findByRole('tab', { name: /Sem zona confirmada/ }))
-    const semZona = screen.getByRole('tabpanel', { name: /Sem zona confirmada/ })
+    fireEvent.click(await screen.findByRole('tab', { name: /Zona não confirmada/ }))
+    const semZona = screen.getByRole('tabpanel', { name: /Zona não confirmada/ })
     expect(within(semZona).getByRole('button', { name: /Maca 2/ })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /1 equipamento em/ })).toHaveLength(1)
     fireEvent.click(screen.getByRole('tab', { name: 'Laboratório de Testes (EASY)' }))
@@ -208,7 +208,7 @@ describe('integração da busca', () => {
     try {
       render(<App/>)
       const dashboard = await screen.findByRole('table')
-      expect(within(dashboard).getByText('Sem zona confirmada')).toBeInTheDocument()
+      expect(within(dashboard).getByText('Zona não confirmada')).toBeInTheDocument()
       expect(within(dashboard).getByText(/Lida agora · Antena 1 · Sala A/)).toBeInTheDocument()
       fireEvent.click(screen.getByRole('link', { name: 'Mapa / Planta' }))
       const region = await screen.findByRole('region', { name: 'Detectados recentemente' })

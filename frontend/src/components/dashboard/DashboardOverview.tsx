@@ -11,7 +11,7 @@ export function DashboardOverview({ data, summary, onSelect, onPage }: {
     <article className="kpi-card kpi-available"><div className="kpi-card-heading"><span className="kpi-card-label">Em trânsito</span><span className="kpi-icon"><Icon name="check" size={18}/></span></div><strong>{summary?.disponivel ?? '—'}</strong></article>
     <article className="kpi-card kpi-attention"><div className="kpi-card-heading"><span className="kpi-card-label">Atenção necessária</span><span className="kpi-icon"><Icon name="alert" size={18}/></span></div><strong>{summary?.atencao ?? '—'}</strong></article>
     <article className="kpi-card kpi-critical"><div className="kpi-card-heading"><span className="kpi-card-label">Fora de serviço</span><span className="kpi-icon"><Icon name="close" size={18}/></span></div><strong>{summary?.fora_de_servico ?? '—'}</strong></article>
-    <article className="kpi-card kpi-offline"><div className="kpi-card-heading"><span className="kpi-card-label">Sem zona confirmada</span><span className="kpi-icon"><Icon name="question" size={18}/></span></div><strong>{summary?.nunca_detectado ?? '—'}</strong></article>
+    <article className="kpi-card kpi-offline"><div className="kpi-card-heading"><span className="kpi-card-label">Zona não confirmada</span><span className="kpi-icon"><Icon name="question" size={18}/></span></div><strong>{summary?.nunca_detectado ?? '—'}</strong></article>
   </div></section><section className="panel inventory-panel" aria-labelledby="inventory-title">
     <div className="panel-heading"><div><p className="eyebrow">INVENTÁRIO</p><h2 id="inventory-title">Equipamentos</h2></div><span>{data.total} encontrados</span></div>
     {data.items.length ? <div className="table-wrap"><table className="equipment-table">

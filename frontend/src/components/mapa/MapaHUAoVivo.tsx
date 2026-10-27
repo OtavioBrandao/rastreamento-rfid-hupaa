@@ -6,7 +6,8 @@ import {
   type LayoutResumo, type Monitor, type SessaoResumo,
 } from '../../services/simulacao'
 import type { AssetStatus, EquipmentItem } from '../../types/dashboard'
-import { detectionLabel } from '../DashboardParts'
+import { detectionLabel, zonaNaoConfirmada } from '../DashboardParts'
+import { simboloDoTipo } from '../simulador/EquipIcon'
 import type { MapMarker } from './FloorMap'
 import { MapaHospital } from './MapaHospital'
 import { MapWorkspace, PRIORIDADE_ALERTA, ROTULO_STATUS } from './MapWorkspace'
@@ -179,6 +180,17 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
       pulse: lendo.has(antena.chave), pulseKey: lendo.get(antena.chave) }] : []),
   ])
   const naRestrita = (monitor?.alertas_restritos ?? []).filter((alerta) => alerta.recente)
+  // Zona não confirmada: lido perto de uma antena, sem transição. Fica junto da antena,
+  // com marca própria, e não conta como ocupação de zona.
+  const antenaPorLeitura = new Map(config.leitores.flatMap((leitor) => leitor.antenas.map((antena) => [`${leitor.reader_id}|${antena.porta}`, antena])))
+  const naoConfirmados: MapMarker[] = items.filter((item) => !item.ultima_zona && item.ultima_leitura?.leitor).flatMap((item, indice) => {
+    const antena = antenaPorLeitura.get(`${item.ultima_leitura!.leitor}|${item.ultima_leitura!.porta}`)
+    if (!antena?.posicao) return []
+    const angulo = indice * 2.4 + 0.8
+    return [{ id: `eq-${item.id}`, kind: 'equipment' as const, x: antena.posicao.x + Math.cos(angulo) * 2.2, y: antena.posicao.y + Math.sin(angulo) * 4,
+      symbol: simboloDoTipo(item.tipo, item.nome), label: item.nome, detail: zonaNaoConfirmada(item) ?? 'Zona não confirmada',
+      ariaLabel: `${item.nome}: zona não confirmada, visto perto da antena. Abrir detalhes`, nonConfirmed: true }]
+  })
   const svgExtras = <>
     {cobertura && config.leitores.flatMap((leitor) => leitor.antenas).map((antena) => antena.posicao && <path key={`cob-${antena.chave}`} className="hu-cobertura" d={contornoCobertura(antena, config.proporcao)}/>)}
     {/* Contorno claro por baixo e tracejado escuro por cima: a zona aparece sobre qualquer cor da planta. */}
@@ -194,11 +206,11 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
     {notificacoes.length > 0 && <div className="hu-toasts" role="alert">{notificacoes.map((n) => <p key={n.chave} className="hu-toast">⚠ {n.texto}
       <button type="button" aria-label="Dispensar notificação" onClick={() => setNotificacoes((velhas) => velhas.filter((v) => v.chave !== n.chave))}>×</button></p>)}</div>}
     {naRestrita.length > 0 && <p className="hu-restrita-agora" role="status"><strong>Atividade suspeita</strong> — na zona restrita agora: {naRestrita.map((a) => a.equipamento?.nome ?? `Tag …${a.epc.slice(-4)}`).join(', ')}</p>}
-    <MapWorkspace mode="hospital" zones={zones} portals={[]} items={items} onSelect={onSelect} markers={markers} areas={hospitalContextAreas} svgExtras={svgExtras}
+    <MapWorkspace mode="hospital" zones={zones} portals={[]} items={items} onSelect={onSelect} markers={[...markers, ...naoConfirmados]} areas={hospitalContextAreas} svgExtras={svgExtras}
       below={<div className="hu-legenda">
         <ul className="hu-legend" aria-label="Cores da planta do HU">{LEGENDA_PLANTA.map((item) =>
           <li key={item.nome}><span className="hu-planta-cor" style={{ background: item.cor }}/>{item.nome}</li>)}
-          <li><span className="hu-planta-cor hu-planta-zona"/>Limite de zona</li><li><span className="hu-planta-cor hu-planta-restrita"/>Zona restrita</li></ul>
+          <li><span className="hu-planta-cor hu-planta-zona"/>Limite de zona</li><li><span className="map-legend-dot marker-nao-confirmado"/>Zona não confirmada (visto perto da antena)</li><li><span className="hu-planta-cor hu-planta-restrita"/>Zona restrita</li></ul>
         <ul className="hu-legend" aria-label="Cores dos equipamentos, da maior para a menor prioridade de alerta">{PRIORIDADE_ALERTA.map((status) =>
           <li key={status}><span className={`map-legend-dot marker-${status}`}/>{ROTULO_STATUS[status]} ({contagem(status)})</li>)}</ul>
         <label className="hu-cobertura-toggle"><input type="checkbox" checked={cobertura} onChange={(e) => setCobertura(e.target.checked)}/> Áreas de cobertura

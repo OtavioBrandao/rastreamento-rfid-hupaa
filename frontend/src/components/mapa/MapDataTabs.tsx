@@ -2,7 +2,7 @@ import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { belongsToZone, type BoundPortal, type BoundZone } from '../../services/mapTopology'
 import { assetPriority } from '../../services/assetPriority'
 import type { EquipmentItem } from '../../types/dashboard'
-import { LocationBadge, PresenceBadge, StatusBadge, detectionLabel } from '../DashboardParts'
+import { LocationBadge, PresenceBadge, StatusBadge, detectionLabel, zonaNaoConfirmada } from '../DashboardParts'
 import { MapReferences } from './MapReferences'
 import { RegisteredDetections } from './RegisteredDetections'
 
@@ -10,7 +10,7 @@ const baseTabs = [
   { id: 'detectados', label: 'Equipamentos detectados' },
   { id: 'salas', label: 'Ativos nas salas' },
   { id: 'zonas', label: 'Zonas e portais' },
-  { id: 'sem-zona', label: 'Sem zona confirmada' },
+  { id: 'sem-zona', label: 'Zona não confirmada' },
   { id: 'outras', label: 'Outras zonas' },
 ] as const
 type TabId = string
@@ -25,7 +25,7 @@ function EquipmentTable({ items, onSelect, empty }: { items: EquipmentItem[]; on
     <tbody>{assetPriority(items).map((item) => <tr key={item.id}>
       <td><button className="table-item-button" type="button" onClick={() => onSelect(item)}>{item.nome}<small>{item.epc ?? 'Sem EPC associado'}</small></button></td>
       <td><StatusBadge status={item.status}/></td>
-      <td>{item.ultima_zona?.caminho ?? 'Nenhuma passagem confirmada'}<LocationBadge item={item}/></td>
+      <td>{item.ultima_zona?.caminho ?? zonaNaoConfirmada(item) ?? 'Nenhuma passagem confirmada'}<LocationBadge item={item}/></td>
       <td>{detectionLabel(item.ultima_deteccao_em)}<PresenceBadge reading={item.ultima_leitura}/></td>
     </tr>)}</tbody>
   </table></div> : <p className="map-table-empty">{empty}</p>

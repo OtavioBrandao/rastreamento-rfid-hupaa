@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from api import service_equipamento as service
+from api import service_vistos
 from api.database import get_db
 from api.permissoes import Permissao, exigir_por_metodo
 from api.schemas_equipamento import (
@@ -40,6 +41,14 @@ _PERMISSAO = exigir_por_metodo(
     consultar=Permissao.EQUIPAMENTOS_CONSULTAR, alterar=Permissao.EQUIPAMENTOS_ALTERAR
 )
 router = APIRouter(prefix="/equipamentos", tags=["equipamentos"], dependencies=[Depends(_PERMISSAO)])
+
+
+@router.get("/{equipamento_id}/vistos", summary="Onde foi visto sem confirmação de zona")
+def listar_vistos(equipamento_id: int, db: Session = Depends(get_db)) -> dict:
+    """Visitas perto de antenas que não confirmam zona (ver api/service_vistos.py)."""
+    if not movement_repository.equipment_exists(db.connection(), equipamento_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="equipamento inexistente")
+    return {"items": service_vistos.visitas(db, equipamento_id)}
 
 
 @router.get(

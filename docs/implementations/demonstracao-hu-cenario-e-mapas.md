@@ -205,6 +205,30 @@ ser a configuração das apresentações. Outros layouts continuam como antes.
   - Equipamento com histórico não é alterado.
   - Só passagens confirmadas o movem depois disso.
 
+### "Zona não confirmada": visto perto da antena, confirmado só por transição
+
+- **Regra mantida:** a zona do equipamento só é **confirmada por transição**
+  (passagem pelos dois lados de um portal). Uma leitura numa antena diz que a
+  tag esteve **perto** daquela antena, não que entrou na zona.
+- **Novo estado:** "Sem zona confirmada" virou **"Zona não confirmada"**, com o
+  complemento "visto perto da Zona X (horário)", no selo, no painel, nas abas e
+  no indicador do dashboard. A aba continua sendo a do item sem zona
+  confirmada (recém-etiquetado, ou lido sem ter passado por um portal).
+- **Histórico** (`GET /equipamentos/{id}/vistos`, `api/service_vistos.py`):
+  - As leituras gravadas são agrupadas em visitas: leituras seguidas perto da
+    mesma zona, sem silêncio maior que 60 s. Nada vai para tabela nova.
+  - O painel do equipamento mistura essas visitas às movimentações, com borda
+    tracejada: "Visto perto da Zona X · leitor, porta, leituras — não confirma
+    a zona".
+  - Entram só as visitas perto de uma zona diferente da confirmada naquele
+    momento, ou de quando não havia zona confirmada.
+  - A leitura que é a própria evidência de uma transição confirmada não se
+    repete.
+- **Mapa do HU:**
+  - O item com zona não confirmada aparece junto da antena onde foi lido, com
+    marcador tracejado.
+  - Ele **não entra** na contagem nem no ícone da zona.
+
 ## Validação
 
 - `tests/test_cenario_demo.py`:

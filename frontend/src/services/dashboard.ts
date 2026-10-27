@@ -27,6 +27,12 @@ export function getAssets(filters: AssetFilters = {}, signal?: AbortSignal): Pro
   return readJson<AssetPage>(`/api/ativos?${params}`, signal)
 }
 
+/** Visita perto de uma antena que não confirma zona (GET /equipamentos/{id}/vistos). */
+export interface Visto { inicio: string; fim: string; leituras: number; zona: string | null; leitor: string; porta: number; zona_confirmada_no_momento: string | null }
+export async function getSightings(equipmentId: number, signal?: AbortSignal): Promise<Visto[]> {
+  return (await readJson<{ items: Visto[] }>(`/equipamentos/${equipmentId}/vistos`, signal)).items
+}
+
 export function getMovements(equipmentId: number, page = 1, signal?: AbortSignal): Promise<MovementPage> {
   return readJson<MovementPage>(`/equipamentos/${equipmentId}/movimentacoes?page=${page}&size=20`, signal)
 }

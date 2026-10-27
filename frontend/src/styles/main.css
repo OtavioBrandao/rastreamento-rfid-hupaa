@@ -2526,3 +2526,7 @@ button:disabled { opacity:.55; cursor:default }
 .hu-planta-restrita { background:rgba(198,40,40,.35); border:2px dashed #7a1f8f }
 .hu-restrita-agora { animation:hu-texto-pisca 1s steps(2, start) infinite }
 @keyframes hu-texto-pisca { 0% { color:#c62828 } 100% { color:#5c0f0b } }
+/* Histórico: "visto perto" (não confirma zona) diferente das movimentações confirmadas. */
+.movement-history li.history-visto { border-left:3px dashed #0b6fb8; padding-left:8px; color:#24435c }
+.movement-history li.history-visto strong { font-weight:600 }
+.map-marker.marker-nao-confirmado,.map-legend-dot.marker-nao-confirmado { background:#fff; color:#24435c; border:2px dashed #24435c }
