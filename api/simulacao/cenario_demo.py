@@ -160,7 +160,8 @@ def _ponto_na_zona(area: dict, layout: dict, ocupados: list[tuple[float, float]]
             dentro = (area["x"] + 1 <= x <= area["x"] + area["largura"] - 1
                       and area["y"] + 1 <= y <= area["y"] + area["altura"] - 1)
             if dentro and not detectar(x, y, antenas, proporcao) and all(
-                    math.dist((x, y), outro) >= 4 for outro in ocupados):
+                    service.distancia_na_tela((x, y), outro, proporcao) >= service.DISTANCIA_ENTRE_ITENS
+                    for outro in ocupados):
                 return x, y
     return round(cx, 3), round(cy, 3)
 

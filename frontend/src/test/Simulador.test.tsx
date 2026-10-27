@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LayoutEditor, redimensionar } from '../components/simulador/LayoutEditor'
 import { SimulatorControlPage, uniformizar, VELOCIDADE } from '../pages/SimulatorControlPage'
-import { aplicarPadroesDeAntena, alcanceNaDirecao, contornoCobertura, emTrajeto, inRange, pendencias, posicaoNoTempo, zoneAt, type LayoutConfig, type Sessao } from '../services/simulacao'
+import { aplicarPadroesDeAntena, alcanceNaDirecao, contornoCobertura, emTrajeto, inRange, pendencias, posicaoNoTempo, tornarPortalDaZona, zoneAt, type LayoutConfig, type Sessao } from '../services/simulacao'
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body })
 
@@ -325,5 +325,18 @@ describe('trajeto executado', () => {
     expect(em(99)).toEqual({ x: 50, y: 10 })
     expect(emTrajeto(item, Date.parse(inicio) + 8000)).toBe(true)
     expect(emTrajeto(item, Date.parse(inicio) + 9500)).toBe(false)
+  })
+})
+
+describe('portal de entrada da zona', () => {
+  it('leitor com duas antenas vira o portal da zona: 1ª antena fora, 2ª dentro, sem pendência de área', () => {
+    const layout = structuredClone(easy)
+    layout.leitores[0].antenas.forEach((a) => Object.assign(a, { portal: null, lado: null }))
+    layout.portais = []
+    tornarPortalDaZona(layout, 'leitor-easy', 'zona-a')
+    const [portal] = layout.portais
+    expect(portal).toMatchObject({ nome: 'Portal para Zona A', modo: 'entrada', zona_a: 'circulacao', zona_b: 'zona-a' })
+    expect(layout.leitores[0].antenas.map((a) => [a.portal, a.lado, a.zona])).toEqual([[portal.chave, 'a', 'circulacao'], [portal.chave, 'b', 'zona-a']])
+    expect(pendencias(layout).join(' ')).not.toMatch(/Circulação/)
   })
 })

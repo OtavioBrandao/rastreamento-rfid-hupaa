@@ -325,7 +325,15 @@ def adicionar_item(db: Session, codigo: str, *, nome: str, tipo: str | None, epc
 
 
 MARGEM_ZONA = 1.5
-DISTANCIA_ENTRE_ITENS = 3.0
+# Distância mínima entre itens novos na escala real da tela (unidades de largura da
+# planta): abaixo disso os marcadores se sobrepõem e o clique pega o item errado
+# (26/10/2026: Maca HU-07 e Cadeira HU-08 surgiram a 3 unidades de altura ≈ 16 px).
+DISTANCIA_ENTRE_ITENS = 4.0
+
+
+def distancia_na_tela(a: tuple[float, float], b: tuple[float, float], proporcao: float) -> float:
+    """Distância em unidades de largura: a altura da planta vale 1/proporção da largura."""
+    return math.hypot(a[0] - b[0], (a[1] - b[1]) / proporcao)
 
 
 def _dentro(area: dict, x: float, y: float, margem: float = 0.0) -> bool:
@@ -356,7 +364,7 @@ def _posicao_livre(layout: dict, itens: list[dict], agora_sim: datetime) -> tupl
                 continue
             if detectar(x, y, antenas, proporcao):
                 continue
-            if any(math.dist((x, y), outro) < DISTANCIA_ENTRE_ITENS for outro in ocupados):
+            if any(distancia_na_tela((x, y), outro, proporcao) < DISTANCIA_ENTRE_ITENS for outro in ocupados):
                 continue
             return x, y
     raise SimulacaoRecusada("sem_espaco", "não há posição livre fora das zonas para um item novo")

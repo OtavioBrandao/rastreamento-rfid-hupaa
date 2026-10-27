@@ -1,6 +1,6 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
-  ALCANCE_PADRAO, aplicarPadroesDeAntena, DIRECOES, FATOR_TRASEIRO_PADRAO, nomeDirecao, zoneAt, zonaRestritaDoLeitor,
+  tornarPortalDaZona, ALCANCE_PADRAO, aplicarPadroesDeAntena, DIRECOES, FATOR_TRASEIRO_PADRAO, nomeDirecao, zoneAt, zonaRestritaDoLeitor,
   type AntenaLayout, type Area, type LayoutConfig, type LeitorLayout, type Modelo, type Ponto,
 } from '../../services/simulacao'
 import { linhasAntena, linhasLeitor, Marcador } from './Marcador'
@@ -357,6 +357,7 @@ export function LayoutEditor({ config, onChange, disabled = false }: { config: L
             onChange={(mutate, grupo) => update((d) => mutate(leitorDe(d, leitor.chave)), grupo)}
             onPosition={(alvo, chave) => setTool(alvo === 'leitor' ? { kind: 'posicionar', alvo, chave } : { kind: 'posicionar', alvo, chave, leitor: leitor.chave })}
             onRemove={() => { update((d) => { d.leitores = d.leitores.filter((l) => l.chave !== leitor.chave) }); setSelection(null) }}
+            onPortalDaZona={(zona) => update((d) => tornarPortalDaZona(d, leitor.chave, zona))}
             onBack={() => setSelection(null)} newKey={(prefixo) => novaChave(prefixo, todasAsChaves(config))}/>
         })()}
       </aside>
@@ -430,11 +431,12 @@ function Visada({ antena, onChange }: { antena: AntenaLayout; onChange: (mutate:
   </fieldset>
 }
 
-function ReaderForm({ config, leitor, focus, disabled, onChange, onPosition, onRemove, onBack, newKey }: {
+function ReaderForm({ config, leitor, focus, disabled, onChange, onPosition, onRemove, onBack, newKey, onPortalDaZona }: {
   config: LayoutConfig; leitor: LeitorLayout; focus?: string; disabled: boolean
   onChange: (mutate: (leitor: LeitorLayout) => void, grupo?: string) => void
   onPosition: (alvo: 'leitor' | 'antena', chave: string) => void
   onRemove: () => void; onBack: () => void; newKey: (prefixo: string) => string
+  onPortalDaZona: (zona: string) => void
 }) {
   const portasLivres = (atual: number) => [1, 2, 3, 4].filter((porta) => porta === atual || !leitor.antenas.some((a) => a.porta === porta))
   const setAntena = (chave: string, mutate: (antena: AntenaLayout) => void, grupo?: string) => onChange((l) => mutate(l.antenas.find((a) => a.chave === chave)!), grupo)
@@ -446,6 +448,14 @@ function ReaderForm({ config, leitor, focus, disabled, onChange, onPosition, onR
       <small>Sempre com prefixo <code>sim-</code>: separa a fonte simulada dos leitores físicos.</small></label>
     <label>Modelo<select value={leitor.modelo} disabled={disabled} onChange={(e) => onChange((l) => { l.modelo = e.target.value as Modelo })}>{MODELOS.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}</select></label>
     {leitor.modelo === 'DR_MAX' && <small className="muted-text">DR Max existe apenas no ambiente simulado: a integração física ao MQTT ainda não foi validada.</small>}
+    {(() => {
+      const portal = config.portais.find((p) => p.modo === 'entrada' && leitor.antenas.some((a) => a.portal === p.chave))
+      return <label>Portal da zona (leitor com 2+ antenas)<select value={portal?.zona_b ?? ''} disabled={disabled || leitor.antenas.length < 2}
+        onChange={(e) => { if (e.target.value) onPortalDaZona(e.target.value) }}>
+        <option value="">{portal ? '—' : 'Não é portal de entrada'}</option>
+        {config.zonas.filter((z) => !z.restrita && z.chave !== 'circulacao').map((z) => <option key={z.chave} value={z.chave}>Portal para {z.nome}</option>)}</select>
+        <small>{leitor.antenas.length < 2 ? 'Precisa de pelo menos duas antenas.' : 'As duas antenas lendo, em qualquer ordem, confirmam a entrada na zona. A 1ª antena fica do lado de fora.'}</small></label>
+    })()}
     <label className="checkbox-label"><input type="checkbox" checked={!!leitor.alerta_area_restrita} disabled={disabled} onChange={(e) => onChange((l) => {
       l.alerta_area_restrita = e.target.checked
       const zona = config.zonas.find((z) => z.restrita)?.chave

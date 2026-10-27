@@ -43,6 +43,8 @@ class DirectionContext:
     zone_b_id: int | None
     first: DirectionEvidence
     second: DirectionEvidence
+    # Portal de entrada da zona B: leitor com duas antenas; qualquer ordem confirma B.
+    entry_portal: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +129,18 @@ def infer_direction(context: DirectionContext, ambiguity: timedelta) -> Directio
     first_side, second_side = first.mappings[0].side, second.mappings[0].side
     if first_side == second_side:
         return result("unknown", "same_side")
+    if context.entry_portal:
+        # As duas antenas do portal da zona leram a tag: entrou na zona B, seja qual
+        # for a ordem (lóbulos traseiros e permanência na porta invertem a ordem).
+        return DirectionInferenceResult(
+            passage_id=context.passage_id, epc=context.epc, portal_id=context.portal_id,
+            status="confirmed", direction="a_para_b", origin_side="a", destination_side="b",
+            origin_zone_id=context.zone_a_id, destination_zone_id=context.zone_b_id,
+            origin_antenna_id=first.antenna_id, destination_antenna_id=second.antenna_id,
+            origin_reading_id=first.reading_id, destination_reading_id=second.reading_id,
+            origin_observed_at=first.observed_at, destination_observed_at=second.observed_at,
+            rule="entry_portal_any_order_v1",
+        )
     assert first.observed_at is not None and second.observed_at is not None
     if first.observed_at > second.observed_at:
         return result("unknown", "evidence_order_invalid")

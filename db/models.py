@@ -347,6 +347,10 @@ class Portal(Base):
     zona_a_id = Column(BigInteger, ForeignKey("zonas.id"), nullable=False)
     zona_b_id = Column(BigInteger, ForeignKey("zonas.id"), nullable=False)
     localizacao_fisica = Column(Text, nullable=True)
+    # 'direcional': a ordem A → B / B → A decide origem e destino (padrão).
+    # 'entrada': leitor com duas antenas na entrada da zona B; as duas antenas
+    # lendo, em qualquer ordem, confirmam a zona B (migration s041).
+    modo = Column(String(16), nullable=False, server_default="direcional")
     ativo = Column(Boolean, nullable=False, server_default="true")
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(
@@ -360,6 +364,7 @@ class Portal(Base):
 
     __table_args__ = (
         CheckConstraint("zona_a_id <> zona_b_id", name="ck_portal_zonas_distintas"),
+        CheckConstraint("modo IN ('direcional', 'entrada')", name="ck_portal_modo"),
     )
 
 

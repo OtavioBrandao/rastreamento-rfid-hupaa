@@ -7,7 +7,28 @@ export interface Ponto { x: number; y: number }
 export interface Area { x: number; y: number; largura: number; altura: number }
 
 export interface ZonaLayout { chave: string; nome: string; cor: string; area: Area | null; referencia_planta: string | null; restrita: boolean }
-export interface PortalLayout { chave: string; nome: string; zona_a: string; zona_b: string; posicao: Ponto | null }
+/** `entrada`: portal da zona B = um leitor com pelo menos duas antenas na entrada dela; as duas
+ *  lendo, em qualquer ordem, confirmam a zona B. `direcional` (padrão): a ordem A → B / B → A decide. */
+export interface PortalLayout { chave: string; nome: string; zona_a: string; zona_b: string; posicao: Ponto | null; modo?: 'direcional' | 'entrada' }
+
+/** Torna o leitor o portal de entrada da zona: 1ª antena fora (circulação), demais dentro. */
+export function tornarPortalDaZona(layout: LayoutConfig, leitorChave: string, zonaChave: string) {
+  const zona = layout.zonas.find((z) => z.chave === zonaChave)
+  const leitor = layout.leitores.find((l) => l.chave === leitorChave)
+  if (!zona || !leitor || leitor.antenas.length < 2) return
+  if (!layout.zonas.some((z) => z.chave === 'circulacao'))
+    layout.zonas.push({ chave: 'circulacao', nome: 'Circulação (fora das zonas)', cor: '#888888', area: null, referencia_planta: null, restrita: false })
+  const chave = `portal-${zonaChave}`
+  let portal = layout.portais.find((p) => p.chave === chave)
+  if (!portal) { portal = { chave, nome: `Portal para ${zona.nome}`, zona_a: 'circulacao', zona_b: zonaChave, posicao: leitor.posicao, modo: 'entrada' }; layout.portais.push(portal) }
+  Object.assign(portal, { zona_a: 'circulacao', zona_b: zonaChave, modo: 'entrada' })
+  // Antenas de outros leitores neste portal deixam de valer: o portal é este leitor.
+  for (const outro of layout.leitores) if (outro.chave !== leitorChave)
+    for (const antena of outro.antenas) if (antena.portal === chave) Object.assign(antena, { portal: null, lado: null, zona: antena.zona ?? zonaChave })
+  leitor.alerta_area_restrita = false
+  leitor.antenas.forEach((antena, i) => Object.assign(antena, i === 0
+    ? { portal: chave, lado: 'a', zona: 'circulacao' } : { portal: chave, lado: 'b', zona: zonaChave }))
+}
 /** `orientacao`: visada em graus da tela (0 direita, 90 baixo, 180 esquerda, 270 cima); null = omnidirecional (layout antigo). */
 export interface AntenaLayout { chave: string; nome: string; porta: number; posicao: Ponto | null; alcance: number; orientacao?: number | null; fator_traseiro?: number; portal: string | null; lado: 'a' | 'b' | null; zona: string | null }
 export interface LeitorLayout { chave: string; nome: string; reader_id: string; modelo: Modelo; posicao: Ponto | null; antenas: AntenaLayout[]; alerta_area_restrita?: boolean }
@@ -243,7 +264,9 @@ export const pontoUnico = (a: AntenaLayout, b: AntenaLayout) => !!a.portal && !!
 export function pendencias(layout: LayoutConfig): string[] {
   const resultado: string[] = []
   if (!layout.zonas.length) resultado.push('Desenhe pelo menos duas zonas.')
-  for (const zona of layout.zonas) if (!zona.area) resultado.push(`Delimite a zona “${zona.nome}” na planta.`)
+  // O lado "fora" de um portal de entrada (circulação) não precisa de área.
+  const fora = new Set(layout.portais.filter((p) => p.modo === 'entrada').map((p) => p.zona_a))
+  for (const zona of layout.zonas) if (!zona.area && !fora.has(zona.chave)) resultado.push(`Delimite a zona “${zona.nome}” na planta.`)
   if (layout.zonas.length >= 2 && !layout.portais.length) resultado.push('Crie um portal entre duas zonas.')
   for (const leitor of layout.leitores) {
     if (!leitor.posicao) resultado.push(`Posicione o ${leitor.nome}.`)

@@ -150,6 +150,7 @@ def aplicar(session: Session, registro: SimulacaoLayout, layout: Layout) -> dict
         else:
             portal.nome = portal_layout.nome
             portal.zona_a_id, portal.zona_b_id = zona_a, zona_b
+        portal.modo = portal_layout.modo
         portal.ativo = True
         session.flush()
         vinculos["portais"][portal_layout.chave] = portal.id

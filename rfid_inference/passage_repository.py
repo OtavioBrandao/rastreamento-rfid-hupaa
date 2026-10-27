@@ -10,7 +10,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
-from db.models import LeituraBruta, MapeamentoAntenaPortal, Passagem
+from db.models import LeituraBruta, MapeamentoAntenaPortal, Passagem, Portal
 from rfid_inference.debounce import ConsolidatedObservation
 
 from .passage import DetectedPassage, PortalObservation
@@ -125,6 +125,10 @@ class PassageRepository:
         leituras já foram persistidas quando o debounce finaliza a observação.
         """
         with self.engine.connect() as connection:
+            # Portal de entrada da zona: as duas antenas do leitor lendo juntas é a própria
+            # evidência da entrada, não reflexo entre lados opostos.
+            if connection.scalar(select(Portal.modo).where(Portal.id == origin.portal_id)) == "entrada":
+                return False
             return bool(connection.scalar(select(exists().where(
                 LeituraBruta.epc == origin.epc,
                 LeituraBruta.antena_id == origin.antenna_id,

@@ -99,6 +99,9 @@ class PortalLayout(BaseModel):
     zona_a: str
     zona_b: str
     posicao: Ponto | None = None
+    # 'entrada': portal da zona B = um leitor com pelo menos duas antenas na entrada
+    # dela; as duas lendo, em qualquer ordem, confirmam a zona B. O lado A é "fora".
+    modo: Literal["direcional", "entrada"] = "direcional"
 
 
 class AntenaLayout(BaseModel):
@@ -273,9 +276,17 @@ def avisos(layout: Layout) -> list[str]:
                     f"({nomes_zonas.get(zona, zona)}), então a passagem por ele nunca é "
                     "confirmada; ligue uma antena a esse lado ou remova o portal se essa "
                     "entrada é vigiada só pelo portal de zona restrita")
+    # O lado "fora" de um portal de entrada (ex.: circulação) não precisa de área.
+    fora = {portal.zona_a for portal in layout.portais if portal.modo == "entrada"}
     for zona in layout.zonas:
-        if zona.area is None:
+        if zona.area is None and zona.chave not in fora:
             resultado.append(f"zona '{zona.nome}' ainda não foi delimitada na planta")
+    for portal in layout.portais:
+        if portal.modo == "entrada" and not any(
+                {a.lado for a in leitor.antenas if a.portal == portal.chave} == {"a", "b"}
+                for leitor in layout.leitores):
+            resultado.append(f"portal '{portal.nome}': portal de entrada precisa de um leitor com "
+                             "as duas antenas, uma de cada lado")
     restritas = {zona.chave for zona in layout.zonas if zona.restrita}
     for leitor in layout.leitores:
         if leitor.alerta_area_restrita and not any(a.zona in restritas for a in leitor.antenas):
