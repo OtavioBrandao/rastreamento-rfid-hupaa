@@ -129,6 +129,18 @@ def listar_equipamentos(
             "total": pagina.total, "pages": pagina.pages}
 
 
+def _chegada_simulada(db: Session, epc: str) -> None:
+    """Com o simulador ligado: item que surgiu no elevador do HU veio de outro andar."""
+    from api.simulacao import config as config_simulador
+    from api.simulacao.chegada import registrar_chegada
+
+    try:
+        if config_simulador.carregar().habilitado:
+            registrar_chegada(db, epc)
+    except ValueError:
+        pass
+
+
 @router.post("/equipamentos", response_model=CadastroResposta,
              status_code=status.HTTP_201_CREATED, summary="Cadastrar equipamento (com ou sem tag)")
 def cadastrar_equipamento(payload: CadastroPayload, db: Session = Depends(get_db)
@@ -143,6 +155,8 @@ def cadastrar_equipamento(payload: CadastroPayload, db: Session = Depends(get_db
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(erro)) from erro
     except (IdentificadorDuplicado, TagJaAssociada) as erro:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=str(erro)) from erro
+    if epc:
+        _chegada_simulada(db, epc)
     return CadastroResposta(
         id=equipamento.id, nome=equipamento.nome, tipo_id=equipamento.tipo_id,
         tipo_nome=equipamento.tipo.nome, identificador_interno=equipamento.identificador_interno,

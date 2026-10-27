@@ -63,6 +63,8 @@ def associar_tag(
     Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         associacao = service.associar(db, equipamento_id, payload.epc)
+        from api.router_cadastro import _chegada_simulada
+        _chegada_simulada(db, associacao.tag.epc if getattr(associacao, "tag", None) else payload.epc)
     except service.EquipamentoInvalido as error:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)

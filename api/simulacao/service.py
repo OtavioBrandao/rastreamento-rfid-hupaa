@@ -304,16 +304,24 @@ def adicionar_item(db: Session, codigo: str, *, nome: str, tipo: str | None, epc
             valor = _epc_valido(epc, itens)
         elif gerar_epc:
             valor = _gerar_epc({item["epc"] for item in itens if item["epc"]})
+        chegada = {}
         if x is None or y is None:
             # Sem posição: o ponto livre mais perto do centro (fora de toda zona e
             # de todo alcance), para o item surgir sem ser lido nem "estar" numa zona.
-            px, py = _posicao_livre(_sessao.layout, itens, relogio_sim.do_banco(db).agora(_agora()))
+            # No HU o centro é o elevador: o item chega de outro andar (ver chegada.py).
+            agora_sim = relogio_sim.do_banco(db).agora(_agora())
+            px, py = _posicao_livre(_sessao.layout, itens, agora_sim)
+            chegada = {"origem": "outro_andar", "chegou_em": agora_sim.isoformat()}
         else:
             px, py = _limitar(x), _limitar(y)
         itens.append({"id": f"it-{secrets.token_hex(4)}", "nome": nome.strip()[:80],
                       "tipo": (tipo or "").strip()[:60] or None, "epc": valor,
-                      "x": px, "y": py, "x0": px, "y0": py})
-    return _alterar(db, codigo, mudanca)
+                      "x": px, "y": py, "x0": px, "y0": py, **chegada})
+    sessao = _alterar(db, codigo, mudanca)
+    from .chegada import registrar_chegada  # evita import circular
+    if sessao.itens and sessao.itens[-1].get("epc"):
+        registrar_chegada(db, sessao.itens[-1]["epc"])
+    return sessao
 
 
 MARGEM_ZONA = 1.5

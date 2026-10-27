@@ -185,6 +185,26 @@ ser a configuração das apresentações. Outros layouts continuam como antes.
   - Eles aparecem na aba "Outras zonas" como recém-chegados.
   - A próxima passagem confirmada leva cada um para a zona do portal.
 
+### Fora de serviço pelo painel e chegada pelo elevador
+
+- **Fora de serviço no painel do equipamento:**
+  - O administrador (`equipamentos:alterar`) põe o equipamento fora de serviço
+    ou o reativa direto no painel que abre ao clicar nele, no dashboard ou no
+    mapa. Antes isso existia só na página Cadastro.
+  - Exemplo: maca quebrada ou tag danificada.
+  - O equipamento fica vermelho no mapa. A tag continua vinculada e o
+    histórico é mantido.
+- **Item novo surge pelo elevador** (`api/simulacao/chegada.py`):
+  - Um item acrescentado no simulador sem posição surge no centro do HU, junto
+    ao elevador, e fica marcado como vindo de outro andar, com o instante
+    simulado.
+  - Quando o equipamento dessa tag está cadastrado, ou é cadastrado ou recebe
+    a tag pelo fluxo de cadastro, e ainda não tem nenhuma localização, o
+    histórico recebe **"Outro andar (elevador)"** no instante em que ele
+    surgiu, como correção justificada.
+  - Equipamento com histórico não é alterado.
+  - Só passagens confirmadas o movem depois disso.
+
 ## Validação
 
 - `tests/test_cenario_demo.py`:

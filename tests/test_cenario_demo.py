@@ -13,7 +13,7 @@ from api.simulacao import cenario_demo, relogio, service
 from api.simulacao.geometria import antenas_do_layout, detectar
 from api.simulacao.presets import NOMES_PRESET
 from api.simulacao.presets import teste_rapido as layout_hu
-from db.models import Equipamento, SimulacaoSessao, TipoEquipamento
+from db.models import Equipamento, HistoricoMovimentacao, SimulacaoSessao, TipoEquipamento
 from rfid_location.recency import classify_recency, recency_threshold_from_env
 
 
@@ -83,6 +83,16 @@ def test_seis_antes_nove_ao_iniciar_onze_depois_do_cadastro_e_reinicio_previsive
         for item in sessao.itens[-2:]:
             service_cadastro.cadastrar(session, nome=item["nome"], tipo_id=tipo, epc=item["epc"])
         assert len(_ativos(session)) == 11
+
+        # Os dois surgiram no centro (elevador): ao cadastrar, o histórico diz que vieram de outro andar.
+        from api.simulacao.chegada import registrar_chegada
+        for item in sessao.itens[-2:]:
+            assert item["origem"] == "outro_andar"
+            assert registrar_chegada(session, item["epc"].lower()) is True
+        chegados = session.scalars(select(HistoricoMovimentacao).where(
+            HistoricoMovimentacao.justificativa.like("Chegou de outro andar%"))).all()
+        assert len(chegados) == 2 and all(h.origem_registro == "correcao_manual" for h in chegados)
+        assert registrar_chegada(session, sessao.itens[-1]["epc"]) is False  # já tem histórico: não repete
 
         # Reiniciar: mesmo link, volta a nove, sem duplicar nem perder histórico.
         reiniciada = cenario_demo.reiniciar(session, sessao.codigo)

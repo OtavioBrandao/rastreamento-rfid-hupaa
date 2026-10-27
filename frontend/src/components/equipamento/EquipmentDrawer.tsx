@@ -5,21 +5,27 @@ import { useLiveQuery, useLiveRefresh } from '../../services/live'
 import { AssetStatusBadge, LocationBadge, PresenceBadge, ageLabel, antennaLabel, detectionLabel } from '../DashboardParts'
 import { Icon } from '../layout/Icon'
 import { CorrectionPanel, type CorrectionMode } from './CorrectionPanel'
+import { errorMessage } from '../../services/api'
+import { setInService } from '../../services/cadastro'
 
 interface Props {
   item: EquipmentItem | null
   onClose: () => void
   /** Só o administrador (`equipamentos:corrigir`) vê a seção de correção (ISS-025). */
   canCorrect?: boolean
+  /** Administrador (`equipamentos:alterar`): colocar fora de serviço ou reativar. */
+  canChangeService?: boolean
 }
 
-export function EquipmentDrawer({ item: selected, onClose, canCorrect = false }: Props) {
+export function EquipmentDrawer({ item: selected, onClose, canCorrect = false, canChangeService = false }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyPage, setHistoryPage] = useState(1)
   const { refresh } = useLiveRefresh()
   const [correction, setCorrection] = useState<CorrectionMode | null>(null)
   const [correctionDone, setCorrectionDone] = useState<string | null>(null)
+  const [serviceMessage, setServiceMessage] = useState<string | null>(null)
+  const [serviceBusy, setServiceBusy] = useState(false)
   // Recarrega pelo ID, identidade estável: o nome e o patrimônio podem ter sido
   // corrigidos (ISS-025), e uma busca textual pode não trazer o item na 1ª página.
   const detail = useLiveQuery(selected ? `detail:${selected.id}` : null,
@@ -33,6 +39,7 @@ export function EquipmentDrawer({ item: selected, onClose, canCorrect = false }:
     setHistoryOpen(false)
     setHistoryPage(1)
     setCorrection(null)
+    setServiceMessage(null)
     setCorrectionDone(null)
   }, [selected?.id])
   useEffect(() => {
@@ -81,6 +88,20 @@ export function EquipmentDrawer({ item: selected, onClose, canCorrect = false }:
           </>}
         </div>}
       </section>
+      {canChangeService && <section className="correction-section" aria-labelledby="service-title"><h3 id="service-title">Situação de serviço</h3>
+        <p className="muted-text">{item.status === 'fora_de_servico'
+          ? 'Fora de serviço: aparece em vermelho no mapa até ser reativado. A tag continua vinculada.'
+          : 'Ex.: a maca quebrou ou a tag está danificada. O equipamento fica em vermelho no mapa e no dashboard; a tag continua vinculada e o histórico é mantido.'}</p>
+        {serviceMessage && <p className="correction-success" role="status">{serviceMessage}</p>}
+        <button type="button" className={item.status === 'fora_de_servico' ? 'correction-secondary' : 'danger'} disabled={serviceBusy}
+          onClick={async () => {
+            const voltar = item.status === 'fora_de_servico'
+            if (!voltar && !window.confirm(`Colocar “${item.nome}” fora de serviço?`)) return
+            setServiceBusy(true)
+            try { await setInService(item.id, voltar); setServiceMessage(voltar ? `“${item.nome}” voltou ao serviço.` : `“${item.nome}” está fora de serviço.`); refresh() }
+            catch (failure) { setServiceMessage(errorMessage(failure)) } finally { setServiceBusy(false) }
+          }}>{item.status === 'fora_de_servico' ? 'Reativar (voltar ao serviço)' : 'Colocar fora de serviço'}</button>
+      </section>}
       {canCorrect && <section className="correction-section" aria-labelledby="correction-title"><h3 id="correction-title">Correção manual</h3>
         {correctionDone && <p className="correction-success" role="status">{correctionDone}</p>}
         {correction ? <CorrectionPanel key={correction} mode={correction} equipmentId={item.id}
