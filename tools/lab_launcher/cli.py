@@ -265,8 +265,9 @@ def start(
                 # leitores virtuais; só o ingestor deste ensaio aceita (sim_reader_id).
                 ambiente["RFID_RELAY_LEITORES_VIRTUAIS"] = topico.split("/")[4]
         ambiente["EZ700_TIMESTAMP_FORMAT"] = timestamp_format or "counter"
-        projeto = valores.get("COMPOSE_PROJECT_NAME", "rfid-hospital-local" if modo == "local"
-                              else "rfid-hospital-managed")
+        # Sem COMPOSE_PROJECT_NAME, o Compose usa o `name:` de deploy/compose.yaml; usar o
+        # mesmo nome evita tratar os contêineres do próprio ensaio como conflito de porta.
+        projeto = valores.get("COMPOSE_PROJECT_NAME", "rfid-hospital-mvp")
         if fresh:
             etapa = "limpeza dos volumes locais"
             print("Removendo ambiente local e volumes...")
