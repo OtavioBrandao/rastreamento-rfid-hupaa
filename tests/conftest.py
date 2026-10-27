@@ -61,6 +61,9 @@ from db.models import Andar, Antena, Leitor, Setor, Zona
 # resolve a ordem de dependência sozinho (não precisa listar filhos antes de
 # pais); o CASCADE leva junto o que depender delas (passagens, leituras...).
 TABELAS_DO_CRUD = (
+    # Simulador web: sessões referenciam layouts e usuários.
+    "simulacao_sessoes",
+    "simulacao_layouts",
     "mapeamentos_antena_portal",
     "auditorias",
     # ISS-026. `perfis` fica de fora de propósito: quem semeia é a migration,
@@ -214,6 +217,8 @@ def db(engine):
         # também é desfeito pelo rollback do final.
         conexao.execute(text("TRUNCATE TABLE auditorias"))
         for tabela in (
+            "simulacao_sessoes",
+            "simulacao_layouts",
             "mapeamentos_antena_portal",
             "sessoes",
             "usuarios",

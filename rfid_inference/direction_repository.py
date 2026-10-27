@@ -112,11 +112,12 @@ class DirectionRepository:
             zones_first = historical_zones(first.observed_at)
             zones_second = historical_zones(second.observed_at)
             zones = zones_first if zones_first == zones_second else None
+            modo = connection.scalar(select(Portal.modo).where(Portal.id == row.portal_id))
             return DirectionContext(
                 passage_id=row.id, epc=row.epc, portal_id=row.portal_id,
                 zone_a_id=zones[0] if zones else None,
                 zone_b_id=zones[1] if zones else None,
-                first=first, second=second,
+                first=first, second=second, entry_portal=modo == "entrada",
             )
 
     def persist(self, result: DirectionInferenceResult) -> bool:

@@ -116,3 +116,9 @@ class PassageInferenceService:
         self.detector.advance_time(
             self.monotonic_clock() if now_monotonic is None else now_monotonic
         )
+        self.retry_pending()  # provisórias confirmadas pelo tempo
+
+    def flush(self) -> None:
+        """Encerramento: confirma as passagens provisórias e tenta gravá-las."""
+        self.detector.flush()
+        self.retry_pending()

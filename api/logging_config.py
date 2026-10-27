@@ -28,6 +28,21 @@ def nivel_do_ambiente(environ: Mapping[str, str] | None = None) -> str:
     return nivel
 
 
+class FormatoJson(logging.Formatter):
+    """Registro como objeto JSON: horário, nível, logger e mensagem (já sem segredos)."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Serializa o registro; mensagens que já são JSON viram objeto aninhado."""
+        mensagem = record.getMessage()
+        try:
+            corpo = json.loads(mensagem)
+        except ValueError:
+            corpo = mensagem
+        return json.dumps({"ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+                           "nivel": record.levelname, "logger": record.name, "msg": corpo},
+                          ensure_ascii=False)
+
+
 def configurar_logging_api(environ: Mapping[str, str] | None = None) -> logging.Logger:
     """Configura o nível dos loggers da API para integração com o servidor ASGI."""
     logger = logging.getLogger("api")
@@ -35,9 +50,12 @@ def configurar_logging_api(environ: Mapping[str, str] | None = None) -> logging.
     logger.propagate = True
     if not any(getattr(handler, _MARCA_HANDLER, False) for handler in logger.handlers):
         handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(logging.Formatter(
-            "%(asctime)s %(levelname)s %(name)s: %(message)s", "%Y-%m-%dT%H:%M:%S%z"
-        ))
+        source = os.environ if environ is None else environ
+        # LOG_FORMAT=json: uma linha JSON por registro, para coletores de log da hospedagem.
+        handler.setFormatter(FormatoJson() if (source.get("LOG_FORMAT") or "").lower() == "json"
+                             else logging.Formatter(
+                                 "%(asctime)s %(levelname)s %(name)s: %(message)s",
+                                 "%Y-%m-%dT%H:%M:%S%z"))
         setattr(handler, _MARCA_HANDLER, True)
         logger.addHandler(handler)
     return logger

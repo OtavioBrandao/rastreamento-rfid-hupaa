@@ -317,6 +317,21 @@ Genérica: uma tabela para toda entidade. As linhas de cadastro saem do registro
 
 ---
 
+### `simulacao_layouts` / `simulacao_sessoes` (simulador web)
+
+Tabelas do simulador, isoladas do pipeline: nenhuma tabela de leitura,
+passagem ou localização ganhou coluna. `simulacao_layouts.configuracao` guarda
+zonas, portais, leitores virtuais e antenas em coordenadas 0–100 (validado
+por `api/simulacao/esquema.py`); `vinculos` aponta para as linhas de
+topologia criadas ao aplicar o layout. `simulacao_sessoes` é o estado
+compartilhado entre as abas: fotografia do layout, ids da topologia, itens
+virtuais (posição e EPC opcional), `estado` (`em_execucao`, `pausada`,
+`encerrada`, com `encerrada_em` coerente por CHECK) e `versao`. O índice
+único parcial `uq_simulacao_sessao_aberta_por_layout` permite uma única
+sessão aberta por layout. `criada_por` não tem FK para não travar a gestão de
+usuários. Leitores virtuais são linhas comuns de `leitores` com
+`reader_id` `sim-*` e serial `SIM-L<layout>-<reader_id>`.
+
 ## 3. Rastreabilidade (critério de aceitação)
 
 `leituras_brutas.antena_id → antenas.leitor_id → leitores` (leitor) e `antenas.portal_id → portais` (portal). Uma leitura sempre chega até leitor/antena/portal.

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import and_, func, select, text, true
 from sqlalchemy.orm import Session
 
+from api.equipamento_visivel import nao_arquivado
 from api.timestamps import em_utc
 from db.models import (
     Antena,
@@ -85,7 +86,7 @@ def resumo(db: Session, *, now: datetime, janela: timedelta,
                 AssociacaoTagEquipamento.fim.is_(None)))
             .join(Equipamento, Equipamento.id == AssociacaoTagEquipamento.equipamento_id)
             .outerjoin(Zona, Zona.id == Equipamento.ultima_zona_id)
-            .where(Equipamento.status == "ativo" if somente_ativos else true())
+            .where(nao_arquivado() if somente_ativos else true())
         ).all()
     }
 
@@ -98,6 +99,8 @@ def resumo(db: Session, *, now: datetime, janela: timedelta,
     if somente_cadastradas:
         agregado = agregado.where(LeituraBruta.epc.in_(list(cadastradas) or [""]))
     if somente_ativos:
+        # Esconde as leituras de cadastros com baixa lógica (ensaios arquivados); o
+        # equipamento fora de serviço continua sendo lido e aparece.
         inativos = (select(Tag.epc).join(AssociacaoTagEquipamento,
                     AssociacaoTagEquipamento.tag_id == Tag.id)
                     .join(Equipamento, Equipamento.id == AssociacaoTagEquipamento.equipamento_id)

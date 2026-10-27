@@ -21,8 +21,10 @@ export function detectionLabel(value: string | null) {
   }).format(new Date(value)) : 'Sem detecção'
 }
 
-/** Leitura em até este intervalo é tratada como presença atual na antena. */
-export const PRESENCE_FRESH_MS = 30_000
+/** Verde de "leitura recente": 90 s desde a última leitura em qualquer antena; cada
+ * leitura nova recomeça a contagem. Só visual: não muda a janela de 5 min das listas
+ * de leituras, a inferência de passagem nem os alertas. */
+export const PRESENCE_FRESH_MS = 90_000
 
 export function isFresh(reading: LastReading | null | undefined, now = Date.now()) {
   return !!reading && now - new Date(reading.em).getTime() <= PRESENCE_FRESH_MS
@@ -43,16 +45,28 @@ export function antennaLabel(reading: LastReading | null | undefined) {
 }
 
 export function PresenceBadge({ reading }: { reading: LastReading | null | undefined }) {
-  if (!reading) return null
   return isFresh(reading)
-    ? <span className="status-badge status-presente">Lida agora · {antennaLabel(reading)}</span>
-    : <span className="status-badge status-ausente">Última leitura {ageLabel(reading.em)}</span>
+    ? <span className="status-badge status-presente">Leitura recente · {antennaLabel(reading)}</span>
+    : <span className="status-badge status-ausente" title={reading ? `Última leitura ${ageLabel(reading.em)}` : 'Nunca lida'}>Sem leitura recente</span>
+}
+
+/** Ponto verde (até 90 s da última leitura) ou cinza, com o texto correspondente. */
+export function PresenceDot({ reading }: { reading: LastReading | null | undefined }) {
+  const fresh = isFresh(reading)
+  return <><span className={fresh ? 'presence-dot fresh' : 'presence-dot'} aria-hidden="true"/>{fresh ? antennaLabel(reading) : 'Sem leitura recente'}</>
 }
 
 /** "Nunca detectado" só vale sem zona confirmada E sem nenhuma leitura bruta. */
+/** Sem transição confirmada, mas lido: onde foi visto (perto da antena), não onde está. */
+export function zonaNaoConfirmada(item: EquipmentItem) {
+  if (item.ultima_zona || !item.ultima_leitura) return null
+  const perto = item.ultima_leitura.zona ? `perto da ${item.ultima_leitura.zona}` : 'perto de uma antena'
+  return `Zona não confirmada · visto ${perto} (${detectionLabel(item.ultima_leitura.em)})`
+}
+
 export function AssetStatusBadge({ item }: { item: EquipmentItem }) {
   if (item.status === 'nunca_detectado' && item.ultima_leitura) {
-    return <span className="status-badge status-sem_zona">Sem zona confirmada</span>
+    return <span className="status-badge status-sem_zona" title="Lido por uma antena, mas a zona só é confirmada por transição">Zona não confirmada</span>
   }
   return <StatusBadge status={item.status}/>
 }

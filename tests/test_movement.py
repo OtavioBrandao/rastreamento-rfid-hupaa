@@ -1,7 +1,7 @@
 """Regras sem banco: só passagens confirmadas produzem evento."""
 
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 
@@ -27,6 +27,7 @@ def test_confirmed_builds_event_from_persisted_passage():
         repo.load_passage.return_value = passage()
         repo.get_automatic_for_passage.return_value = None
         repo.resolve_equipment.return_value = (42,)
+        repo.reading_time.return_value = T
         repo.append.return_value = (8, True)
         result = append_automatic_movement(Mock(), 1)
         assert result.status == "recorded"
@@ -36,7 +37,20 @@ def test_confirmed_builds_event_from_persisted_passage():
         assert event.passagem_id == 1
         assert (event.epc, event.portal_id, event.leitura_origem_id,
                 event.leitura_destino_id) == ("EPC-X", 2, 5, 6)
-        repo.resolve_equipment.assert_called_once_with(repo.append.call_args.args[0], "EPC-X", T)
+        # No instante da passagem e no da leitura de origem (mesmo vínculo).
+        assert repo.resolve_equipment.call_args_list == [
+            call(repo.append.call_args.args[0], "EPC-X", T), call(repo.append.call_args.args[0], "EPC-X", T)]
+
+
+def test_origin_reading_outside_current_association_is_not_recorded():
+    """Leitura de origem de outro vínculo (rodada anterior da demonstração): sem movimento."""
+    with patch("rfid_movement.service.repository") as repo:
+        repo.load_passage.return_value = passage()
+        repo.get_automatic_for_passage.return_value = None
+        repo.resolve_equipment.side_effect = [(42,), ()]
+        repo.reading_time.return_value = T
+        assert append_automatic_movement(Mock(), 1).status == "unresolved_epc"
+        repo.append.assert_not_called()
 
 
 @pytest.mark.parametrize("changes", [

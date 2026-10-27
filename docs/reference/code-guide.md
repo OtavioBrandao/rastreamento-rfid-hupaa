@@ -19,7 +19,7 @@ pydoc pública e uma página de **todas as definições**, incluindo métodos pr
 e funções internas que o pydoc normalmente omite. O gerador usa AST para validar
 docstrings e complementar assinaturas/descrições privadas. Os HTML são ignorados
 pelo Git; a fonte versionada é o código documentado. Não exige banco ou broker
-para gerar; Flet deve estar instalado para importar os módulos visuais.
+para gerar.
 
 `--check` não importa o produto. `--html` importa módulos com suas dependências,
 sem iniciar servidores, menus de laboratório ou migrations. A geração desabilita
@@ -60,7 +60,12 @@ externo `alembic`. Testes e scripts shell são descritos no guia de validação.
 | `rfid_movement/` | Ledger de movimentações, associação temporal e correção append-only |
 | `rfid_location/` | Projeção temporal, bloqueio, reconciliação e classificação de recência |
 | `tools/lab_launcher/` | Perfis, Compose, seed, sessão, terminais, observadores e publicador |
-| `tools/lab_simulator/` | Modelo geométrico sem UI, janela Flet e thread de envio |
+| `api/service_cadastro.py`, `api/router_cadastro.py` | Descoberta de EPCs detectados e cadastro atômico equipamento + tag |
+| `api/simulacao/` | Simulador web: esquema do layout, presets EASY/HUPAA, aplicação da topologia, sessões, motor e publicador MQTT |
+| `api/router_simulacao.py` | Layouts, sessões compartilhadas, itens virtuais e monitoramento |
+| `api/ambiente.py`, `api/seguranca_http.py` | `APP_ENV`, cabeçalhos de segurança, verificação de Origin, CORS e travas de produção |
+| `tools/limpeza_banco.py` | Limpeza segura de dados experimentais (prévia, execução, verificação) |
+| `deploy/production/` | Imagens e Compose de referência para hospedagem |
 | `scripts/dev.py` | Inicialização conjunta e encerramento de API, interface e launcher |
 | `scripts/documentation.py` | Cobertura de docstrings e geração pydoc |
 

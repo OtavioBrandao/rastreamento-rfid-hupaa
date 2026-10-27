@@ -6,23 +6,29 @@ Sobe com:
     uvicorn api.main:app --reload
 """
 
+import os
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
-from api import __version__
+from api import __version__, seguranca_http
 from api.auditoria import correlacao_da_requisicao, correlation_id_valido
 from api.config_auth import configuracao_auth_do_ambiente
+from api.database import get_db
 from api.logging_config import configurar_logging_api
 from api.router_associacao import router as router_associacao
 from api.router_auditoria import router as router_auditoria
 from api.router_auth import router as router_auth
 from api.router_busca_ativos import router as router_busca_ativos
+from api.router_cadastro import router as router_cadastro
 from api.router_correcoes import router as router_correcoes
 from api.router_dashboard import router as router_dashboard
 from api.router_equipamento import router as router_equipamento
@@ -30,10 +36,13 @@ from api.router_hardware import router as router_hardware
 from api.router_leituras import router as router_leituras
 from api.router_leituras_laboratorio import router as router_leituras_laboratorio
 from api.router_localizacao import router as router_localizacao
+from api.router_simulacao import router as router_simulacao
 from api.router_status_hardware import router as router_status_hardware
 from api.router_tipos_equipamento import router as router_tipos_equipamento
 from api.router_topologia_portal import router as router_topologia_portal
 from api.router_usuarios import router as router_usuarios
+from api.simulacao import config as config_simulador
+from api.simulacao.motor import iniciar_motor, parar_motor
 from rfid_ingestion.reader_status import StatusPolicy
 
 # Sem isto o uvicorn descarta todo INFO de `api.*` (ver api/logging_config.py).
@@ -47,7 +56,24 @@ async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
     """Valida a configuração de autenticação antes de liberar a aplicação ASGI."""
     configuracao_auth_do_ambiente()
     StatusPolicy.from_env()
-    yield
+    seguranca_http.validar_producao()
+    # Simulador web: em produção, pedir para ligá-lo derruba a subida (nunca publica por engano).
+    simulador = config_simulador.carregar()
+    if simulador.habilitado:
+        from api.database import get_engine
+        iniciar_motor(simulador, get_engine())
+        execucao = os.environ.get("SIMULADOR_DEMO_EXECUCAO")
+        if execucao:
+            # Cada execução do dev.py começa na demonstração padrão do HU (uma vez só).
+            import threading
+
+            from api.simulacao.cenario_demo import restaurar_na_subida
+            threading.Thread(target=restaurar_na_subida, args=(get_engine(), execucao),
+                             name="demo-padrao", daemon=True).start()
+    try:
+        yield
+    finally:
+        parar_motor()
 
 
 app = FastAPI(
@@ -66,6 +92,8 @@ app.include_router(router_equipamento)
 # ISS-025: correção manual (localização e cadastro), logo depois de equipamentos.
 app.include_router(router_correcoes)
 app.include_router(router_busca_ativos)
+# Cadastro operacional pelo dashboard (manual e por EPC detectado).
+app.include_router(router_cadastro)
 app.include_router(router_dashboard)
 app.include_router(router_leituras_laboratorio)
 app.include_router(router_leituras)
@@ -83,8 +111,13 @@ app.include_router(router_auth)
 app.include_router(router_usuarios)
 # ISS-028: consulta da trilha de auditoria (só leitura, só administrador).
 app.include_router(router_auditoria)
+# Simulador web (planta, sessões e monitoramento); desligado por padrão.
+app.include_router(router_simulacao)
 
 CABECALHO_CORRELACAO = "X-Correlation-ID"
+
+# Cabeçalhos de segurança, verificação de Origin e CORS opcional (deploy).
+seguranca_http.instalar(app)
 
 
 @app.middleware("http")
@@ -167,3 +200,19 @@ def health() -> dict[str, str]:
     endpoint próprio.
     """
     return {"status": "ok"}
+
+
+@app.get("/health/ready", tags=["infra"], summary="Readiness check")
+def ready(response: Response, db: Session = Depends(get_db)) -> dict[str, str]:
+    """
+    Readiness: a API só deve receber tráfego quando alcança o banco. Separado
+    do `/health` (liveness) para o orquestrador não reiniciar um processo
+    saudável durante uma queda do PostgreSQL — só tirá-lo do balanceamento.
+    Nunca devolve detalhes da conexão.
+    """
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        response.status_code = 503
+        return {"status": "indisponivel", "banco": "falha"}
+    return {"status": "ok", "banco": "ok"}

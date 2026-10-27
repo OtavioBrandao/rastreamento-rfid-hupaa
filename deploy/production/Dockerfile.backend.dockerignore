@@ -1,0 +1,14 @@
+# Contexto mínimo (allowlist): nada de .env, dados locais, testes ou node_modules.
+**
+!requirements/base.txt
+!config/alembic.ini
+!alembic/**
+!db/**
+!api/**
+!docker/**
+!rfid_ingestion/**
+!rfid_inference/**
+!rfid_movement/**
+!rfid_location/**
+**/__pycache__
+**/*.py[cod]

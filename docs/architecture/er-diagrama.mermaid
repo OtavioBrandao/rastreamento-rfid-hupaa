@@ -230,3 +230,30 @@ erDiagram
         jsonb dados_depois
         timestamptz registrado_em
     }
+
+    SIMULACAO_LAYOUTS ||--o{ SIMULACAO_SESSOES : "inicia"
+
+    SIMULACAO_LAYOUTS {
+        bigint id PK
+        string nome
+        string cenario "easy, hupaa"
+        jsonb configuracao "zonas, portais, leitores, antenas (0-100)"
+        jsonb vinculos "ids da topologia aplicada"
+        bigint versao "otimista"
+        boolean arquivado
+        timestamptz aplicado_em
+    }
+
+    SIMULACAO_SESSOES {
+        bigint id PK
+        string codigo UK "link da aba de controle"
+        bigint layout_id FK
+        string cenario
+        jsonb layout "fotografia no inicio"
+        jsonb topologia "ids por chave"
+        jsonb itens "posicao virtual e EPC opcional"
+        string estado "em_execucao, pausada, encerrada"
+        bigint versao
+        bigint criada_por "sem FK"
+    }
+

@@ -43,6 +43,9 @@ class DirectionContext:
     zone_b_id: int | None
     first: DirectionEvidence
     second: DirectionEvidence
+    # Portal de entrada da zona B (lado A = circulação): a ordem das antenas decide,
+    # 1 → 2 entra em B e 2 → 1 sai para a circulação; muda só o nome da regra.
+    entry_portal: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +91,8 @@ def infer_direction(context: DirectionContext, ambiguity: timedelta) -> Directio
     def result(status: str, rule: str, direction: str = "indeterminada") -> DirectionInferenceResult:
         """Constrói o resultado da direção com a regra aplicada e suas evidências."""
         confirmed = status == "confirmed"
+        if confirmed and context.entry_portal:
+            rule = "entry_portal_order_v1"
         origin = first.mappings[0] if confirmed else None
         destination = second.mappings[0] if confirmed else None
         return DirectionInferenceResult(

@@ -1,0 +1,68 @@
+# Processado pelo envsubst da imagem oficial: só ${API_UPSTREAM} é substituída.
+# O TLS termina antes deste contêiner (proxy da hospedagem, Caddy ou Nginx de borda);
+# habilite o HSTS abaixo somente quando TODO o domínio já responder em HTTPS.
+
+limit_req_zone $binary_remote_addr zone=login:10m rate=10r/m;
+limit_req_zone $binary_remote_addr zone=api:10m rate=30r/s;
+
+server {
+    listen 8080;
+    server_name _;
+    server_tokens off;
+    root /usr/share/nginx/html;
+    client_max_body_size 1m;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "same-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    # add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    location = /healthz { access_log off; default_type text/plain; return 200 "ok"; }
+
+    # Login: limite por IP além do bloqueio por conta já feito pela API.
+    location = /auth/login {
+        limit_req zone=login burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass ${API_UPSTREAM};
+        include /etc/nginx/conf.d/proxy_params.inc;
+    }
+
+    location /auth/ {
+        limit_req zone=api burst=60 nodelay;
+        proxy_pass ${API_UPSTREAM};
+        include /etc/nginx/conf.d/proxy_params.inc;
+    }
+
+    location /api/ {
+        limit_req zone=api burst=120 nodelay;
+        proxy_pass ${API_UPSTREAM};
+        include /etc/nginx/conf.d/proxy_params.inc;
+    }
+
+    # Demais rotas da API (mesmos prefixos do proxy do Vite em desenvolvimento).
+    location ~ ^/(equipamentos|tipos-equipamento|localizacoes|andares|setores|zonas|portais|leitores|antenas|mapeamentos-antena|tags|usuarios|auditorias|health)(/|$) {
+        limit_req zone=api burst=120 nodelay;
+        proxy_pass ${API_UPSTREAM};
+        include /etc/nginx/conf.d/proxy_params.inc;
+    }
+
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        try_files $uri =404;
+    }
+
+    location / {
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+        try_files $uri /index.html;
+    }
+}

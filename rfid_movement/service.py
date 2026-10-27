@@ -52,6 +52,16 @@ def append_automatic_movement(connection: Connection, passage_id: int) -> Moveme
             "passage_id": passage_id, "epc": passage["epc"],
         })
         return MovementWriteResult("ambiguous_association", passagem_id=passage_id)
+    # A primeira evidência também precisa ser deste vínculo: depois de reiniciar a
+    # demonstração, o ingestor ainda lembra a última antena da rodada anterior, e o
+    # par (leitura antiga, leitura nova) não é deslocamento do equipamento recriado.
+    origin_read_at = repository.reading_time(connection, passage["leitura_origem_id"])
+    if origin_read_at is None or equipment_ids != repository.resolve_equipment(
+            connection, passage["epc"], origin_read_at):
+        logger.info("rfid_movement_evidence_outside_association", extra={
+            "passage_id": passage_id, "epc": passage["epc"],
+        })
+        return MovementWriteResult("unresolved_epc", passagem_id=passage_id)
     event = MovementEvent(
         equipamento_id=equipment_ids[0],
         epc=passage["epc"],

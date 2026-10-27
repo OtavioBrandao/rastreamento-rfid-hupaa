@@ -148,7 +148,7 @@ class Equipamento(Base):
             name="uq_equipamentos_identificador_interno_normalizado",
         ),
         CheckConstraint(
-            "status IN ('ativo', 'inativo')", name="ck_equipamento_status_valido"
+            "status IN ('ativo', 'inativo', 'fora_de_servico')", name="ck_equipamento_status_valido"
         ),
         CheckConstraint("versao >= 1", name="ck_equipamentos_versao_positiva"),
     )
@@ -347,6 +347,10 @@ class Portal(Base):
     zona_a_id = Column(BigInteger, ForeignKey("zonas.id"), nullable=False)
     zona_b_id = Column(BigInteger, ForeignKey("zonas.id"), nullable=False)
     localizacao_fisica = Column(Text, nullable=True)
+    # 'direcional': a ordem A → B / B → A decide origem e destino (padrão).
+    # 'entrada': leitor com duas antenas na entrada da zona B; as duas antenas
+    # lendo, em qualquer ordem, confirmam a zona B (migration s041).
+    modo = Column(String(16), nullable=False, server_default="direcional")
     ativo = Column(Boolean, nullable=False, server_default="true")
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(
@@ -360,6 +364,7 @@ class Portal(Base):
 
     __table_args__ = (
         CheckConstraint("zona_a_id <> zona_b_id", name="ck_portal_zonas_distintas"),
+        CheckConstraint("modo IN ('direcional', 'entrada')", name="ck_portal_modo"),
     )
 
 
@@ -824,4 +829,72 @@ class Auditoria(Base):
         CheckConstraint(
             "(origem = 'usuario') = (usuario_id IS NOT NULL)", name="ck_auditoria_autor_coerente"
         ),
+    )
+
+
+class SimulacaoLayout(Base):
+    """
+    Simulador web: configuração editável da planta (zonas, portais, leitores e
+    antenas virtuais) em coordenadas normalizadas 0–100. `vinculos` guarda os
+    ids das linhas de topologia (zonas, portais, leitores, antenas) criadas ao
+    aplicar o layout, para que renomear um elemento atualize a mesma linha.
+    """
+
+    __tablename__ = "simulacao_layouts"
+
+    id = Column(BigInteger, primary_key=True)
+    nome = Column(String(120), nullable=False)
+    cenario = Column(String(16), nullable=False)  # 'easy' | 'hupaa'
+    configuracao = Column(JSONB, nullable=False)
+    vinculos = Column(JSONB(none_as_null=True), nullable=True)
+    versao = Column(BigInteger, nullable=False, server_default=text("1"))
+    arquivado = Column(Boolean, nullable=False, server_default="false")
+    aplicado_em = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint("cenario IN ('easy', 'hupaa')", name="ck_simulacao_layout_cenario"),
+        CheckConstraint("versao >= 1", name="ck_simulacao_layout_versao"),
+        Index("ix_simulacao_layouts_cenario", "cenario", "arquivado"),
+    )
+
+
+class SimulacaoSessao(Base):
+    """
+    Simulador web: estado COMPARTILHADO entre o dashboard e a aba de controle.
+    `layout` e `topologia` são fotografias do momento em que a sessão começou;
+    `itens` traz os equipamentos virtuais (posição virtual, EPC opcional).
+    `versao` cresce a cada mudança, para as abas saberem quando recarregar.
+    A posição virtual NUNCA vira localização: só as leituras publicadas no
+    MQTT, processadas pelo ingestor e pela inferência, movem um equipamento.
+    """
+
+    __tablename__ = "simulacao_sessoes"
+
+    id = Column(BigInteger, primary_key=True)
+    codigo = Column(String(32), nullable=False, unique=True)
+    layout_id = Column(BigInteger, ForeignKey("simulacao_layouts.id"), nullable=False)
+    cenario = Column(String(16), nullable=False)
+    layout = Column(JSONB, nullable=False)
+    topologia = Column(JSONB, nullable=False)
+    itens = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    estado = Column(String(16), nullable=False)  # em_execucao | pausada | encerrada
+    versao = Column(BigInteger, nullable=False, server_default=text("1"))
+    # Autor sem FK: a simulação não pode travar a gestão de usuários.
+    criada_por = Column(BigInteger, nullable=True)
+    iniciada_em = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    atualizada_em = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    encerrada_em = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("estado IN ('em_execucao', 'pausada', 'encerrada')",
+                        name="ck_simulacao_sessao_estado"),
+        CheckConstraint("(estado = 'encerrada') = (encerrada_em IS NOT NULL)",
+                        name="ck_simulacao_sessao_encerramento"),
+        Index("ix_simulacao_sessoes_estado", "estado"),
+        Index("uq_simulacao_sessao_aberta_por_layout", "layout_id", unique=True,
+              postgresql_where=text("estado <> 'encerrada'")),
     )

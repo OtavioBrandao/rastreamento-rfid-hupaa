@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from datetime import timedelta
 from typing import Any, Callable
 
@@ -131,6 +132,46 @@ class PassageRepository:
                 LeituraBruta.lido_em > destination.first_seen_at + grace,
                 LeituraBruta.lido_em <= destination.last_seen_at + hold,
             ))))
+
+    def exclusive_crossing(self, passage: DetectedPassage, *, grace: timedelta,
+                           lookback: timedelta = timedelta(seconds=60)) -> DetectedPassage | None:
+        """Confere a travessia nas leituras gravadas das duas antenas do portal.
+
+        Uma leitura é *isolada* quando a outra antena não leu a tag a menos de
+        ``grace``. Parada na porta, o leitor alterna as antenas e nenhuma leitura é
+        isolada. A travessia exige uma leitura isolada na origem seguida de uma
+        isolada no destino; a evidência passa a ser a última isolada da origem e a
+        primeira isolada do destino depois dela. Sem isso, devolve None.
+        """
+        inicio = passage.first_observed_at - lookback
+        with self.engine.connect() as connection:
+            leituras = connection.execute(
+                select(LeituraBruta.id, LeituraBruta.antena_id, LeituraBruta.lido_em)
+                .where(LeituraBruta.epc == passage.epc, LeituraBruta.lido_em >= inicio,
+                       LeituraBruta.antena_id.in_((passage.first_antenna_id, passage.second_antenna_id)))
+                .order_by(LeituraBruta.lido_em, LeituraBruta.id)
+            ).all()
+        por_antena: dict[int, list] = {passage.first_antenna_id: [], passage.second_antenna_id: []}
+        for leitura in leituras:
+            por_antena[leitura.antena_id].append(leitura.lido_em)
+
+        def isolada(leitura) -> bool:
+            """A outra antena não leu a tag a menos de ``grace`` desta leitura."""
+            outra = (passage.second_antenna_id if leitura.antena_id == passage.first_antenna_id
+                     else passage.first_antenna_id)
+            return all(abs(instante - leitura.lido_em) >= grace for instante in por_antena[outra])
+
+        origem = None
+        for leitura in leituras:
+            if not isolada(leitura):
+                continue
+            if leitura.antena_id == passage.first_antenna_id:
+                origem = leitura
+            elif origem is not None and leitura.lido_em >= passage.second_observed_at - grace:
+                return replace(passage, first_reading_id=origem.id, first_observed_at=origem.lido_em,
+                               second_reading_id=leitura.id, second_observed_at=leitura.lido_em,
+                               detected_at=max(passage.detected_at, leitura.lido_em))
+        return None
 
     def persist(self, passage: DetectedPassage) -> bool:
         """Retorna True se inserida, False se as evidências já existiam."""

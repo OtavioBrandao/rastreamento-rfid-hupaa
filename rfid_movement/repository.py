@@ -13,6 +13,7 @@ from db.models import (
     AssociacaoTagEquipamento,
     Equipamento,
     HistoricoMovimentacao,
+    LeituraBruta,
     Passagem,
     Portal,
     Tag,
@@ -25,6 +26,13 @@ from .types import MovementEvent, MovementPage, MovementRecord
 def load_passage(connection: Connection, passage_id: int):
     """Carrega a passagem persistida por ID para validar a movimentação."""
     return connection.execute(select(Passagem.__table__).where(Passagem.id == passage_id)).mappings().one_or_none()
+
+
+def reading_time(connection: Connection, reading_id: int | None) -> datetime | None:
+    """Instante da leitura bruta usada como evidência."""
+    if reading_id is None:
+        return None
+    return connection.scalar(select(LeituraBruta.lido_em).where(LeituraBruta.id == reading_id))
 
 
 def resolve_equipment(connection: Connection, epc: str, at: datetime) -> tuple[int, ...]:

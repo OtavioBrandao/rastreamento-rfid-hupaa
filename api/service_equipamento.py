@@ -279,6 +279,22 @@ def inativar(session: Session, equipamento_id: int) -> Equipamento:
     return equipamento
 
 
+def colocar_fora_de_servico(session: Session, equipamento_id: int) -> Equipamento:
+    """Fora de serviço (ex.: maca quebrada): continua visível e rastreado, em vermelho.
+
+    Diferente da baixa lógica (`inativar`), que tira o cadastro do painel.
+    Idempotente.
+    """
+    equipamento = buscar_por_id(session, equipamento_id)
+    if equipamento.status == "fora_de_servico":
+        return equipamento
+    equipamento.status = "fora_de_servico"
+    session.commit()
+    session.refresh(equipamento)
+    session.refresh(equipamento, attribute_names=["tipo"])
+    return equipamento
+
+
 def reativar(session: Session, equipamento_id: int) -> Equipamento:
     """Desfaz a baixa lógica. Idempotente, pelo mesmo motivo de `inativar`."""
     equipamento = buscar_por_id(session, equipamento_id)

@@ -47,6 +47,9 @@ class Permissao(StrEnum):
     LABORATORIO_CONSULTAR = "laboratorio:consultar"
     USUARIOS_ADMINISTRAR = "usuarios:administrar"
     AUDITORIA_CONSULTAR = "auditoria:consultar"  # ISS-028, só administrador
+    # Simulador web: acompanhar é consulta; configurar planta e mover itens, só administrador.
+    SIMULACAO_CONSULTAR = "simulacao:consultar"
+    SIMULACAO_ALTERAR = "simulacao:alterar"
 
 
 MATRIZ: dict[str, frozenset[Permissao]] = {
@@ -56,6 +59,7 @@ MATRIZ: dict[str, frozenset[Permissao]] = {
         Permissao.LOCALIZACAO_CONSULTAR,
         Permissao.HARDWARE_CONSULTAR,
         Permissao.LABORATORIO_CONSULTAR,
+        Permissao.SIMULACAO_CONSULTAR,
     }),
     PERFIL_ADMINISTRADOR: frozenset(Permissao),
 }

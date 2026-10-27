@@ -66,6 +66,11 @@ beforeEach(() => {
         : registro)
     }
     if (url.pathname === '/equipamentos/1') return json(200, registro)
+    if (url.pathname === '/equipamentos/1/percursos') {
+      return json(200, { em_circulacao: false, ultima_observacao: null, items: [{ tipo: 'correcao', titulo: 'Zona C → Zona D',
+        origem: 'Zona C', destino: 'Zona D', em: '2026-09-26T13:00:00Z', completo: true,
+        justificativa: 'Vista na sala D', referencia: 'OS-9', etapas: [] }] })
+    }
     if (url.pathname === '/equipamentos/1/movimentacoes') {
       return json(200, { items: [{ id: 50, origem_registro: 'correcao_manual', zona_origem: 'Zona C',
         zona_destino: 'Zona D', movimentada_em: '2026-09-26T13:00:00Z', registrado_em: '2026-09-26T13:00:00Z',
@@ -137,7 +142,8 @@ describe('correção manual no painel do equipamento', () => {
     expect(await screen.findByText('Localização corrigida.')).toBeInTheDocument()
     expect(posts).toEqual([{ path: '/equipamentos/1/correcoes/localizacao',
       body: { zona_id: 4, justificativa: 'Vista na sala D', referencia: 'OS-9', versao_esperada: 3 } }])
-    expect(await screen.findByText(/Correção manual: Vista na sala D \(ref\. OS-9\)/)).toBeInTheDocument()
+    expect(await screen.findByText('Vista na sala D')).toBeInTheDocument()
+    expect(screen.getAllByText(/Zona C → Zona D/).length).toBeGreaterThan(0)
   })
 
   it('mesma zona não grava: Nada a corrigir', async () => {

@@ -55,6 +55,9 @@ def simulator(payload, settings):
             payload.get("observed_at"), signal.get("unit"), False, extras)
 
 
+# Mesmo formato de api/simulacao/esquema.py: leitores virtuais nunca colidem com físicos.
+READER_ID_VIRTUAL = re.compile(r"sim-[a-z0-9][a-z0-9-]{0,40}")
+
 # Novo adapter: função com o mesmo contrato e registro aqui; consumidor não muda.
 ADAPTERS = {"ez700": ez700, "simulator": simulator}
 
@@ -70,6 +73,17 @@ def normalize(payload, topic, raw, settings, *, received_at_utc=None):
     try:
         validate_topic(topic)
         reader_id = topic.split("/")[4]
+        relay = None
+        if isinstance(payload, dict) and "sim_reader_id" in payload:
+            # Simulador web no broker externo: a ACL só libera o tópico do leitor de
+            # laboratório, então os leitores virtuais publicam por ele e se identificam
+            # aqui. Só vale num tópico habilitado como relay e só para ids `sim-*`.
+            if reader_id not in getattr(settings, "relay_virtual_readers", ()):
+                raise ValueError("sim_reader_id recusado: este tópico não é relay de leitores virtuais")
+            virtual = payload["sim_reader_id"]
+            if not isinstance(virtual, str) or not READER_ID_VIRTUAL.fullmatch(virtual):
+                raise ValueError("sim_reader_id deve ser um leitor virtual (sim-...)")
+            relay, reader_id = reader_id, virtual
         adapter = settings.reader_adapters.get(reader_id, adapter)
         if adapter not in ADAPTERS:
             raise ValueError("adapter desconhecido")
@@ -100,6 +114,20 @@ def normalize(payload, topic, raw, settings, *, received_at_utc=None):
                 else datetime.now(timezone.utc).isoformat()
             )
             timestamp_format = "received_at_utc"
+        if "sim_lido_em" in payload:
+            # Simulador web com o tempo acelerado/adiantado: o instante vem do relógio
+            # da simulação. Só de leitores virtuais, fora de produção e nunca antes
+            # do recebimento (não serve para reescrever o passado).
+            if not READER_ID_VIRTUAL.fullmatch(reader_id):
+                raise ValueError("sim_lido_em só vale para leitores virtuais (sim-...)")
+            if getattr(settings, "app_env", "development") == "production":
+                raise ValueError("sim_lido_em recusado em produção")
+            simulado = utc_timestamp(payload["sim_lido_em"])
+            recebido = received_at_utc or datetime.now(timezone.utc).isoformat()
+            if (datetime.fromisoformat(simulado.replace("Z", "+00:00"))
+                    < datetime.fromisoformat(recebido.replace("Z", "+00:00")) - timedelta(seconds=120)):
+                raise ValueError("sim_lido_em anterior ao recebimento")
+            timestamp, epoch_ms, timestamp_format = simulado, False, "sim_clock"
         timestamp = utc_timestamp(timestamp, epoch_ms=epoch_ms)
         identity = b"rfid-v1\0" + topic.encode() + b"\0" + adapter.encode() + b"\0" + timestamp_format.encode() + b"\0" + raw
         event = dict(event_id="sha256:" + hashlib.sha256(identity).hexdigest(),
@@ -109,6 +137,8 @@ def normalize(payload, topic, raw, settings, *, received_at_utc=None):
                                    rssi_original=rssi, rssi_unit=unit,
                                    timestamp_original=payload.get("timestamp", payload.get("observed_at")),
                                    timestamp_format=timestamp_format))
+        if relay is not None:
+            event["metadata"]["relay_reader_id"] = relay
         return event, [], reader_id, adapter
     except ValueError as error:
         return None, [str(error)], reader_id, adapter

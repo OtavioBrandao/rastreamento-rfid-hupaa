@@ -34,7 +34,7 @@ from api.main import app
 
 pytestmark = pytest.mark.autenticacao_real
 
-PUBLICAS = {("GET", "/health"), ("POST", "/auth/login"), ("POST", "/auth/logout")}
+PUBLICAS = {("GET", "/health"), ("GET", "/health/ready"), ("POST", "/auth/login"), ("POST", "/auth/logout")}
 QUALQUER_SESSAO = {("GET", "/auth/me"), ("POST", "/auth/trocar-senha")}
 METODOS_DE_CONSULTA = {"GET", "HEAD", "OPTIONS"}
 
@@ -44,6 +44,10 @@ RECURSO_POR_PREFIXO = [
     # Presença por leitura bruta (página Leituras): mesma permissão das leituras do laboratório.
     ("/api/leituras", "laboratorio"),
     ("/api/ativos", "equipamentos"),
+    # Cadastro pelo dashboard (manual e por EPC detectado): mesmo recurso de equipamentos.
+    ("/api/cadastro", "equipamentos"),
+    # Simulador web: consulta para todos; configurar e mover itens, só administrador.
+    ("/api/simulacao", "simulacao"),
     ("/api/dashboard", "equipamentos"),
     ("/equipamentos", "equipamentos"),
     ("/tipos-equipamento", "equipamentos"),
@@ -62,13 +66,13 @@ RECURSO_POR_PREFIXO = [
 
 PERMISSOES_OPERACIONAL = [
     "equipamentos:consultar", "hardware:consultar", "laboratorio:consultar",
-    "localizacao:consultar",
+    "localizacao:consultar", "simulacao:consultar",
 ]
 PERMISSOES_ADMINISTRADOR = sorted([
     "equipamentos:consultar", "equipamentos:alterar", "localizacao:consultar",
     "localizacao:alterar", "hardware:consultar", "hardware:alterar",
     "laboratorio:consultar", "usuarios:administrar", "auditoria:consultar",
-    "equipamentos:corrigir",
+    "equipamentos:corrigir", "simulacao:consultar", "simulacao:alterar",
 ])
 
 

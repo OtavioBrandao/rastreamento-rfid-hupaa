@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -52,10 +50,10 @@ def _cenario(env: str | None, source: str | None) -> tuple[str, str]:
     """Resolve ambiente local/externo e origem física/sintética do menu ou dos argumentos."""
     if env is None and source is None and sys.stdin.isatty():
         click.clear()
-        typer.echo("1. Local com simulador visual (dados sintéticos)")
+        typer.echo("1. Local com simulador web (dados sintéticos)")
         typer.echo("2. Local com leitor físico")
         typer.echo("3. Broker e banco externos com leitor físico")
-        typer.echo("4. Broker e banco externos com simulador visual (dados sintéticos)")
+        typer.echo("4. Broker e banco externos com simulador web (dados sintéticos)")
         escolha = typer.prompt("Escolha o teste (1-4)", default="1")
         cenarios = {
             "1": ("local", "synthetic"),
@@ -143,10 +141,10 @@ def _perfil_publicador(modo: str, valores: dict[str, str], arquivo: Path | None,
             raise ValueError("perfil do publicador exige MQTT_USERNAME e MQTT_PASSWORD")
         if perfil["MQTT_USERNAME"] == valores.get("MQTT_USERNAME"):
             raise ValueError("use uma credencial MQTT de publicação separada do ingestor")
-        if not perfil.get("MQTT_TOPIC") or any(
-            coringa in perfil["MQTT_TOPIC"] for coringa in ("+", "#")
-        ):
-            raise ValueError("perfil do publicador exige MQTT_TOPIC exato, sem curingas")
+        # O simulador web publica um tópico por leitor virtual: aceita o filtro da ACL
+        # com `+` (ex.: easy/dev/hupaa/+/+/readings), nunca `#`.
+        if not perfil.get("MQTT_TOPIC") or "#" in perfil["MQTT_TOPIC"]:
+            raise ValueError("perfil do publicador exige MQTT_TOPIC (tópico ou filtro com +, sem #)")
     print(f"Perfil MQTT de publicação: {arquivo.name}")
     return dict(valores, **perfil)
 
@@ -196,11 +194,7 @@ def _preparar_portas(binds: dict[int, str], projeto: str, force: bool,
         raise RuntimeError("portas TCP ainda indisponíveis: " + ", ".join(map(str, indisponiveis)))
 
 
-def _fechar_simulador(simulador: subprocess.Popen | None) -> None:
-    # Separado de ``encerrar``: no Windows ele preserva as janelas dos observadores.
-    """Encerra o subprocesso do simulador se ainda estiver em execução."""
-    if simulador is not None and simulador.poll() is None:
-        simulador.terminate()
+URL_SIMULADOR = "http://localhost:5173/#/simulador"
 
 
 @app.command()
@@ -224,7 +218,7 @@ def start(
 ) -> None:
     """Prepara perfil e portas, sobe infraestrutura/migrations, semeia o domínio e inicia o ensaio.
 
-    Pode abrir observadores e simulador. Limpeza de volumes pertence apenas ao
+    Pode abrir observadores; o simulador é web (API + navegador). Limpeza de volumes pertence apenas ao
     modo local e depende da escolha explícita; falhas encerram serviços iniciados."""
     processos = []
     arquivo = None
@@ -233,19 +227,14 @@ def start(
     started = False
     marker = None
     tags_fisicas: list[tuple[str, str]] = []
-    publisher: dict[str, str] | None = None
-    simulador: subprocess.Popen | None = None
     etapa = "seleção do cenário"
     try:
         modo, origem = _cenario(env, source)
         print(f"Cenário: ambiente {modo}; origem {origem}; leitor {reader_id}")
         interativo = sys.stdin.isatty()
         if origem == "synthetic" and tag:
-            raise ValueError("--tag é do leitor físico; no simulador os nomes são "
-                             "definidos na janela")
-        if origem == "synthetic" and importlib.util.find_spec("flet") is None:
-            raise ValueError("simulador visual exige Flet: pip install -r "
-                             "requirements/lab.txt")
+            raise ValueError("--tag é do leitor físico; no simulador web os equipamentos são "
+                             "definidos no navegador")
         if fresh and reuse:
             raise ValueError("escolha --fresh ou --reuse")
         if modo == "local" and not fresh and not reuse and interativo:
@@ -268,11 +257,17 @@ def start(
         if origem == "synthetic":
             if timestamp_format not in (None, "counter"):
                 raise ValueError("dados sintéticos reproduzem o timestamp counter do leitor")
-            publisher = _perfil_publicador(modo, valores, publisher_env_file,
-                                           interativo)
+            # Validado aqui para falhar cedo; quem publica é a API (scripts/dev.py).
+            perfil = _perfil_publicador(modo, valores, publisher_env_file, interativo) or {}
+            topico = perfil.get("MQTT_TOPIC", "") if modo == "managed" else ""
+            if topico and "+" not in topico:
+                # ACL de um tópico só: o simulador web publica por ele em nome dos
+                # leitores virtuais; só o ingestor deste ensaio aceita (sim_reader_id).
+                ambiente["RFID_RELAY_LEITORES_VIRTUAIS"] = topico.split("/")[4]
         ambiente["EZ700_TIMESTAMP_FORMAT"] = timestamp_format or "counter"
-        projeto = valores.get("COMPOSE_PROJECT_NAME", "rfid-hospital-local" if modo == "local"
-                              else "rfid-hospital-managed")
+        # Sem COMPOSE_PROJECT_NAME, o Compose usa o `name:` de deploy/compose.yaml; usar o
+        # mesmo nome evita tratar os contêineres do próprio ensaio como conflito de porta.
+        projeto = valores.get("COMPOSE_PROJECT_NAME", "rfid-hospital-mvp")
         if fresh:
             etapa = "limpeza dos volumes locais"
             print("Removendo ambiente local e volumes...")
@@ -330,19 +325,9 @@ def start(
             marker = iniciar_sessao()
             processos = abrir(arquivo, modo, ingestor, ambiente, marker)
         if origem == "synthetic":
-            etapa = "abertura do simulador visual"
-            assert publisher is not None
-            print("Abrindo o simulador visual do laboratório...")
-            # Credencial de publicação sobre o ambiente; banco do seed para o cadastro.
-            ambiente_simulador = {**ambiente, **publisher,
-                                  "DATABASE_URL": seed_env["DATABASE_URL"]}
-            simulador = subprocess.Popen(
-                [sys.executable, "-m", "tools.lab_simulator", "--reader-id", reader_id,
-                 "--portal-id", portal_id],
-                cwd=ROOT, env=ambiente_simulador)
-            processos.append(simulador)
-            print("Defina os itens na janela e arraste-os até as antenas. Use Ctrl+C "
-                  "para encerrar o teste.")
+            print("Simulador web pronto: abra " + URL_SIMULADOR + " (EASY ou HUPAA), "
+                  "inicie a simulação e use o link de controle em outra aba. Os "
+                  "equipamentos são criados e movidos no navegador. Ctrl+C encerra o teste.")
         else:
             if tags_fisicas:
                 print("Equipamentos do ensaio:")
@@ -355,17 +340,13 @@ def start(
             print("Acompanhando o teste. Pressione Ctrl+C para encerrar os serviços.")
             while marker is not None and marker.exists():
                 time.sleep(1)
-        elif simulador is not None:
-            simulador.wait()
     except (KeyboardInterrupt, click.Abort):
-        _fechar_simulador(simulador)
         parar_sessao()
         encerrar(processos)
         if started and arquivo is not None and modo is not None and ambiente is not None:
             compose(arquivo, modo, "down", env=ambiente)
         print("Teste encerrado")
     except (ValueError, RuntimeError, TimeoutError, OSError, SQLAlchemyError) as erro:
-        _fechar_simulador(simulador)
         if marker is not None:
             parar_sessao()
         if started and arquivo is not None and modo is not None and ambiente is not None:

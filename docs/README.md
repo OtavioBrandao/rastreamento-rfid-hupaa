@@ -8,7 +8,9 @@ Universitário Professor Alberto Antunes (HUPAA/UFAL).
 - [Apresentação, objetivos e início rápido](../README.md)
 - [Operação, requisitos, perfis e quatro modos de execução](operations/execution.md)
 - [Piloto no HUPAA: planta, leitores, antenas, portais e cadastro das tags](operations/implantacao-hupaa.md)
-- [Launcher de laboratório e simulador visual](lab_test_launcher.md)
+- [Launcher de laboratório e simulador web](lab_test_launcher.md)
+- [Preparação para implantação (deploy)](operations/deploy.md)
+- [Limpeza segura do banco, backup e restauração](operations/limpeza-banco.md)
 - [Validações e testes reproduzíveis](operations/validation.md)
 
 ## Compreender o software
@@ -50,7 +52,9 @@ use o guia de operação acima; relatórios antigos registram o contexto do ensa
 | Planta e atualização da interface | [Mapa e portais](implementations/iss-023-mapa-portais.md) e [atualização automática](implementations/iss-033-atualizacao-automatica.md) |
 | Correção justificada | [Correções manuais e versão otimista](implementations/iss-025-correcao-manual.md) |
 | Acesso e responsabilização | [Autenticação](implementations/iss-026-usuarios-autenticacao.md), [permissões](implementations/iss-027-perfis-rbac.md) e [auditoria](implementations/iss-028-auditoria.md) |
-| Demonstração sem hardware | [Simulador visual](implementations/simulador-visual-laboratorio.md) |
+| Demonstração sem hardware | [Simulador web EASY/HUPAA](implementations/simulador-web.md) (substitui o [simulador Flet](implementations/simulador-visual-laboratorio.md); [hotfix MQTT e visada](implementations/simulador-web-hotfix-mqtt-visada.md); [trajeto, relógio e HU ao vivo para a apresentação](implementations/apresentacao-hu-trajeto-relogio-dashboard.md); [zonas agrupadas, planta original do HU e cenário de demonstração](implementations/demonstracao-hu-cenario-e-mapas.md); [portal de entrada da zona](implementations/portal-de-entrada-da-zona.md); [sentido nos portais, histórico em percursos, mapa simplificado e limpeza do cenário](implementations/historico-percursos-e-sentido-nos-portais.md)) |
+| Cadastro dependente do terminal | [Cadastro de equipamentos e tags pelo dashboard](implementations/cadastro-equipamentos-web.md) |
+| Dados experimentais e hospedagem | [Limpeza segura e preparação para deploy](implementations/limpeza-banco-e-preparacao-deploy.md) |
 
 ## Evidências de funcionamento
 

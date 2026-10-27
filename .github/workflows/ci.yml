@@ -129,6 +129,28 @@ jobs:
         if: always()
         run: docker compose -f deploy/compose.yaml --profile local down --volumes --remove-orphans
 
+  deploy:
+    name: Artefatos de deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+
+      - name: Validar Compose de produção
+        run: |
+          cp config/environments/.env.production.example config/environments/.env.production
+          docker compose -f deploy/production/compose.yaml config --quiet
+          docker compose -f deploy/production/compose.yaml --profile banco-local config --quiet
+
+      - name: Construir imagens de produção (sem publicar)
+        run: |
+          docker build -f deploy/production/Dockerfile.backend -t rfid-hupaa-backend:ci .
+          docker build -f deploy/production/Dockerfile.frontend -t rfid-hupaa-web:ci .
+
+      - name: Conferir usuário sem privilégios
+        run: test "$(docker run --rm --entrypoint id rfid-hupaa-backend:ci -un)" = "app"
+
   migrations:
     name: Migrations
     uses: ./.github/workflows/migrations.yml

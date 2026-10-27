@@ -1,0 +1,107 @@
+# Pilha de referência para hospedagem (VPS ou qualquer host com Docker Compose).
+# Independente de provedor: os mesmos contêineres servem para PaaS de contêineres.
+#
+#   cp config/environments/.env.production.example config/environments/.env.production
+#   docker compose -f deploy/production/compose.yaml up -d --build
+#
+# O TLS termina ANTES do serviço `web` (proxy da hospedagem, Caddy ou Nginx de borda).
+# PostgreSQL gerenciado (ex.: Neon) por padrão; `--profile banco-local` sobe um
+# PostgreSQL no próprio host. O broker MQTT é externo (HiveMQ Cloud ou bridge).
+name: rfid-hupaa
+
+x-backend: &backend
+  build:
+    context: ../..
+    dockerfile: deploy/production/Dockerfile.backend
+  image: ${IMAGEM_BACKEND:-rfid-hupaa-backend:local}
+  env_file:
+    - ${ENV_FILE:-../../config/environments/.env.production}
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  migrate:
+    <<: *backend
+    restart: "no"
+    entrypoint: ["/app/docker/require-database-url.sh"]
+    command: ["alembic", "-c", "config/alembic.ini", "upgrade", "head"]
+
+  api:
+    <<: *backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  ingestor:
+    <<: *backend
+    command: ["python", "-m", "rfid_ingestion"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ingestor_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-m", "rfid_ingestion.health"]
+      interval: 15s
+      timeout: 8s
+      retries: 6
+      start_period: 20s
+
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/production/Dockerfile.frontend
+    image: ${IMAGEM_WEB:-rfid-hupaa-web:local}
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: http://api:8000
+    ports:
+      # Publique só para o proxy TLS local; nunca HTTP aberto na internet.
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  postgres:
+    image: postgres:16.15-alpine
+    profiles: ["banco-local"]
+    restart: unless-stopped
+    # POSTGRES_DB/USER/PASSWORD vêm do mesmo arquivo de ambiente; senha vazia é
+    # recusada pela própria imagem do PostgreSQL.
+    env_file:
+      - ${ENV_FILE:-../../config/environments/.env.production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  ingestor_data:
+  postgres_data:

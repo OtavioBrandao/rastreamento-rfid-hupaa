@@ -1,19 +1,21 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { belongsToZone, type BoundPortal, type BoundZone } from '../../services/mapTopology'
 import { assetPriority } from '../../services/assetPriority'
 import type { EquipmentItem } from '../../types/dashboard'
-import { LocationBadge, PresenceBadge, StatusBadge, detectionLabel } from '../DashboardParts'
+import { LocationBadge, PresenceBadge, StatusBadge, detectionLabel, zonaNaoConfirmada } from '../DashboardParts'
 import { MapReferences } from './MapReferences'
 import { RegisteredDetections } from './RegisteredDetections'
 
-const tabs = [
+const baseTabs = [
   { id: 'detectados', label: 'Equipamentos detectados' },
   { id: 'salas', label: 'Ativos nas salas' },
   { id: 'zonas', label: 'Zonas e portais' },
-  { id: 'sem-zona', label: 'Sem zona confirmada' },
+  { id: 'sem-zona', label: 'Zona não confirmada' },
   { id: 'outras', label: 'Outras zonas' },
 ] as const
-type TabId = typeof tabs[number]['id']
+type TabId = string
+/** Aba própria de uma planta (ex.: passagens detalhadas do HU), depois das abas comuns. */
+export interface ExtraTab { id: string; label: string; count?: number; content: ReactNode }
 
 export const zonePriority = assetPriority
 
@@ -23,7 +25,7 @@ function EquipmentTable({ items, onSelect, empty }: { items: EquipmentItem[]; on
     <tbody>{assetPriority(items).map((item) => <tr key={item.id}>
       <td><button className="table-item-button" type="button" onClick={() => onSelect(item)}>{item.nome}<small>{item.epc ?? 'Sem EPC associado'}</small></button></td>
       <td><StatusBadge status={item.status}/></td>
-      <td>{item.ultima_zona?.caminho ?? 'Nenhuma passagem confirmada'}<LocationBadge item={item}/></td>
+      <td>{item.ultima_zona?.caminho ?? zonaNaoConfirmada(item) ?? 'Nenhuma passagem confirmada'}<LocationBadge item={item}/></td>
       <td>{detectionLabel(item.ultima_deteccao_em)}<PresenceBadge reading={item.ultima_leitura}/></td>
     </tr>)}</tbody>
   </table></div> : <p className="map-table-empty">{empty}</p>
@@ -33,16 +35,18 @@ function EquipmentTable({ items, onSelect, empty }: { items: EquipmentItem[]; on
  * Abas abaixo da planta. Os painéis ficam montados (apenas ocultos) para preservar
  * consultas ao vivo e o estado de cada aba ao alternar ou ao inspecionar uma zona.
  */
-export function MapDataTabs({ mode, zones, portals, items, onSelect, selectedZone, onZone, onCloseZone }: {
+export function MapDataTabs({ mode, zones, portals, items, onSelect, selectedZone, onZone, onCloseZone, extraTabs = [] }: {
   mode: 'hospital' | 'lab'; zones: BoundZone[]; portals: BoundPortal[]; items: EquipmentItem[]
   onSelect: (item: EquipmentItem) => void; selectedZone?: BoundZone
-  onZone: (id: string) => void; onCloseZone: () => void
+  onZone: (id: string) => void; onCloseZone: () => void; extraTabs?: ExtraTab[]
 }) {
+  const tabs: { id: string; label: string }[] = [...baseTabs, ...extraTabs.map(({ id, label }) => ({ id, label }))]
   const [tab, setTab] = useState<TabId>('detectados')
   const positioned = items.filter((item) => zones.some((zone) => belongsToZone(item, zone)))
   const never = items.filter((item) => item.status === 'nunca_detectado')
   const other = items.filter((item) => item.status !== 'nunca_detectado' && !positioned.includes(item))
-  const counts: Partial<Record<TabId, number>> = { salas: positioned.length, 'sem-zona': never.length, outras: other.length }
+  const counts: Partial<Record<TabId, number>> = { salas: positioned.length, 'sem-zona': never.length, outras: other.length,
+    ...Object.fromEntries(extraTabs.filter((t) => t.count !== undefined).map((t) => [t.id, t.count])) }
   const tabId = (id: TabId) => `map-${mode}-tab-${id}`
   const panelId = (id: TabId) => `map-${mode}-panel-${id}`
   function keyNav(event: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -65,12 +69,12 @@ export function MapDataTabs({ mode, zones, portals, items, onSelect, selectedZon
         </button>)}
       </div>
       {tabs.map((entry) => <div key={entry.id} id={panelId(entry.id)} role="tabpanel" aria-labelledby={tabId(entry.id)} hidden={tab !== entry.id} className="map-data-panel">
-        {entry.id === 'detectados' ? <RegisteredDetections items={items} onSelect={onSelect}/>
+        {extraTabs.find((extra) => extra.id === entry.id)?.content ?? (entry.id === 'detectados' ? <RegisteredDetections items={items} onSelect={onSelect}/>
           : entry.id === 'zonas' ? <MapReferences zones={zones} portals={portals} items={items} selectedZone={selectedZone?.id ?? ''} onZone={onZone}/>
           : <section className="panel inventory-panel" aria-label={entry.label}><div className="panel-heading"><h2>{entry.label}</h2></div>
             <EquipmentTable items={entry.id === 'salas' ? positioned : entry.id === 'sem-zona' ? never : other} onSelect={onSelect}
               empty={entry.id === 'salas' ? 'Nenhum equipamento com zona mapeada nesta planta.' : 'Nenhum ativo nesta condição.'}/>
-          </section>}
+          </section>)}
       </div>)}
     </div>
     {selectedZone && <section className="panel inventory-panel zone-table" aria-label={`Equipamentos em ${selectedZone.name}`}>

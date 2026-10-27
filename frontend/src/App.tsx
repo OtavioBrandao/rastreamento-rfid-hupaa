@@ -7,13 +7,16 @@ import { LoginPage } from './pages/LoginPage'
 import { MapPage } from './pages/MapPage'
 import { ReadingsPage } from './pages/ReadingsPage'
 import { ReaderStatusPage } from './pages/ReaderStatusPage'
+import { RegistrationPage } from './pages/RegistrationPage'
+import { SimulatorControlPage } from './pages/SimulatorControlPage'
+import { SimulatorPage } from './pages/SimulatorPage'
 import { UsersPage } from './pages/UsersPage'
 import { AuditPage } from './pages/AuditPage'
 import { getSession, logout, onSessionEnded, pode, type Session } from './services/auth'
 import type { EquipmentItem } from './types/dashboard'
 import { LiveProvider } from './services/live'
 
-export type Page = 'dashboard' | 'map' | 'readings' | 'reader-status' | 'users' | 'audit' | 'password'
+export type Page = 'dashboard' | 'map' | 'readings' | 'reader-status' | 'users' | 'audit' | 'password' | 'registration' | 'simulator' | 'simulator-control'
 
 const SESSION_EXPIRED = 'Sua sessão expirou. Entre novamente.'
 const SERVER_UNAVAILABLE = 'Não foi possível contactar o servidor. Tente entrar novamente em instantes.'
@@ -23,7 +26,18 @@ type AuthState =
   | { phase: 'anonymous'; notice?: string }
   | { phase: 'authenticated'; session: Session }
 
+const hashPath = () => window.location.hash.split('?')[0]
+
+/** Código da sessão no link de controle `#/simulador/controle/<codigo>`. */
+export function controlCode(): string | null {
+  const match = /^#\/simulador\/controle\/([0-9a-f]{16})$/.exec(hashPath())
+  return match ? match[1] : null
+}
+
 function currentPage(): Page {
+  if (controlCode()) return 'simulator-control'
+  if (hashPath() === '#/cadastro') return 'registration'
+  if (hashPath() === '#/simulador') return 'simulator'
   if (window.location.hash === '#/mapa') return 'map'
   if (window.location.hash === '#/leituras') return 'readings'
   if (window.location.hash === '#/status-leitores') return 'reader-status'
@@ -73,17 +87,24 @@ function Panel({ session, onLogout, onSessionChanged }: { session: Session; onLo
   const canAdministerUsers = pode(session, 'usuarios:administrar')
   const canReadAudit = pode(session, 'auditoria:consultar')
   const canReadHardware = pode(session, 'hardware:consultar')
+  const canRegister = pode(session, 'equipamentos:alterar')
+  const canSimulate = pode(session, 'simulacao:consultar')
+  const canEditSimulation = pode(session, 'simulacao:alterar')
   const denied = (page === 'users' && !canAdministerUsers) || (page === 'audit' && !canReadAudit) || (page === 'reader-status' && !canReadHardware)
+    || ((page === 'simulator' || page === 'simulator-control') && !canSimulate)
   useEffect(() => {
     const onHashChange = () => setPage(currentPage())
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
+  const code = controlCode()
+  // Aba de controle: tela limpa, sem menu lateral, própria para gravar demonstrações.
+  if (page === 'simulator-control' && code && !denied) return <SimulatorControlPage key={code} codigo={code} canEdit={canEditSimulation}/>
   if (page === 'password') return <ChangePasswordPage session={session} onLogout={onLogout}
     onCancel={() => { window.location.hash = '#/'; setPage('dashboard') }}
     onChanged={() => { window.location.hash = '#/'; setPage('dashboard'); onSessionChanged() }}/>
-  return <AppShell page={page} user={session.usuario} onLogout={onLogout} canAdministerUsers={canAdministerUsers} canReadAudit={canReadAudit} canReadHardware={canReadHardware}>
-    {denied ? <div className="state-panel" role="alert"><h1>Acesso restrito</h1><p>Você não tem permissão para acessar esta página.</p><a href="#/">Voltar ao dashboard</a></div> : page === 'users' ? <UsersPage currentUserId={session.usuario.id} onSessionChanged={onSessionChanged}/> : page === 'reader-status' ? <ReaderStatusPage/> : page === 'audit' ? <AuditPage/> : page === 'map' ? <MapPage onSelect={setSelected} /> : page === 'readings' ? <ReadingsPage /> : <DashboardPage onSelect={setSelected} />}
-    <EquipmentDrawer item={page === 'dashboard' || page === 'map' ? selected : null} onClose={() => setSelected(null)} canCorrect={canCorrect}/>
+  return <AppShell page={page} user={session.usuario} onLogout={onLogout} canAdministerUsers={canAdministerUsers} canReadAudit={canReadAudit} canReadHardware={canReadHardware} canSimulate={canSimulate}>
+    {denied ? <div className="state-panel" role="alert"><h1>Acesso restrito</h1><p>Você não tem permissão para acessar esta página.</p><a href="#/">Voltar ao dashboard</a></div> : page === 'users' ? <UsersPage currentUserId={session.usuario.id} onSessionChanged={onSessionChanged}/> : page === 'reader-status' ? <ReaderStatusPage/> : page === 'audit' ? <AuditPage/> : page === 'registration' ? <RegistrationPage canEdit={canRegister}/> : page === 'simulator' ? <SimulatorPage canEdit={canEditSimulation}/> : page === 'map' ? <MapPage onSelect={setSelected}/> : page === 'readings' ? <ReadingsPage /> : <DashboardPage onSelect={setSelected} />}
+    <EquipmentDrawer item={page === 'dashboard' || page === 'map' ? selected : null} onClose={() => setSelected(null)} canCorrect={canCorrect} canChangeService={canRegister}/>
   </AppShell>
 }

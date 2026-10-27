@@ -14,12 +14,13 @@ Mapeamento de erro:
 - payload inválido                           -> 422, direto pelo Pydantic
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from api import service_equipamento as service
+from api import service_percursos, service_vistos
 from api.database import get_db
 from api.permissoes import Permissao, exigir_por_metodo
 from api.schemas_equipamento import (
@@ -29,6 +30,8 @@ from api.schemas_equipamento import (
     EquipamentoResposta,
 )
 from api.schemas_movimentacao import MovimentacaoPagina, MovimentacaoResposta
+from api.simulacao import config as config_simulador
+from api.simulacao import relogio as relogio_sim
 from api.timestamps import em_utc
 from db.models import Equipamento
 from rfid_location.recency import classify_recency, recency_threshold_from_env
@@ -38,6 +41,22 @@ _PERMISSAO = exigir_por_metodo(
     consultar=Permissao.EQUIPAMENTOS_CONSULTAR, alterar=Permissao.EQUIPAMENTOS_ALTERAR
 )
 router = APIRouter(prefix="/equipamentos", tags=["equipamentos"], dependencies=[Depends(_PERMISSAO)])
+
+
+@router.get("/{equipamento_id}/vistos", summary="Onde foi visto sem confirmação de zona")
+def listar_vistos(equipamento_id: int, db: Session = Depends(get_db)) -> dict:
+    """Visitas perto de antenas que não confirmam zona (ver api/service_vistos.py)."""
+    if not movement_repository.equipment_exists(db.connection(), equipamento_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="equipamento inexistente")
+    return {"items": service_vistos.visitas(db, equipamento_id)}
+
+
+@router.get("/{equipamento_id}/percursos", summary="Histórico em percursos (origem → destino) com evidências")
+def listar_percursos(equipamento_id: int, db: Session = Depends(get_db)) -> dict:
+    """Percursos, correções e observações do equipamento (ver api/service_percursos.py)."""
+    if not movement_repository.equipment_exists(db.connection(), equipamento_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="equipamento inexistente")
+    return service_percursos.percursos(db, equipamento_id)
 
 
 @router.get(
@@ -80,9 +99,21 @@ def listar_movimentacoes(
     )
 
 
-def get_recency_context() -> tuple[datetime, timedelta]:
-    """Relógio UTC e configuração da API, capturados uma vez por request."""
-    return datetime.now(timezone.utc), recency_threshold_from_env()
+def get_recency_context(db: Session = Depends(get_db)) -> tuple[datetime, timedelta]:
+    """Relógio UTC e configuração da API, capturados uma vez por request.
+
+    Com o simulador web ligado (nunca em produção), "agora" é o relógio da
+    simulação: avançar o tempo na demonstração deixa os equipamentos
+    desatualizados de verdade, pela mesma regra de recência.
+    """
+    agora = relogio_sim.real_agora()
+    try:
+        habilitado = config_simulador.carregar().habilitado
+    except ValueError:
+        habilitado = False
+    if habilitado:
+        agora = relogio_sim.do_banco(db, agora).agora(agora)
+    return agora, recency_threshold_from_env()
 
 
 def para_resposta(
@@ -256,6 +287,24 @@ def inativar_equipamento(
     Valida o contrato HTTP e as dependências de acesso antes de chamar o serviço."""
     try:
         equipamento = service.inativar(db, equipamento_id)
+    except service.EquipamentoNaoEncontrado as erro:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
+    return para_resposta(equipamento, recency_context)
+
+
+@router.post(
+    "/{equipamento_id}/fora-de-servico",
+    response_model=EquipamentoResposta,
+    summary="Colocar equipamento fora de serviço (continua visível e rastreado)",
+)
+def fora_de_servico_equipamento(
+    equipamento_id: int,
+    db: Session = Depends(get_db),
+    recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
+) -> EquipamentoResposta:
+    """Marca o equipamento como fora de serviço, sem tirá-lo do painel."""
+    try:
+        equipamento = service.colocar_fora_de_servico(db, equipamento_id)
     except service.EquipamentoNaoEncontrado as erro:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
     return para_resposta(equipamento, recency_context)

@@ -2174,3 +2174,387 @@ button.admin-primary { background:var(--blue); color:white; border-color:var(--b
 .hardware-card-nunca_conectado { border-top:3px solid #718297 }
 
 .inventory-options { margin:14px 0 24px; font-size:.8rem; color:var(--muted) }
+
+/* Cadastro de equipamentos e tags pelo dashboard. */
+.visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap }
+.registration-panel { margin-bottom:20px }
+.registration-panel h2 { margin-top:0 }
+.registration-steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; padding:0; margin:0 0 18px; list-style:none; counter-reset:passo }
+.registration-steps li { counter-increment:passo; background:#fff; border:1px solid var(--line); border-radius:10px; padding:12px 14px 12px 46px; position:relative; font-size:.88rem; line-height:1.45 }
+.registration-steps li::before { content:counter(passo); position:absolute; left:14px; top:12px; width:22px; height:22px; border-radius:50%; background:var(--blue); color:#fff; font-weight:700; font-size:.8rem; display:grid; place-items:center }
+.registration-form.admin-editor { padding:0; margin:12px 0 0 }
+.registration-form label + label { margin-top:14px }
+.registration-form .admin-form-grid { align-items:start }
+.sim-monitor .sim-plan { max-width:980px; margin:0 auto }
+.type-select { display:grid; gap:6px; align-content:start }
+.inline-create { display:flex; gap:6px; flex-wrap:wrap }
+.inline-create input { flex:1; min-width:140px }
+.link-button { background:none; border:0; padding:0; color:var(--blue); font-weight:650; text-decoration:underline; text-underline-offset:3px; cursor:pointer; justify-self:start }
+.field-error { color:#9d2929 !important; font-weight:600 }
+.confirm-tag { display:flex; gap:10px; align-items:center; flex-direction:row !important; margin:16px 0 0; padding:12px 14px; border:1px solid #f0d58e; background:#fffaf0; border-radius:8px }
+.confirm-tag input { width:auto !important; min-height:0 !important }
+.tag-chip { display:inline-block; padding:3px 9px; margin:0 4px 2px 0; border-radius:20px; font-size:.72rem; font-weight:750; white-space:nowrap; vertical-align:middle }
+.tag-known { color:#176b40; background:#e4f5eb }
+.tag-unknown { color:#875007; background:#fff3da }
+.tag-out-of-service { color:#8a2b25; background:#fde8e6; margin-left:6px }
+.row-out-of-service td { color:var(--muted) }
+.tag-sim { color:#4a3a8c; background:#efeafd; margin-left:6px }
+.tag-reading { color:#fff; background:#1e9e4a }
+.discovery-table tr[aria-selected="true"] td { background:#eef6fb }
+.associate-form fieldset { border:0; padding:0; margin:0; display:grid; gap:8px; min-width:220px }
+.associate-form label { display:grid; gap:4px; font-size:.8rem; font-weight:650 }
+.associate-form input,.associate-form select { min-height:36px; border:1px solid var(--line); border-radius:7px; padding:6px 8px }
+.associate-form .checkbox-label { display:flex; align-items:center; gap:6px }
+.admin-secondary,.panel-heading .admin-secondary { border:1px solid var(--line); border-radius:8px; padding:8px 12px; background:#fff; font-weight:600 }
+
+/* Simulador web: planta editável, controle e monitoramento. */
+.sim-scenarios { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin-bottom:18px }
+.sim-scenarios button { text-align:left; border:1px solid var(--line); background:#fff; border-radius:12px; padding:14px 16px; display:grid; gap:4px; color:var(--slate) }
+.sim-scenarios button small { color:var(--muted); line-height:1.4 }
+.sim-scenarios button[aria-selected="true"] { border-color:var(--blue); box-shadow:inset 0 0 0 2px var(--blue); background:#f2f9fd }
+.sim-session-bar { display:flex; flex-wrap:wrap; gap:14px; align-items:end; margin-bottom:16px }
+.sim-session-bar label { display:grid; gap:5px; font-size:.82rem; font-weight:700; min-width:200px }
+.sim-session-bar input,.sim-session-bar select { min-height:40px; border:1px solid #bdccca; border-radius:7px; padding:7px; background:#fff }
+.sim-session-actions,.sim-session-state,.sim-form-actions,.sim-control-status { display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+.sim-session-state { margin-left:auto }
+.sim-session-bar button,.sim-session-bar .as-button,.sim-toolbar button,.sim-form button:not(.link-button),.sim-control-status button,.sim-selected button:not(.link-button),.sim-add button,.sim-new-portal button { border:1px solid var(--line); border-radius:8px; padding:9px 13px; background:#fff; color:var(--slate); font-weight:650; text-decoration:none; font-size:.86rem }
+.sim-session-bar button.admin-primary,.as-button.admin-primary,.sim-control-status button.admin-primary,.sim-add button.admin-primary,.sim-selected button.admin-primary { background:var(--blue); border-color:var(--blue); color:#fff }
+button.danger { color:#9d2929 !important; border-color:#f0c4c4 !important }
+button:disabled { opacity:.55; cursor:default }
+.sim-start { display:inline-flex; gap:8px; align-items:center; font-size:.95rem !important; padding:11px 18px !important }
+.sim-state { padding:6px 11px; border-radius:20px; font-size:.76rem; font-weight:800 }
+.sim-state-em_execucao { color:#176b40; background:#e4f5eb }
+.sim-state-pausada { color:#875007; background:#fff3da }
+.sim-state-encerrada { color:#536579; background:#eaf0f5 }
+.sim-warnings { margin:0 0 12px; background:#fffaf0; border:1px solid #f0d58e; border-radius:10px; padding:10px 14px; font-size:.86rem }
+.sim-warnings summary { cursor:pointer; font-weight:700; color:#80560d }
+.sim-warnings ul { margin:8px 0 0; padding-left:20px }
+.sim-ready { display:flex; gap:8px; align-items:center; margin:0 0 12px; background:#edf8f0; color:#176338; border-radius:10px; padding:10px 14px; font-size:.86rem; font-weight:600 }
+.sim-quick { display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between; margin-bottom:16px; border-left:4px solid var(--slate) }
+.sim-quick h2 { margin:0 0 4px; font-size:1.05rem }
+.sim-quick p { margin:0; color:var(--muted); font-size:.88rem; max-width:720px }
+.sim-quick-actions { display:flex; gap:8px; flex-wrap:wrap }
+.sim-steps { margin:0 0 14px; padding-left:20px; font-size:.86rem; line-height:1.5 }
+.sim-steps li { margin-bottom:4px }
+.sim-chip-action { cursor:pointer; border:0; font:inherit }
+.sim-chip-action:hover { filter:brightness(.95); text-decoration:underline }
+.sim-items-heading { display:flex; justify-content:space-between; align-items:center; gap:8px }
+.sim-quick-add { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px }
+.sim-add details summary { cursor:pointer; color:var(--muted); font-size:.86rem; margin-bottom:8px }
+.sim-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px }
+.sim-toolbar button[aria-pressed="true"] { background:var(--slate); color:#fff; border-color:var(--slate) }
+.sim-hint { color:var(--muted); font-size:.82rem; margin-left:4px }
+.sim-new-portal { display:inline-flex; gap:6px; align-items:center; flex-wrap:wrap }
+.sim-new-portal select { min-height:36px; border-radius:7px; border:1px solid var(--line) }
+.sim-editor-body { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:16px; align-items:start }
+.sim-plan { position:relative; width:100%; background:#f7fafc; border:1px solid var(--line); border-radius:12px; overflow:hidden; user-select:none; touch-action:none }
+.sim-plan-bg { position:absolute; inset:0; width:100%; height:100% }
+.sim-plan-editor.tool-zona,.sim-plan-editor.tool-leitor,.sim-plan-editor.tool-posicionar { cursor:crosshair }
+.sim-coverage { fill:#df3f45; fill-opacity:.07; stroke:#df3f45; stroke-opacity:.45; stroke-width:1; stroke-dasharray:4 3 }
+.sim-coverage-active { fill-opacity:.22; stroke-opacity:.9; stroke-dasharray:none; animation:sim-pulse .9s ease-in-out infinite alternate }
+.sim-coverage-restrita { fill:#7a3fb2; stroke:#7a3fb2 }
+.sim-reader.restrita { background:#7a3fb2 }
+.tag-restricted { color:#5b2a8c; background:#f1e8fb; margin-left:6px }
+.sim-restricted-note { margin:0 0 10px; padding:8px 10px; border-left:3px solid #7a3fb2; background:#f7f1fd; font-size:.84rem; line-height:1.45 }
+@keyframes sim-pulse { from { fill-opacity:.12 } to { fill-opacity:.3 } }
+.sim-zone-label { position:absolute; transform:translate(6px,4px); font-size:.72rem; font-weight:800; letter-spacing:.02em; text-transform:uppercase; pointer-events:none; text-shadow:0 0 3px #fff,0 0 3px #fff }
+.sim-zone-hit { position:absolute; cursor:move }
+.sim-zone-hit.selected { outline:2px dashed var(--blue); outline-offset:-2px }
+.sim-resize { position:absolute; right:-7px; bottom:-7px; width:14px; height:14px; border-radius:3px; background:var(--blue); border:2px solid #fff; cursor:nwse-resize }
+.sim-drawing { position:absolute; border:2px dashed var(--blue); background:rgba(0,109,159,.08); pointer-events:none }
+.sim-marker { position:absolute; transform:translate(-50%,-50%); display:inline-flex; align-items:center; gap:4px; padding:4px 7px; border-radius:20px; border:1px solid #fff; font-size:.7rem; font-weight:750; white-space:nowrap; cursor:grab; box-shadow:0 1px 3px rgba(16,42,66,.25); z-index:2 }
+.sim-marker.static { cursor:default }
+.sim-marker.selected { outline:3px solid #0095da; outline-offset:1px }
+.sim-reader { background:var(--reader); color:#fff }
+.sim-antenna { background:var(--antenna); color:#fff; padding:3px 6px }
+.sim-antenna.reading { box-shadow:0 0 0 4px rgba(223,63,69,.3) }
+.sim-portal { background:#fff; color:var(--slate); border-color:#9fb3c3 }
+.sim-side { position:sticky; top:12px; max-height:calc(100vh - 40px); overflow:auto; font-size:.88rem }
+.sim-side h3 { margin:6px 0 8px; font-size:.95rem }
+.sim-side h4 { margin:16px 0 6px }
+.sim-overview ul { list-style:none; padding:0; margin:0 0 12px; display:grid; gap:6px }
+.sim-overview li { display:flex; gap:6px; align-items:center; flex-wrap:wrap }
+.sim-swatch { display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:6px; vertical-align:middle }
+.sim-form { display:grid; gap:10px }
+.sim-form label { display:grid; gap:4px; font-weight:650; font-size:.82rem }
+.sim-form .checkbox-label { display:flex; gap:8px; align-items:center }
+.sim-form input:not([type="checkbox"]):not([type="range"]):not([type="color"]),.sim-form select { min-height:36px; border:1px solid var(--line); border-radius:7px; padding:6px 8px; background:#fff; width:100% }
+.sim-antenna-form { border:1px solid var(--line); border-radius:10px; padding:10px; display:grid; gap:8px }
+.sim-antenna-form.focused { border-color:var(--antenna); box-shadow:0 0 0 2px rgba(223,63,69,.15) }
+.sim-antenna-form legend { font-weight:750; padding:0 4px }
+.sim-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:8px }
+.sim-monitor { display:grid; gap:16px }
+.sim-kpis { margin:0 }
+.sim-zone-summary { position:absolute; background:rgba(255,255,255,.94); border:1px solid var(--line); border-radius:8px; padding:6px 9px; font-size:.75rem; box-shadow:0 1px 4px rgba(16,42,66,.12) }
+.sim-zone-summary strong { font-size:1rem; color:var(--slate) }
+.sim-zone-summary ul { margin:4px 0 0; padding-left:16px }
+.sim-zone-summary .recency-desatualizada { color:var(--attention) }
+.sim-zone-list { margin:10px 0 0; font-size:.85rem }
+.sim-monitor-grid { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); gap:16px }
+.sim-monitor-grid h2,.sim-monitor h2 { margin-top:0; font-size:1.1rem }
+.sim-readers,.sim-tags,.sim-item-list { list-style:none; padding:0; margin:0; display:grid; gap:8px; font-size:.86rem }
+.sim-readers small,.sim-tags small { display:block; color:var(--muted); margin-top:2px }
+.direction-confirmed { color:#176b40; background:#e4f5eb }
+.direction-ambiguous { color:#875007; background:#fff3da }
+.direction-unknown,.direction-pendente { color:#536579; background:#eaf0f5 }
+.sim-control-shell { min-height:100vh; background:var(--canvas); padding:18px 22px }
+.sim-control-header { display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; align-items:center; margin-bottom:12px }
+.sim-control-header h1 { margin:2px 0 0; font-size:1.6rem }
+.sim-pub { font-size:.78rem; font-weight:700; padding:6px 10px; border-radius:20px }
+.sim-pub.ok { color:#176b40; background:#e4f5eb }
+.sim-pub.off { color:#536579; background:#eaf0f5 }
+.sim-control-body { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:16px; align-items:start }
+.sim-item { position:absolute; transform:translate(-50%,-50%); display:inline-flex; align-items:center; gap:5px; padding:6px 10px; border-radius:22px; font-size:.78rem; font-weight:800; white-space:nowrap; cursor:grab; z-index:3; border:2px solid #fff; box-shadow:0 2px 6px rgba(16,42,66,.3); transition:box-shadow .2s }
+.sim-item.tagged { background:#2f6fb2; color:#fff }
+.sim-item.untagged { background:#fff; color:var(--slate); border:2px dashed #7d8f9c }
+.sim-item.reading { background:#1f8a70; box-shadow:0 0 0 6px rgba(31,138,112,.3) }
+.sim-item.selected { outline:3px solid #0095da; outline-offset:2px }
+.sim-item.dragging { cursor:grabbing; z-index:4 }
+.sim-legend { margin-top:8px; font-style:normal }
+.legend-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin:0 4px 0 10px; vertical-align:middle }
+.legend-dot.tagged { background:#2f6fb2 }
+.legend-dot.untagged { border:2px dashed #7d8f9c }
+.legend-dot.reading { background:#1f8a70 }
+.sim-control-side { display:grid; gap:14px }
+.sim-control-side h2 { margin:0 0 10px; font-size:1.05rem }
+.sim-add { display:grid; gap:10px }
+.sim-add label { display:grid; gap:4px; font-weight:650; font-size:.84rem }
+.sim-add input:not([type="radio"]),.sim-add select { min-height:36px; border:1px solid var(--line); border-radius:7px; padding:6px 8px }
+.sim-tag-mode { border:1px solid var(--line); border-radius:10px; padding:8px 10px; display:grid; gap:6px }
+.sim-tag-mode .checkbox-label { display:flex; gap:8px; align-items:center; font-weight:500 }
+.sim-selected p { margin:6px 0; font-size:.88rem; overflow-wrap:anywhere }
+.sim-item-list li { display:flex; gap:6px; align-items:center; flex-wrap:wrap }
+.sim-events { list-style:none; margin:0; padding:0; display:grid; gap:6px; font-size:.82rem; max-height:260px; overflow:auto }
+.sim-events time { color:var(--muted); font-variant-numeric:tabular-nums; margin-right:4px }
+@media (max-width:1100px) {
+  .sim-editor-body,.sim-control-body,.sim-monitor-grid { grid-template-columns:1fr }
+  .sim-side { position:static; max-height:none }
+}
+@media (max-width:600px) {
+  .sim-control-shell { padding:12px }
+  .sim-session-state { margin-left:0 }
+  .sim-marker span { display:none }
+}
+
+/* --- Simulador: marcadores mínimos, edição de áreas, visada e etapas (hotfix PR #85) --- */
+.sim-coverage { fill:#df3f45; fill-opacity:.06; stroke:#df3f45; stroke-opacity:.5; stroke-width:1; stroke-dasharray:3 3 }
+.sim-coverage-active { fill-opacity:.2; stroke-opacity:.9; stroke-dasharray:none }
+.sim-coverage-restrita { fill:#c2413b; stroke:#c2413b }
+.sim-boresight { stroke:#df3f45; stroke-width:1.5; stroke-opacity:.8 }
+.sim-swatch { background:transparent !important; border:2px dashed currentColor }
+
+.sim-dot { position:absolute; transform:translate(-50%,-50%); width:22px; height:22px; padding:0; margin:0; border:0; background:transparent; display:grid; place-items:center; cursor:grab; z-index:2 }
+.sim-dot.static { cursor:default }
+.sim-dot:focus-visible { outline:2px solid #0095da; outline-offset:0; border-radius:50% }
+.sim-dot-shape { position:relative; display:block; box-shadow:0 0 0 1.5px #fff, 0 1px 2px rgba(16,42,66,.4) }
+.sim-dot-leitor .sim-dot-shape { width:9px; height:9px; border-radius:2px; background:var(--reader) }
+.sim-dot-leitor.restrita .sim-dot-shape { background:#c2413b }
+.sim-dot-antena .sim-dot-shape { width:8px; height:8px; border-radius:50%; background:var(--antenna) }
+.sim-dot-portal .sim-dot-shape { width:7px; height:7px; background:#526b7e; transform:rotate(45deg) }
+.sim-dot-arrow { position:absolute; left:50%; top:50%; width:9px; height:2px; background:var(--antenna); transform-origin:0 50%; margin-top:-1px }
+.sim-dot.selected .sim-dot-shape { box-shadow:0 0 0 2px #fff, 0 0 0 4px #0095da }
+.sim-dot.reading .sim-dot-shape { animation:sim-pulse .9s ease-in-out infinite alternate; box-shadow:0 0 0 2px #fff, 0 0 0 5px rgba(223,63,69,.35) }
+.sim-dot-label { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:.62rem; font-weight:700; color:var(--slate); white-space:nowrap; background:rgba(255,255,255,.85); padding:0 3px; border-radius:3px; pointer-events:none }
+.sim-tip { display:none; position:absolute; left:50%; bottom:calc(100% + 4px); transform:translateX(-50%); min-width:170px; max-width:260px; padding:7px 9px; border-radius:8px; background:#17242e; color:#fff; font-size:.72rem; font-weight:500; line-height:1.35; text-align:left; white-space:normal; z-index:20; pointer-events:none; box-shadow:0 4px 14px rgba(0,0,0,.25) }
+.sim-tip strong { display:block; font-size:.76rem; margin-bottom:2px }
+.sim-tip span { display:block; color:#cfdbe4 }
+.sim-dot:hover .sim-tip,.sim-dot:focus-visible .sim-tip { display:block }
+
+.sim-zone-label { font-size:.62rem; opacity:.9 }
+.sim-zone-edit { position:absolute; outline:2px solid #0095da; outline-offset:-1px; pointer-events:none; z-index:1 }
+.sim-handle { position:absolute; width:12px; height:12px; margin:-6px 0 0 -6px; border-radius:3px; background:#fff; border:2px solid #0095da; pointer-events:auto; z-index:3 }
+.sim-handle-n { left:50%; top:0; cursor:ns-resize } .sim-handle-s { left:50%; top:100%; cursor:ns-resize }
+.sim-handle-e { left:100%; top:50%; cursor:ew-resize } .sim-handle-w { left:0; top:50%; cursor:ew-resize }
+.sim-handle-ne { left:100%; top:0; cursor:nesw-resize } .sim-handle-sw { left:0; top:100%; cursor:nesw-resize }
+.sim-handle-nw { left:0; top:0; cursor:nwse-resize } .sim-handle-se { left:100%; top:100%; cursor:nwse-resize }
+.sim-plan-editor.tool-selecionar { cursor:default }
+.sim-area-fields { display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; border:1px solid var(--line); border-radius:8px; padding:8px }
+.sim-area-fields input { width:100% }
+.sim-view-toggles { display:inline-flex; gap:10px; margin-left:auto; font-size:.82rem }
+.sim-hint { margin:0 0 8px }
+
+.sim-visada { border:1px dashed var(--line); border-radius:8px; padding:8px; display:grid; gap:6px }
+.sim-visada legend { font-size:.8rem; font-weight:700; padding:0 4px }
+.sim-compass { display:grid; grid-template-columns:repeat(3,34px); gap:4px }
+.sim-compass button { min-height:30px; padding:0; font-size:1rem; line-height:1 }
+.sim-compass button[aria-pressed="true"] { background:var(--antenna); color:#fff; border-color:var(--antenna) }
+.sim-compass-center { font-size:.8rem !important }
+.sim-range-row { display:flex; gap:8px; align-items:center }
+.sim-range-row input[type="range"] { flex:1 }
+.sim-range-row input[type="number"] { width:70px }
+.sim-defaults { border:1px solid #f0d58e; background:#fffaf0; border-radius:8px; padding:8px 10px; margin-bottom:10px; display:grid; gap:6px; font-size:.84rem }
+.sim-defaults p { margin:0 }
+
+.sim-legend-plan { list-style:none; display:flex; flex-wrap:wrap; gap:4px 14px; margin:8px 0 0; padding:0; font-size:.74rem; color:var(--muted) }
+.sim-legend-plan li { display:flex; align-items:center; gap:5px }
+.sim-legend-plan span { width:10px; height:10px; border-radius:2px; opacity:.75 }
+
+.sim-item { padding:4px 8px; font-size:.72rem; gap:4px }
+.sim-stages { list-style:none; display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; padding:0; margin:0 0 12px }
+.sim-stages li { border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:#fff; display:grid; gap:2px; font-size:.8rem; color:var(--muted) }
+.sim-stages li strong { color:var(--slate); font-size:.82rem }
+.sim-stages li.on { border-color:#1f8a70; background:#f1faf6 }
+.sim-alerts { border:1px solid #f0c2bf; background:#fff6f5; border-radius:10px; padding:10px 12px; margin:0 0 12px }
+.sim-alerts.active { border-color:#c2413b; box-shadow:0 0 0 3px rgba(194,65,59,.15) }
+.sim-alerts h3 { display:flex; gap:6px; align-items:center; margin:0 0 6px; font-size:.92rem; color:#9b2c27 }
+.sim-alerts ul { list-style:none; margin:0; padding:0; display:grid; gap:6px; font-size:.84rem }
+.sim-alerts li.recent strong:first-child { color:#9b2c27 }
+.sim-alerts small { display:block; color:var(--muted) }
+.sim-alert-none { color:var(--muted); font-size:.84rem; margin:0 0 10px }
+@media (max-width: 700px) { .sim-view-toggles { margin-left:0 } }
+
+/* Simulador limpo (link separado): planta, zonas e equipamentos; trajeto desenhado e executado. */
+.sim-control-limpo .sim-control-plan { max-width:1180px; margin:0 auto }
+.sim-control-bar { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; max-width:1180px; margin:12px auto 0 }
+.sim-control-bar .sim-add,.sim-control-bar .sim-selected { flex:1 1 320px; margin:0 }
+.sim-remove-all { align-self:center }
+.sim-notice { max-width:1180px; margin:8px auto; color:#24435c; font-size:.86rem }
+.sim-plan-control { cursor:default }
+.sim-path-layer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:2 }
+.sim-path-preview { fill:none; stroke:#0b6fb8; stroke-width:2.5; stroke-dasharray:6 4; stroke-linecap:round; stroke-linejoin:round }
+.sim-path-exec { fill:none; stroke:#0b6fb8; stroke-opacity:.28; stroke-width:2; stroke-linecap:round; stroke-linejoin:round }
+.sim-path-ghost { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; border:2px dashed #0b6fb8; background:rgba(11,111,184,.12); pointer-events:none; z-index:3 }
+.sim-dot { position:absolute; z-index:4; width:24px; height:24px; margin:-12px 0 0 -12px; padding:0; display:grid; place-items:center; border-radius:50%;
+  border:2px solid #fff; background:#24435c; color:#fff; box-shadow:0 1px 3px rgba(16,42,66,.45); cursor:grab; touch-action:none }
+.sim-dot:focus-visible { outline:3px solid #0095da; outline-offset:2px }
+.sim-dot.sim-dot-sem-tag { background:#8a98a5 }
+.sim-dot.selected { box-shadow:0 0 0 3px #0095da }
+.sim-dot.moving { cursor:progress }
+.sim-dot.drawing { cursor:grabbing; opacity:.85 }
+.sim-dot-nome { display:none; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); white-space:nowrap; font-size:.72rem;
+  background:#183449; color:#fff; padding:3px 7px; border-radius:6px; pointer-events:none }
+.sim-dot:hover .sim-dot-nome,.sim-dot:focus-visible .sim-dot-nome,.sim-dot.drawing .sim-dot-nome { display:block }
+
+/* Relógio da simulação: discreto; fica evidente quando acelerado ou adiantado. */
+.sim-clock { display:inline-flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:.8rem; color:#24435c }
+.sim-clock-hora { font-variant-numeric:tabular-nums; font-weight:600 }
+.sim-clock-selo { background:#fff3cd; color:#7a4b00; border:1px solid #f0c75e; border-radius:999px; padding:1px 8px; font-weight:600 }
+.sim-clock-acelerado .sim-clock-hora { color:#7a4b00 }
+.sim-clock-fator { display:inline-flex; align-items:center; gap:4px; font-size:.78rem }
+.sim-clock-fator select { padding:2px 4px; font-size:.78rem }
+.sim-clock-avanco { padding:2px 8px; font-size:.76rem }
+.sim-clock-erro { color:#9b2c27; flex-basis:100% }
+
+/* Dashboard: HU ao vivo. */
+.hu-live-head { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:flex-start; justify-content:space-between }
+.hu-live-head > div:first-child { flex:1 1 420px }
+.hu-live-tools { display:flex; flex-direction:column; align-items:flex-end; gap:6px; font-size:.82rem }
+.hu-live-alert { display:flex; flex-wrap:wrap; gap:8px 16px; background:#fdecea; border:1px solid #e9a39e; color:#8c1d18; border-radius:10px; padding:8px 12px; margin:10px 0; font-weight:600; font-size:.86rem }
+.hu-live-body { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:14px; margin-top:10px }
+.hu-live-side { display:grid; gap:12px; align-content:start }
+.hu-live-side .panel { margin:0 }
+@media (max-width: 1100px) { .hu-live-body { grid-template-columns:1fr } }
+.sim-plan-live { cursor:default }
+.hu-zone-hit { position:absolute; z-index:1; background:transparent; border:0; padding:0; cursor:pointer; border-radius:2px }
+.hu-zone-hit:hover { background:rgba(0,109,159,.06) }
+.hu-zone-hit.selected { background:rgba(0,109,159,.1); outline:2px solid #006d9f }
+.hu-reader,.hu-antenna { position:absolute; z-index:3; display:grid; place-items:center; transform:translate(-50%,-50%) }
+.hu-reader svg { width:20px; height:20px; fill:#365fc4; stroke:#fff; stroke-width:1.6 }
+.hu-reader.restrito svg { fill:#7a3fb2 }
+.hu-antenna svg { width:16px; height:16px; fill:#df3f45; stroke:#fff; stroke-width:1.4; transition:transform .2s }
+.hu-antenna.lendo::after { content:''; position:absolute; inset:-7px; border-radius:50%; border:2px solid #df3f45; animation:hu-pulso 1s ease-out infinite; pointer-events:none }
+@keyframes hu-pulso { from { opacity:.9; transform:scale(.6) } to { opacity:0; transform:scale(1.6) } }
+@media (prefers-reduced-motion: reduce) { .hu-antenna.lendo::after { animation:none; opacity:.8 } }
+.hu-reader:hover .marker-tooltip,.hu-reader:focus-visible .marker-tooltip,.hu-antenna:hover .marker-tooltip,.hu-antenna:focus-visible .marker-tooltip,
+.hu-equip:hover .marker-tooltip,.hu-equip:focus-visible .marker-tooltip { display:block; z-index:10 }
+.hu-equip { position:absolute; z-index:4; width:22px; height:22px; margin:-11px 0 0 -11px; padding:0; display:grid; place-items:center; border-radius:50%;
+  border:2px solid #fff; color:#fff; box-shadow:0 1px 3px rgba(16,42,66,.45); cursor:pointer; transition:left .6s ease, top .6s ease }
+.hu-equip:focus-visible { outline:3px solid #0095da; outline-offset:2px }
+.hu-fora_de_servico { background:#7b8794 }
+.hu-em_transito { background:#0b6fb8 }
+.hu-atencao { background:#f2b705; color:#3d2b00 }
+.hu-detectado { background:#1f9d55 }
+.hu-confirmado { background:#2b5f4f }
+.hu-sem_confirmacao { background:#fff; color:#24435c; border-color:#24435c }
+.hu-nunca_detectado { background:#c3ccd4 }
+.hu-equip.hu-em_transito { box-shadow:0 0 0 3px rgba(11,111,184,.3) }
+.hu-legend { display:flex; flex-wrap:wrap; gap:6px 14px; list-style:none; padding:0; margin:8px 0; font-size:.8rem; color:#24435c }
+.hu-swatch { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:6px; vertical-align:-1px; border:1.5px solid transparent }
+.hu-swatch.hu-sem_confirmacao { border-color:#24435c }
+.hu-list { list-style:none; margin:0; padding:0; display:grid; gap:6px; font-size:.86rem }
+.hu-list small { display:block; color:var(--muted); margin-left:17px }
+.hu-events { list-style:none; margin:0; padding:0; display:grid; gap:6px; font-size:.82rem; max-height:420px; overflow:auto }
+.hu-events time { color:var(--muted); font-variant-numeric:tabular-nums; margin-right:4px }
+.hu-ev-ok { border-left:3px solid #1f9d55; padding-left:6px }
+.hu-ev-info { border-left:3px solid #0b6fb8; padding-left:6px }
+.hu-ev-aviso { border-left:3px solid #f2b705; padding-left:6px }
+.hu-ev-alerta { border-left:3px solid #c62828; padding-left:6px; color:#8c1d18; font-weight:600 }
+
+/* Zonas recolhidas/expandidas nos mapas do HU e do EASY. */
+.marker-disponivel { background:var(--available) }
+.marker-nunca_detectado { background:#9aa8b3 }
+.map-marker.marker-collapsed { width:40px; height:40px }
+.marker-count { position:absolute; top:-7px; right:-9px; min-width:20px; height:20px; padding:0 5px; border-radius:999px; background:#102a42; color:#fff;
+  font-size:.72rem; font-weight:700; line-height:20px; text-align:center; border:2px solid #fff }
+.map-marker.marker-individual { width:26px; height:26px; border-width:2px; z-index:5 }
+.map-marker.marker-collapsed.marker-selected { outline:3px solid #102a42; outline-offset:2px }
+.marker-icon { display:grid; place-items:center }
+.map-legend-dot { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; vertical-align:-1px }
+
+/* Acompanhamento do HU: planta original com mais contraste, limites e leitores por cima. */
+.hu-tracking .floor-background { filter:contrast(1.08) saturate(1.12) }
+.hu-limite { fill:none; stroke:#102a42; stroke-width:2.2; stroke-dasharray:7 4; vector-effect:non-scaling-stroke }
+.hu-limite.restrita { stroke:#7a1f8f; stroke-dasharray:3 3 }
+.hu-cobertura { fill:rgba(223,63,69,.16); stroke:#df3f45; stroke-width:1.2; vector-effect:non-scaling-stroke }
+.hu-tracking .map-marker.marker-reader,.hu-tracking .map-marker.marker-antenna { width:30px; height:30px }
+.hu-tracking .map-marker.marker-reader svg,.hu-tracking .map-marker.marker-antenna svg { width:16px; height:16px }
+.hu-legenda { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:8px 24px; margin:10px 0 4px }
+.hu-cobertura-toggle { display:flex; flex-direction:column; font-size:.86rem; font-weight:600 }
+.hu-cobertura-toggle small { font-weight:400; color:var(--muted) }
+.hu-toasts { position:fixed; top:16px; right:16px; z-index:50; display:grid; gap:8px; max-width:380px }
+.hu-toast { margin:0; display:flex; gap:10px; align-items:flex-start; background:#fdecea; border:1px solid #e9a39e; border-left:5px solid #c62828;
+  color:#8c1d18; border-radius:10px; padding:10px 12px; font-weight:600; font-size:.88rem; box-shadow:0 6px 18px rgba(16,42,66,.18) }
+.hu-toast button { margin-left:auto; border:0; background:transparent; font-size:1.1rem; cursor:pointer; color:inherit }
+.hu-restrita-agora { margin:0 0 8px; color:#8c1d18; font-weight:600; font-size:.88rem }
+.hu-ev-swatch { display:inline-block; width:14px; height:10px; margin-right:6px; border-left:4px solid transparent }
+.hu-ev-swatch.hu-ev-ok { border-color:#1f9d55 } .hu-ev-swatch.hu-ev-info { border-color:#0b6fb8 }
+.hu-ev-swatch.hu-ev-aviso { border-color:#f2b705 } .hu-ev-swatch.hu-ev-alerta { border-color:#c62828 }
+.sim-portal-regra { font-size:.84rem; margin:4px 0 }
+/* Avisos do simulador sem deslocar o mapa (o desenho do trajeto depende da posição). */
+.sim-mensagens { position:fixed; left:16px; bottom:16px; z-index:40; display:grid; gap:6px; max-width:min(520px, calc(100vw - 32px)); pointer-events:none }
+.sim-mensagens > p { margin:0; pointer-events:auto; box-shadow:0 6px 18px rgba(16,42,66,.18); background:#fff; border-radius:8px; padding:8px 12px }
+/* Zonas bem visíveis sobre a planta e alerta piscando na zona restrita. */
+.hu-zona-fundo { fill:rgba(255,255,255,.18); stroke:none }
+.hu-zona-fundo.restrita { fill:rgba(122,31,143,.12) }
+.hu-zona-fundo.alerta { animation:hu-pisca 1s steps(2, start) infinite }
+@keyframes hu-pisca { 0% { fill:rgba(198,40,40,.55) } 100% { fill:rgba(198,40,40,.08) } }
+@media (prefers-reduced-motion: reduce) { .hu-zona-fundo.alerta { animation:none; fill:rgba(198,40,40,.4) } }
+.hu-limite-halo { fill:none; stroke:#fff; stroke-width:6; vector-effect:non-scaling-stroke; stroke-opacity:.9 }
+.hu-limite { stroke-width:3 !important }
+.hu-planta-cor { display:inline-block; width:14px; height:14px; border-radius:3px; margin-right:6px; vertical-align:-2px; border:1px solid rgba(16,42,66,.25) }
+.hu-planta-zona { background:#fff; border:2px dashed #102a42 }
+.hu-planta-restrita { background:rgba(198,40,40,.35); border:2px dashed #7a1f8f }
+.hu-restrita-agora { animation:hu-texto-pisca 1s steps(2, start) infinite }
+@keyframes hu-texto-pisca { 0% { color:#c62828 } 100% { color:#5c0f0b } }
+/* Histórico: "visto perto" (não confirma zona) diferente das movimentações confirmadas. */
+.movement-history li.history-visto { border-left:3px dashed #0b6fb8; padding-left:8px; color:#24435c }
+.movement-history li.history-visto strong { font-weight:600 }
+.map-marker.marker-nao-confirmado,.map-legend-dot.marker-nao-confirmado { background:#fff; color:#24435c; border:2px dashed #24435c }
+
+/* Histórico do equipamento: resumo (até 3) e blocos origem → destino com as etapas. */
+.journey-summary { list-style:none; margin:10px 0; padding:0; display:grid; gap:8px }
+.journey-summary li { display:grid; gap:2px; padding:8px 10px; border-left:4px solid #1f7a4d; background:#f4f9f6; font-size:.8rem }
+.journey-summary li span, .journey-summary li small { color:#4f6668 }
+.journey-summary li.journey-incompleto { border-left-color:#b7791f; background:#fdf8ee }
+.journey-summary li.journey-observacao { border-left:3px dashed #0b6fb8; background:#f3f8fc }
+.journey-summary li.journey-correcao { border-left-color:#6b5ca5; background:#f6f4fb }
+.journey-blocks { display:grid; gap:12px; margin:12px 0 }
+.journey-block { border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:.78rem }
+.journey-block h4 { margin:0 0 6px; font-size:.9rem }
+.journey-block h4 em { font-style:normal; font-weight:500; font-size:.72rem; color:#4f6668; margin-left:6px }
+.journey-block ol { list-style:none; margin:6px 0; padding:0 0 0 10px; border-left:2px solid var(--line); display:grid; gap:6px }
+.journey-block ol li { display:grid; gap:2px }
+.journey-block ol li span, .journey-block ol li small, .journey-block p { color:#4f6668; margin:2px 0 }
+.journey-block.journey-incompleto { border-color:#e3c27d }
+.journey-block.journey-observacao { border-style:dashed; border-color:#0b6fb8 }
+.journey-pending { color:#8a5a00 !important; font-weight:600 }
+.drawer-detail dd small { display:block; color:#60777a }
+
+/* Mapa do HU: alternância de planta e nomes de zona arrastáveis. */
+.hu-modo-planta { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:4px 0 8px }
+.hu-modo-planta button { border:1px solid #075e94; background:#fff; color:#075e94; border-radius:5px; padding:4px 10px; font-size:.78rem; cursor:pointer }
+.hu-modo-planta button[aria-pressed="true"] { background:#075e94; color:#fff }
+.hu-modo-planta small { color:#60777a; flex-basis:100% }
+.sector-pin-movel { cursor:grab; touch-action:none }
+.sector-pin-arrastando { cursor:grabbing; opacity:.85; z-index:5 }
+.hu-rotulo-erro { color:#a3221b; font-size:.8rem }

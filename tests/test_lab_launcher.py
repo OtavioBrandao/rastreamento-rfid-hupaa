@@ -431,60 +431,45 @@ def test_transporte_e_tags_respeitam_o_modo(monkeypatch):
     assert cli._transporte_escolhido(None, "managed", False) == "tls"
 
 
-def test_simulador_sem_flet_falha_antes_de_subir_servicos(monkeypatch, capsys):
-    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda nome: None)
-    monkeypatch.setattr(cli.sys, "stdin", SimpleNamespace(isatty=lambda: False))
-    monkeypatch.setattr(cli, "compose", lambda *a, **k: pytest.fail("não deve subir serviços"))
-    with pytest.raises(cli.typer.Exit):
-        cli.start(env="local", source="synthetic", no_terminals=True)
-    assert "requirements/lab.txt" in capsys.readouterr().err
-
-
 def test_simulador_nao_aceita_tags_do_leitor_fisico(monkeypatch, capsys):
     monkeypatch.setattr(cli.sys, "stdin", SimpleNamespace(isatty=lambda: False))
     with pytest.raises(cli.typer.Exit):
         cli.start(env="local", source="synthetic", no_terminals=True,
                   tag=["E2801190A502006016C32F62=Bomba"])
-    assert "definidos na janela" in capsys.readouterr().err
+    assert "definidos no navegador" in capsys.readouterr().err
 
 
-def test_opcao_sintetica_abre_simulador_com_publicador_e_banco(monkeypatch, tmp_path):
+def test_opcao_sintetica_nao_abre_aplicativo_desktop(monkeypatch, tmp_path, capsys):
     valores = {"MQTT_HOST": "broker", "MQTT_PORT": "8883", "MQTT_USERNAME": "ingestor",
                "MQTT_PASSWORD": "segredo", "DATABASE_URL": "postgresql://seed",
                "APP_DATABASE_URL": "postgresql://app"}
     arquivo = tmp_path / ".env.cloud"
-    abertos = []
-
-    class Processo:
-        def __init__(self, comando, cwd, env):
-            abertos.append((comando, env))
-
-        def poll(self):
-            return 0
-
-        def wait(self):
-            return 0
-
+    validados = []
     monkeypatch.setattr(cli.sys, "stdin", SimpleNamespace(isatty=lambda: False))
-    # O simulador roda em processo separado (Popen simulado); o CI não instala o Flet.
-    monkeypatch.setattr(cli.importlib.util, "find_spec", lambda nome: object())
     monkeypatch.setattr(cli, "carregar", lambda *a, **k: (arquivo, dict(valores)))
-    monkeypatch.setattr(cli, "_perfil_publicador", lambda modo, v, *a: dict(
-        v, MQTT_USERNAME="leitor", MQTT_PASSWORD="segredo-leitor",
-        MQTT_TOPIC="easy/dev/hupaa/portal-01/reader-01/readings"))
+    monkeypatch.setattr(cli, "_perfil_publicador", lambda modo, v, *a: validados.append(modo))
     monkeypatch.setattr(cli, "compose", lambda *a, **k: None)
     monkeypatch.setattr(cli, "aguardar", lambda *a, **k: None)
     monkeypatch.setattr(cli, "executar", lambda *a, **k: None)
-    monkeypatch.setattr(cli.subprocess, "Popen", Processo)
 
     cli.start(env="managed", source="synthetic", no_terminals=True)
 
-    comando, env = abertos[0]
-    assert comando[1:] == ["-m", "tools.lab_simulator", "--reader-id", "reader-01",
-                           "--portal-id", "portal-01"]
-    assert env["MQTT_USERNAME"] == "leitor"
-    assert env["MQTT_TOPIC"] == "easy/dev/hupaa/portal-01/reader-01/readings"
-    assert env["DATABASE_URL"] == "postgresql://seed"
+    # A credencial de publicação é validada cedo; quem publica é a API (simulador web).
+    assert validados == ["managed"]
+    saida = capsys.readouterr().out
+    assert "#/simulador" in saida
+    assert not hasattr(cli, "subprocess")
+
+
+def test_perfil_publicador_aceita_filtro_com_mais_e_recusa_cerquilha(monkeypatch, tmp_path):
+    valores = {"MQTT_USERNAME": "ingestor", "MQTT_PASSWORD": "segredo-ingestor"}
+    perfil = tmp_path / ".env.cloud.reader-01"
+    credencial = "MQTT_USERNAME=simulador\nMQTT_PASSWORD=segredo-sim\n"
+    perfil.write_text(credencial + "MQTT_TOPIC=easy/dev/hupaa/+/+/readings\n", encoding="utf-8")
+    assert cli._perfil_publicador("managed", valores, perfil, False)["MQTT_TOPIC"].endswith("+/readings")
+    perfil.write_text(credencial + "MQTT_TOPIC=easy/#\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="sem #"):
+        cli._perfil_publicador("managed", valores, perfil, False)
 
 
 @pytest.mark.parametrize("host, erro", [

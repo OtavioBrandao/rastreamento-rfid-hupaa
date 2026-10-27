@@ -12,8 +12,9 @@ Fluxo:
    externo) e o frontend Vite, em segundo plano, e abre o navegador.
 3. Entrega o terminal ao launcher, que segue com as perguntas dele, sobe o
    backend em Docker, abre os três terminais de observação (MQTT, Ingestor e
-   Banco) e, nas opções 1 e 4, abre o simulador visual (``tools.lab_simulator``)
-   para mover os itens pela planta.
+   Banco). Nas opções 1 e 4 a API sobe com o simulador web habilitado e o
+   navegador abre em ``#/simulador`` (planta EASY ou HUPAA); o controle dos
+   equipamentos fica num link próprio, em outra aba. Não há aplicativo desktop.
 
 Ctrl+C encerra o launcher (que derruba os contêineres) e depois a API e o
 frontend. A saída da API e do frontend vai para ``data/dev/*.log`` para não
@@ -39,12 +40,13 @@ ROOT = Path(__file__).resolve().parent.parent
 FRONTEND = ROOT / "frontend"
 LOGS = ROOT / "data" / "dev"
 WINDOWS = os.name == "nt"
+PASTAS_BACKEND = ("api", "db", "rfid_inference", "rfid_ingestion", "rfid_location", "rfid_movement")
 
 TESTES = {
-    "1": ("local", "synthetic", "Local com simulador visual (dados sintéticos)"),
+    "1": ("local", "synthetic", "Local com simulador web (dados sintéticos)"),
     "2": ("local", "physical", "Local com leitor físico"),
     "3": ("managed", "physical", "Broker e banco externos com leitor físico"),
-    "4": ("managed", "synthetic", "Broker e banco externos com simulador visual (dados sintéticos)"),
+    "4": ("managed", "synthetic", "Broker e banco externos com simulador web (dados sintéticos)"),
 }
 
 
@@ -56,16 +58,99 @@ def python_do_projeto() -> str:
     return sys.executable
 
 
-def servir_api(modo: str, env_file: str | None, host: str, porta: int) -> None:
+def ambiente_simulador(modo: str, valores: dict[str, str]) -> dict[str, str]:
+    """Variáveis do simulador web na API: local usa o Mosquitto do ensaio; externo,
+    a credencial de PUBLICAÇÃO de ``.env.cloud.reader-01`` (nunca a do ingestor)."""
+    extras = {"SIMULADOR_HABILITADO": "true", "APP_ENV": valores.get("APP_ENV") or "development",
+              "SIMULADOR_TOPICO_INGESTOR": valores.get("MQTT_TOPIC") or "easy/dev/hupaa/+/+/readings"}
+    if modo == "managed" and valores.get("MQTT_INSECURE_LAB") != "true":
+        from tools.lab_launcher.cli import _perfil_publicador
+
+        try:
+            perfil = _perfil_publicador(modo, valores, None, False)
+        except ValueError as erro:
+            print(f"Simulador web desabilitado: {erro}", flush=True)
+            return {"SIMULADOR_HABILITADO": "false"}
+        extras.update({f"SIMULADOR_{chave}": valor for chave, valor in perfil.items()
+                       if chave in ("MQTT_USERNAME", "MQTT_PASSWORD", "MQTT_CA_CERT")})
+        # Perfil com tópico exato (ACL de um leitor só, como o simulador Flet usava):
+        # os leitores virtuais publicam por ele (relay) e o ingestor do ensaio aceita
+        # `sim_reader_id` só desse tópico. Filtro com `+` vira só checagem local.
+        topico = perfil.get("MQTT_TOPIC", "")
+        if "+" in topico:
+            extras["SIMULADOR_MQTT_TOPICO_PERMITIDO"] = topico
+        elif topico:
+            extras["SIMULADOR_MQTT_TOPICO_RELAY"] = topico
+    return extras
+
+
+def migracao_pendente() -> tuple[str, str] | None:
+    """Compara a revisão do banco com a head do Alembic; devolve (banco, head) se diferem."""
+    from alembic.config import Config
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import create_engine
+    from sqlalchemy.exc import OperationalError
+
+    from db.url import get_database_url
+
+    head = ScriptDirectory.from_config(Config(str(ROOT / "config" / "alembic.ini"))).get_current_head()
+    engine = create_engine(get_database_url())
+    try:
+        with engine.connect() as conexao:
+            atual = MigrationContext.configure(conexao).get_current_revision()
+    except OperationalError:
+        # No modo local o Postgres do Docker só sobe depois, pelo launcher.
+        return None
+    finally:
+        engine.dispose()
+    return None if atual == head else (atual or "vazia", head or "?")
+
+
+def servir_api(modo: str, env_file: str | None, host: str, porta: int,
+               simulador: bool = False) -> None:
     """Roda no Python da .venv: resolve o banco como o launcher e inicia o uvicorn."""
     sys.path.insert(0, str(ROOT))
-    import uvicorn
+    from watchfiles import PythonFilter, watch
 
     from tools.lab_launcher.config import carregar
 
     _, valores = carregar(modo, Path(env_file) if env_file else None, interativo=False)
     os.environ.update(valores)
-    uvicorn.run("api.main:app", host=host, port=porta)
+    pendente = migracao_pendente()
+    if pendente:
+        # Banco atrás do código quebra rotas novas com 500; nunca migra sozinho
+        # (o banco externo é compartilhado), só para e diz o comando.
+        sys.exit(f"Banco na migration {pendente[0]}, código em {pendente[1]}. Aplique antes:\n"
+                 f"  python -m alembic -c config/alembic.ini upgrade head  (com DATABASE_URL do {modo})")
+    if simulador:
+        os.environ.update(ambiente_simulador(modo, valores))
+        # Uma marca por execução: a API restaura a demonstração padrão do HU só na
+        # primeira subida; as recargas automáticas desta execução não a repetem.
+        os.environ.setdefault("SIMULADOR_DEMO_EXECUCAO", f"{int(time.time())}-{os.getpid()}")
+    # Recarrega ao salvar código do backend (o frontend já recarrega pelo Vite).
+    # Não usa o `reload=True` do uvicorn: no Windows ele reinicia mandando Ctrl+C,
+    # que este processo (grupo próprio, ver `iniciar`) ignora, e a API antiga fica
+    # no ar com o código velho. Aqui a árvore do uvicorn é derrubada e sobe de novo.
+    comando = [sys.executable, "-m", "uvicorn", "api.main:app", "--host", host, "--port", str(porta)]
+    processo = subprocess.Popen(comando, cwd=ROOT)
+    try:
+        # Acorda a cada 2 s mesmo sem mudança: se a API caiu (ex.: porta ainda ocupada
+        # por um processo antigo), sobe de novo em vez de deixar o site sem API.
+        for mudancas in watch(*(ROOT / pasta for pasta in PASTAS_BACKEND), watch_filter=PythonFilter(),
+                              rust_timeout=2000, yield_on_timeout=True):
+            if not mudancas:
+                if processo.poll() is not None:
+                    print(f"A API parou (código {processo.returncode}); subindo de novo...", flush=True)
+                    processo = subprocess.Popen(comando, cwd=ROOT)
+                continue
+            nomes = sorted({Path(caminho).relative_to(ROOT).as_posix() for _, caminho in mudancas})
+            print(f"Código alterado ({', '.join(nomes)}): reiniciando a API...", flush=True)
+            encerrar(processo)
+            processo.wait()
+            processo = subprocess.Popen(comando, cwd=ROOT)
+    finally:
+        encerrar(processo)
 
 
 def escolher_teste(valor: str | None) -> str:
@@ -78,11 +163,6 @@ def escolher_teste(valor: str | None) -> str:
     if valor not in TESTES:
         sys.exit("Escolha um teste de 1 a 4.")
     return valor
-
-
-def flet_disponivel(python: str) -> bool:
-    """Verifica em subprocesso se o Python escolhido consegue importar o Flet."""
-    return subprocess.run([python, "-c", "import flet"], capture_output=True).returncode == 0
 
 
 def porta_ocupada(host: str, porta: int) -> bool:
@@ -150,11 +230,16 @@ def main() -> int:
     parser.add_argument("--api-port", type=int, default=8010)
     parser.add_argument("--front-port", type=int, default=5173)
     parser.add_argument("--sem-navegador", action="store_true", help="não abre o navegador")
+    parser.add_argument("--reaproveitar", action="store_true",
+                        help="modo local: reaproveita contêineres e dados sem perguntar")
+    parser.add_argument("--mqtt-transport", choices=("tls", "plain"),
+                        help="repassa ao launcher (broker externo) e pula a pergunta do transporte")
     parser.add_argument("--servir-api", choices=("local", "managed"), help=argparse.SUPPRESS)
+    parser.add_argument("--com-simulador", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     if args.servir_api:
-        servir_api(args.servir_api, args.env_file, args.host, args.api_port)
+        servir_api(args.servir_api, args.env_file, args.host, args.api_port, args.com_simulador)
         return 0
 
     for fluxo in (sys.stdout, sys.stderr):
@@ -165,15 +250,13 @@ def main() -> int:
     else:
         modo, origem, descricao = TESTES[escolher_teste(args.teste)]
         print(f"\n> {descricao}")
-        if origem == "synthetic" and not flet_disponivel(python):
-            sys.exit("O simulador visual precisa do Flet. Instale com:\n"
-                     f"  {python} -m pip install -r requirements/lab.txt")
 
     if porta_ocupada(args.host, args.api_port):
         sys.exit(f"A porta {args.api_port} já está em uso. Use --api-port <outra porta>.")
     if porta_ocupada("127.0.0.1", args.front_port):
         sys.exit(f"A porta {args.front_port} (frontend) já está em uso. Use --front-port <outra porta>.")
     front_url = f"http://localhost:{args.front_port}/"
+    abrir_url = front_url + ("#/simulador" if origem == "synthetic" else "")
     npm = shutil.which("npm")
     if npm is None:
         sys.exit("npm não encontrado no PATH. Instale o Node.js.")
@@ -193,6 +276,8 @@ def main() -> int:
                "--host", args.host, "--api-port", str(args.api_port)]
     if args.env_file:
         api_cmd += ["--env-file", args.env_file]
+    if origem == "synthetic":
+        api_cmd.append("--com-simulador")
     processos: list[subprocess.Popen] = []
     launcher: subprocess.Popen | None = None
     try:
@@ -207,10 +292,12 @@ def main() -> int:
                 return 1
         print(f"API: http://{args.host}:{args.api_port}/docs")
         print(f"Frontend: {front_url}")
+        if origem == "synthetic":
+            print(f"Simulador web: {abrir_url}")
         if log_api:
             print(f"Logs da API e do frontend: {LOGS}")
         if not args.sem_navegador:
-            webbrowser.open(front_url)
+            webbrowser.open(abrir_url)
 
         if not com_launcher:
             print("Ctrl+C encerra tudo.", flush=True)
@@ -220,6 +307,10 @@ def main() -> int:
 
         print("\nAbrindo o launcher de laboratório...\n", flush=True)
         comando = [python, "-m", "tools.lab_launcher", "start", "--env", modo, "--source", origem]
+        if args.mqtt_transport:
+            comando += ["--mqtt-transport", args.mqtt_transport]
+        if args.reaproveitar:
+            comando.append("--reuse")
         if args.env_file:
             comando += ["--env-file", args.env_file]
         launcher = subprocess.Popen(comando, cwd=ROOT, env=dict(os.environ))

@@ -251,3 +251,25 @@ def test_concurrent_workers_keep_latest(pg_engine, setup, delayed_passage):
         setup["zones"][0], T + timedelta(minutes=5), later,
     )
     assert count(pg_engine) == 2
+
+
+def test_pending_skips_epc_without_association_until_one_covers_it(pg_engine, setup):
+    """Sessão de 25/10/2026: passagens de tags não cadastradas voltavam a cada ciclo
+    (~1 s cada no Neon) e atrasavam toda a inferência. Só voltam quando resolvíveis."""
+    from rfid_location import repository
+
+    sem_tag = passage(pg_engine, setup, T + timedelta(minutes=5), epc="NO-TAG")
+    assert sem_tag not in repository.pending_ids(pg_engine)
+    with pg_engine.begin() as c:
+        tag = c.scalar(Tag.__table__.insert().values(epc="NO-TAG").returning(Tag.id))
+        # Associação só depois da passagem: continua sem resolver (regra de rfid_movement).
+        c.execute(AssociacaoTagEquipamento.__table__.insert().values(
+            tag_id=tag, equipamento_id=setup["equipment"][1], inicio=T + timedelta(minutes=6),
+            fim=T + timedelta(days=1)))
+    assert sem_tag not in repository.pending_ids(pg_engine)
+    with pg_engine.begin() as c:
+        c.execute(AssociacaoTagEquipamento.__table__.update()
+                  .where(AssociacaoTagEquipamento.tag_id == tag)
+                  .values(inicio=T + timedelta(minutes=4)))
+    assert sem_tag in repository.pending_ids(pg_engine)
+    assert LocationProjectionService(pg_engine).process_passage(sem_tag).equipment_id == setup["equipment"][1]

@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import and_, case, false, func, literal_column, or_, select, true
 from sqlalchemy.orm import Session, contains_eager
 
+from api.equipamento_visivel import nao_arquivado
 from api.schemas_busca_ativos import AtivoBusca, BuscaAtivosPagina, LeituraRecente, ZonaBusca
 from api.service_leituras import ultimas_leituras
 from api.timestamps import em_utc
@@ -88,7 +89,7 @@ def buscar(
         )
     )
     if somente_ativos:
-        query = query.filter(Equipamento.status == "ativo")
+        query = query.filter(nao_arquivado())  # fora de serviço continua visível
     if q is not None:
         pattern = f"%{_escape_like(q)}%"
         query = query.filter(or_(
@@ -109,7 +110,7 @@ def buscar(
     status_predicates = {
         "nunca_detectado": Equipamento.ultima_deteccao_em.is_(None),
         "fora_de_servico": and_(Equipamento.ultima_deteccao_em.is_not(None),
-                                Equipamento.status == "inativo"),
+                                Equipamento.status.in_(("inativo", "fora_de_servico"))),
         "atencao": and_(Equipamento.status == "ativo",
                         Equipamento.ultima_deteccao_em < cutoff),
         "disponivel": and_(Equipamento.status == "ativo",
@@ -158,7 +159,7 @@ def buscar(
         recency = classify_recency(equipment.ultima_deteccao_em, now, threshold)
         if recency == "nunca_detectada":
             visual_status = "nunca_detectado"
-        elif equipment.status == "inativo":
+        elif equipment.status in ("inativo", "fora_de_servico"):
             visual_status = "fora_de_servico"
         elif recency == "desatualizada":
             visual_status = "atencao"
