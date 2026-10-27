@@ -246,13 +246,15 @@ python scripts/dev.py --teste 1 --reaproveitar
 
 ### Fora de serviço continua visível; demonstração padrão a cada subida
 
-- **Fora de serviço não some do painel** (`api/equipamento_visivel.py`):
-  - "Fora de serviço" e "baixa lógica" usam o mesmo status `inativo`.
-  - O filtro "somente ativos" do inventário, do resumo, da atividade e das
-    leituras agora esconde só os **arquivados**: inativos sem etiqueta.
-  - O equipamento fora de serviço, que mantém a etiqueta, continua no
-    inventário, no mapa e nas abas por zona, em vermelho. As transições dele
-    continuam sendo detectadas.
+- **Fora de serviço não some do painel:**
+  - O status próprio `fora_de_servico` (migration `s042a1b2c3d4`, endpoint
+    `POST /equipamentos/{id}/fora-de-servico`) fica separado da baixa lógica
+    (`inativo`).
+  - O botão "Fora de serviço" usa esse status. O equipamento continua no
+    inventário, no mapa e nas abas por zona, em vermelho, e as transições dele
+    seguem detectadas.
+  - "Somente ativos" continua escondendo só a baixa lógica (ensaios
+    arquivados), como antes.
 - **Demonstração padrão a cada subida:**
   - O `dev.py` passa à API um identificador da execução
     (`SIMULADOR_DEMO_EXECUCAO`).

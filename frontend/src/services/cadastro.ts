@@ -122,7 +122,7 @@ export async function getEquipmentTypes(signal?: AbortSignal): Promise<TipoEquip
 
 export const createEquipmentType = (nome: string) => sendJson<TipoEquipamento>('/tipos-equipamento', 'POST', { nome })
 export const register = (payload: NovoCadastro) => sendJson<CadastroCriado>('/api/cadastro/equipamentos', 'POST', payload)
-/** Fora de serviço = baixa lógica (status inativo); a tag continua vinculada. */
-export const setInService = (equipamentoId: number, emServico: boolean) => sendJson(`/equipamentos/${equipamentoId}/${emServico ? 'reativar' : 'inativar'}`, 'POST')
+/** Fora de serviço (status próprio): continua no painel, em vermelho, com a tag vinculada. */
+export const setInService = (equipamentoId: number, emServico: boolean) => sendJson(`/equipamentos/${equipamentoId}/${emServico ? 'reativar' : 'fora-de-servico'}`, 'POST')
 export const associateTag =(equipamentoId: number, epc: string) => sendJson(`/equipamentos/${equipamentoId}/tag`, 'POST', { epc })
 export const epcAvailability = (epc: string) => apiRequest<{ epc: string; disponivel: boolean; equipamento: EpcDetectado['equipamento'] }>(`/api/cadastro/epcs/${encodeURIComponent(epc.trim())}`)

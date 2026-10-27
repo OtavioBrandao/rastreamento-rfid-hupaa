@@ -147,7 +147,7 @@ def test_fora_de_servico_continua_no_painel_e_arquivado_nao(pg_engine, layout_pa
     with Session(pg_engine) as session:
         cenario_demo.preparar(session)
         maca, monitor = session.scalars(select(Equipamento).where(Equipamento.status == "ativo").limit(2)).all()
-        maca.status = "inativo"  # fora de serviço: a etiqueta continua vinculada
+        maca.status = "fora_de_servico"  # fora de serviço: continua no painel, com a etiqueta
         cenario_demo._dar_baixa(session, monitor, datetime.now(UTC))  # arquivado: sem etiqueta
         session.commit()
         agora, limiar = datetime.now(UTC), td(minutes=30)

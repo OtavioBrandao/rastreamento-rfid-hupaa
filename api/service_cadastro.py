@@ -236,7 +236,9 @@ def listar_equipamentos(
         .subquery()
     )
     filtros = []
-    if estado != "todos":
+    if estado == "inativo":  # "Fora de serviço" na tela: fora de serviço ou com baixa
+        filtros.append(Equipamento.status.in_(("inativo", "fora_de_servico")))
+    elif estado != "todos":
         filtros.append(Equipamento.status == estado)
     if situacao == "sem_tag":
         filtros.append(vinculo.c.epc.is_(None))

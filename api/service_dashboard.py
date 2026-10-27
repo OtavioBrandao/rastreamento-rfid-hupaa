@@ -17,7 +17,7 @@ def resumo(db: Session, *, now: datetime, threshold: timedelta,
     row = db.execute(select(
         func.count(Equipamento.id).label("registered"),
         func.count(case((~detected, 1))).label("nunca_detectado"),
-        func.count(case((detected & (Equipamento.status == "inativo"), 1))).label("fora_de_servico"),
+        func.count(case((detected & Equipamento.status.in_(("inativo", "fora_de_servico")), 1))).label("fora_de_servico"),
         func.count(case((detected & (Equipamento.status == "ativo")
                          & (Equipamento.ultima_deteccao_em < cutoff), 1))).label("atencao"),
         func.count(case((detected & (Equipamento.status == "ativo")

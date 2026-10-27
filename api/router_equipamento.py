@@ -285,6 +285,24 @@ def inativar_equipamento(
 
 
 @router.post(
+    "/{equipamento_id}/fora-de-servico",
+    response_model=EquipamentoResposta,
+    summary="Colocar equipamento fora de serviço (continua visível e rastreado)",
+)
+def fora_de_servico_equipamento(
+    equipamento_id: int,
+    db: Session = Depends(get_db),
+    recency_context: tuple[datetime, timedelta] = Depends(get_recency_context),
+) -> EquipamentoResposta:
+    """Marca o equipamento como fora de serviço, sem tirá-lo do painel."""
+    try:
+        equipamento = service.colocar_fora_de_servico(db, equipamento_id)
+    except service.EquipamentoNaoEncontrado as erro:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(erro)) from erro
+    return para_resposta(equipamento, recency_context)
+
+
+@router.post(
     "/{equipamento_id}/reativar",
     response_model=EquipamentoResposta,
     summary="Reativar equipamento",

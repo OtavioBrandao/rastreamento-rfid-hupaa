@@ -98,8 +98,14 @@ def resumo(db: Session, *, now: datetime, janela: timedelta,
     )
     if somente_cadastradas:
         agregado = agregado.where(LeituraBruta.epc.in_(list(cadastradas) or [""]))
-    # Fora de serviço continua com etiqueta e continua sendo lido: não é escondido.
-    # Arquivados não têm etiqueta vinculada, então suas leituras já não se ligam a eles.
+    if somente_ativos:
+        # Esconde as leituras de cadastros com baixa lógica (ensaios arquivados); o
+        # equipamento fora de serviço continua sendo lido e aparece.
+        inativos = (select(Tag.epc).join(AssociacaoTagEquipamento,
+                    AssociacaoTagEquipamento.tag_id == Tag.id)
+                    .join(Equipamento, Equipamento.id == AssociacaoTagEquipamento.equipamento_id)
+                    .where(AssociacaoTagEquipamento.fim.is_(None), Equipamento.status == "inativo"))
+        agregado = agregado.where(LeituraBruta.epc.not_in(inativos))
     por_epc: dict[str, list] = {}
     for linha in db.execute(agregado).all():
         por_epc.setdefault(linha.epc, []).append(linha)

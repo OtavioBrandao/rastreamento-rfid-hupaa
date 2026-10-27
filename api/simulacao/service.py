@@ -840,7 +840,7 @@ def monitor(db: Session, sessao: SimulacaoSessao, *, now: datetime,
             AssociacaoTagEquipamento.fim.is_(None)))
         .outerjoin(Tag, Tag.id == AssociacaoTagEquipamento.tag_id)
         .where(Equipamento.ultima_zona_id.in_(list(zonas) or [0]),
-               Equipamento.status == "ativo")
+               Equipamento.status != "inativo")  # fora de serviço continua na zona
         .order_by(Equipamento.nome, Equipamento.id)
     ).all()
     por_zona: dict[str, list] = {chave: [] for chave in zonas.values()}

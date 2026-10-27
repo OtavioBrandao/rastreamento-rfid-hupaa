@@ -148,7 +148,7 @@ class Equipamento(Base):
             name="uq_equipamentos_identificador_interno_normalizado",
         ),
         CheckConstraint(
-            "status IN ('ativo', 'inativo')", name="ck_equipamento_status_valido"
+            "status IN ('ativo', 'inativo', 'fora_de_servico')", name="ck_equipamento_status_valido"
         ),
         CheckConstraint("versao >= 1", name="ck_equipamentos_versao_positiva"),
     )
