@@ -229,6 +229,21 @@ ser a configuração das apresentações. Outros layouts continuam como antes.
     marcador tracejado.
   - Ele **não entra** na contagem nem no ícone da zona.
 
+### Rodar a demonstração sem o Neon (modo 1)
+
+Quando o banco externo não está disponível (ex.: cota do Neon esgotada em
+26/10/2026), a demonstração roda com banco e Mosquitto locais:
+
+```bash
+python scripts/dev.py --teste 1 --reaproveitar
+```
+
+- `--reaproveitar` repassa `--reuse` ao launcher e pula a pergunta "Reaproveitar
+  contêineres e dados existentes?".
+- O layout do HU é recriado no banco local a partir da cópia em `data/backups`.
+- Depois, **Preparar demonstração** no simulador. O banco local tem só o que
+  foi recriado: layout, cenário e o administrador de teste.
+
 ## Validação
 
 - `tests/test_cenario_demo.py`:
