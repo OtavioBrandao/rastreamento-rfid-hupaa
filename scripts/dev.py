@@ -125,6 +125,9 @@ def servir_api(modo: str, env_file: str | None, host: str, porta: int,
                  f"  python -m alembic -c config/alembic.ini upgrade head  (com DATABASE_URL do {modo})")
     if simulador:
         os.environ.update(ambiente_simulador(modo, valores))
+        # Uma marca por execução: a API restaura a demonstração padrão do HU só na
+        # primeira subida; as recargas automáticas desta execução não a repetem.
+        os.environ.setdefault("SIMULADOR_DEMO_EXECUCAO", f"{int(time.time())}-{os.getpid()}")
     # Recarrega ao salvar código do backend (o frontend já recarrega pelo Vite).
     # Não usa o `reload=True` do uvicorn: no Windows ele reinicia mandando Ctrl+C,
     # que este processo (grupo próprio, ver `iniciar`) ignora, e a API antiga fica

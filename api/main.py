@@ -6,6 +6,7 @@ Sobe com:
     uvicorn api.main:app --reload
 """
 
+import os
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 
@@ -61,6 +62,14 @@ async def ciclo_de_vida(_: FastAPI) -> AsyncIterator[None]:
     if simulador.habilitado:
         from api.database import get_engine
         iniciar_motor(simulador, get_engine())
+        execucao = os.environ.get("SIMULADOR_DEMO_EXECUCAO")
+        if execucao:
+            # Cada execução do dev.py começa na demonstração padrão do HU (uma vez só).
+            import threading
+
+            from api.simulacao.cenario_demo import restaurar_na_subida
+            threading.Thread(target=restaurar_na_subida, args=(get_engine(), execucao),
+                             name="demo-padrao", daemon=True).start()
     try:
         yield
     finally:

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -329,3 +330,42 @@ def estado(db: Session) -> dict:
             "antigos": sum(_identificador(i) in ativos for i in range(1, len(EQUIPAMENTOS_ANTIGOS) + 1)),
             "novos": sum(_identificador(i) in ativos for i in range(len(EQUIPAMENTOS_ANTIGOS) + 1,
                                                                   len(EQUIPAMENTOS_ANTIGOS) + len(EQUIPAMENTOS_NOVOS) + 1))}
+
+
+MARCAS = Path(__file__).resolve().parents[2] / "data" / "dev"
+
+
+def restaurar_na_subida(engine, execucao: str, *, tentativas: int = 60, espera_s: float = 5.0) -> bool:
+    """Cada execução do ``dev.py`` começa na demonstração padrão (seis parados, três no centro).
+
+    Roda uma vez por execução (marca em ``data/dev``): as recargas automáticas da API
+    na mesma execução não desfazem o que foi feito na apresentação. Espera o banco e o
+    layout padrão ficarem disponíveis (no modo local o banco sobe depois da API).
+    """
+    import time
+
+    from sqlalchemy.orm import Session as Sessao
+
+    marca = MARCAS / f"demo-padrao-{execucao}.feito"
+    if marca.exists():
+        return False
+    for _ in range(tentativas):
+        try:
+            with Sessao(engine) as db:
+                layout_padrao(db)
+                aberta = db.scalar(select(SimulacaoSessao.codigo).where(
+                    SimulacaoSessao.layout_id == layout_padrao(db).id,
+                    SimulacaoSessao.estado.in_(service.ESTADOS_ABERTOS)))
+                if aberta:
+                    reiniciar(db, aberta)  # mesmo link de controle
+                else:
+                    preparar(db)
+                    iniciar(db, None)
+            MARCAS.mkdir(parents=True, exist_ok=True)
+            marca.write_text(datetime.now().isoformat(), encoding="utf-8")
+            return True
+        except service.SimulacaoRecusada:
+            return False  # sem layout padrão: nada a restaurar
+        except Exception:  # noqa: BLE001 - banco ainda subindo ou migrando
+            time.sleep(espera_s)
+    return False

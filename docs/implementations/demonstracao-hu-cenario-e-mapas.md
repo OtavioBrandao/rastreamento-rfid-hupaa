@@ -244,6 +244,24 @@ python scripts/dev.py --teste 1 --reaproveitar
 - Depois, **Preparar demonstração** no simulador. O banco local tem só o que
   foi recriado: layout, cenário e o administrador de teste.
 
+### Fora de serviço continua visível; demonstração padrão a cada subida
+
+- **Fora de serviço não some do painel** (`api/equipamento_visivel.py`):
+  - "Fora de serviço" e "baixa lógica" usam o mesmo status `inativo`.
+  - O filtro "somente ativos" do inventário, do resumo, da atividade e das
+    leituras agora esconde só os **arquivados**: inativos sem etiqueta.
+  - O equipamento fora de serviço, que mantém a etiqueta, continua no
+    inventário, no mapa e nas abas por zona, em vermelho. As transições dele
+    continuam sendo detectadas.
+- **Demonstração padrão a cada subida:**
+  - O `dev.py` passa à API um identificador da execução
+    (`SIMULADOR_DEMO_EXECUCAO`).
+  - Na primeira subida dessa execução, a API restaura o cenário: os 6 parados
+    (2 por zona) e os 3 no centro (`cenario_demo.restaurar_na_subida`). Se a
+    sessão já estava aberta, mantém o mesmo link de controle.
+  - Recargas automáticas da mesma execução não repetem a restauração, porque
+    há uma marca em `data/dev`.
+
 ## Validação
 
 - `tests/test_cenario_demo.py`:

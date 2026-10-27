@@ -117,3 +117,42 @@ def test_outros_layouts_continuam_iniciando_sem_cenario(pg_engine, layout_padrao
         assert cenario_demo.e_layout_padrao(session, layout_padrao)
         assert service.iniciar_sessao(session, outro.id, None).itens == []
         assert len(_ativos(session)) == 0
+
+
+def test_cada_execucao_comeca_na_demonstracao_padrao_uma_vez_so(pg_engine, layout_padrao, tmp_path, monkeypatch):
+    """Toda subida do localhost volta ao padrão (6 parados + 3 no centro); recargas não."""
+    monkeypatch.setattr(cenario_demo, "MARCAS", tmp_path)
+    assert cenario_demo.restaurar_na_subida(pg_engine, "execucao-1") is True
+    with Session(pg_engine) as session:
+        sessao = session.scalar(select(SimulacaoSessao).where(SimulacaoSessao.estado != "encerrada"))
+        assert len(sessao.itens) == 9 and len(_ativos(session)) == 9
+        # Durante a apresentação: um item extra e um movimento.
+        service.adicionar_item(session, sessao.codigo, nome="Extra", tipo="Maca", epc=None,
+                               gerar_epc=True, x=None, y=None)
+    assert cenario_demo.restaurar_na_subida(pg_engine, "execucao-1") is False  # recarga: mantém
+    with Session(pg_engine) as session:
+        assert len(session.scalar(select(SimulacaoSessao).where(SimulacaoSessao.estado != "encerrada")).itens) == 10
+    assert cenario_demo.restaurar_na_subida(pg_engine, "execucao-2") is True  # nova execução: padrão
+    with Session(pg_engine) as session:
+        aberta = session.scalar(select(SimulacaoSessao).where(SimulacaoSessao.estado != "encerrada"))
+        assert sorted(i["nome"] for i in aberta.itens) == sorted(
+            nome for nome, _, _ in cenario_demo.EQUIPAMENTOS_ANTIGOS + cenario_demo.EQUIPAMENTOS_NOVOS)
+
+
+def test_fora_de_servico_continua_no_painel_e_arquivado_nao(pg_engine, layout_padrao):
+    from datetime import timedelta as td
+
+    from api.service_busca_ativos import buscar
+    from api.service_dashboard import resumo
+    with Session(pg_engine) as session:
+        cenario_demo.preparar(session)
+        maca, monitor = session.scalars(select(Equipamento).where(Equipamento.status == "ativo").limit(2)).all()
+        maca.status = "inativo"  # fora de serviço: a etiqueta continua vinculada
+        cenario_demo._dar_baixa(session, monitor, datetime.now(UTC))  # arquivado: sem etiqueta
+        session.commit()
+        agora, limiar = datetime.now(UTC), td(minutes=30)
+        pagina = buscar(session, now=agora, threshold=limiar, page_size=50, somente_ativos=True)
+        nomes = {item.nome: item.status for item in pagina.items}
+        assert nomes[maca.nome] == "fora_de_servico"
+        assert monitor.nome not in nomes
+        assert resumo(session, now=agora, threshold=limiar, somente_ativos=True)["fora_de_servico"] == 1

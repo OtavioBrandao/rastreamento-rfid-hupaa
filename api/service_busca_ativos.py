@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import and_, case, false, func, literal_column, or_, select, true
 from sqlalchemy.orm import Session, contains_eager
 
+from api.equipamento_visivel import nao_arquivado
 from api.schemas_busca_ativos import AtivoBusca, BuscaAtivosPagina, LeituraRecente, ZonaBusca
 from api.service_leituras import ultimas_leituras
 from api.timestamps import em_utc
@@ -88,7 +89,7 @@ def buscar(
         )
     )
     if somente_ativos:
-        query = query.filter(Equipamento.status == "ativo")
+        query = query.filter(nao_arquivado())  # fora de serviço continua visível
     if q is not None:
         pattern = f"%{_escape_like(q)}%"
         query = query.filter(or_(
