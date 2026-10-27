@@ -2530,3 +2530,31 @@ button:disabled { opacity:.55; cursor:default }
 .movement-history li.history-visto { border-left:3px dashed #0b6fb8; padding-left:8px; color:#24435c }
 .movement-history li.history-visto strong { font-weight:600 }
 .map-marker.marker-nao-confirmado,.map-legend-dot.marker-nao-confirmado { background:#fff; color:#24435c; border:2px dashed #24435c }
+
+/* Histórico do equipamento: resumo (até 3) e blocos origem → destino com as etapas. */
+.journey-summary { list-style:none; margin:10px 0; padding:0; display:grid; gap:8px }
+.journey-summary li { display:grid; gap:2px; padding:8px 10px; border-left:4px solid #1f7a4d; background:#f4f9f6; font-size:.8rem }
+.journey-summary li span, .journey-summary li small { color:#4f6668 }
+.journey-summary li.journey-incompleto { border-left-color:#b7791f; background:#fdf8ee }
+.journey-summary li.journey-observacao { border-left:3px dashed #0b6fb8; background:#f3f8fc }
+.journey-summary li.journey-correcao { border-left-color:#6b5ca5; background:#f6f4fb }
+.journey-blocks { display:grid; gap:12px; margin:12px 0 }
+.journey-block { border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:.78rem }
+.journey-block h4 { margin:0 0 6px; font-size:.9rem }
+.journey-block h4 em { font-style:normal; font-weight:500; font-size:.72rem; color:#4f6668; margin-left:6px }
+.journey-block ol { list-style:none; margin:6px 0; padding:0 0 0 10px; border-left:2px solid var(--line); display:grid; gap:6px }
+.journey-block ol li { display:grid; gap:2px }
+.journey-block ol li span, .journey-block ol li small, .journey-block p { color:#4f6668; margin:2px 0 }
+.journey-block.journey-incompleto { border-color:#e3c27d }
+.journey-block.journey-observacao { border-style:dashed; border-color:#0b6fb8 }
+.journey-pending { color:#8a5a00 !important; font-weight:600 }
+.drawer-detail dd small { display:block; color:#60777a }
+
+/* Mapa do HU: alternância de planta e nomes de zona arrastáveis. */
+.hu-modo-planta { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:4px 0 8px }
+.hu-modo-planta button { border:1px solid #075e94; background:#fff; color:#075e94; border-radius:5px; padding:4px 10px; font-size:.78rem; cursor:pointer }
+.hu-modo-planta button[aria-pressed="true"] { background:#075e94; color:#fff }
+.hu-modo-planta small { color:#60777a; flex-basis:100% }
+.sector-pin-movel { cursor:grab; touch-action:none }
+.sector-pin-arrastando { cursor:grabbing; opacity:.85; z-index:5 }
+.hu-rotulo-erro { color:#a3221b; font-size:.8rem }

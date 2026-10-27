@@ -4,7 +4,14 @@ from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import aliased
 
-from db.models import AssociacaoTagEquipamento, Equipamento, HistoricoMovimentacao, Passagem, Tag
+from db.models import (
+    AssociacaoTagEquipamento,
+    Equipamento,
+    HistoricoMovimentacao,
+    LeituraBruta,
+    Passagem,
+    Tag,
+)
 
 
 def lock_equipment(connection: Connection, equipment_id: int):
@@ -58,8 +65,11 @@ def pending_ids(engine: Engine, *, limit: int = 100, after_id: int = 0) -> tuple
                 # cadastrada não tem o que reconciliar; repetir a tentativa a cada
                 # ciclo custava ~1 s por passagem no banco remoto e atrasava toda a
                 # inferência (sessão de 25/10/2026: 11–21 s de atraso).
+                # A leitura de origem também precisa estar no vínculo (ver rfid_movement).
                 and_(movement.id.is_(None), exists().where(
                     AssociacaoTagEquipamento.tag_id == Tag.id, Tag.epc == Passagem.epc,
+                    LeituraBruta.id == Passagem.leitura_origem_id,
+                    AssociacaoTagEquipamento.inicio <= LeituraBruta.lido_em,
                     AssociacaoTagEquipamento.inicio <= Passagem.detectada_em,
                     or_(AssociacaoTagEquipamento.fim.is_(None),
                         AssociacaoTagEquipamento.fim > Passagem.detectada_em))),

@@ -11,11 +11,18 @@
    não vinculada, e cadastrados pelo fluxo de cadastro por leitura: onze no total.
    Nada disso é automático.
 
-Reiniciar volta sempre ao mesmo ponto: os equipamentos da rodada anterior (os nove
-do cenário e os cadastrados a partir das etiquetas da sessão) recebem baixa lógica —
-ficam inativos, sem etiqueta e com o identificador marcado ``-ARQ-`` — e o cenário é
-recriado. Nada é apagado do banco; o histórico continua auditável. Recriar (em vez
-de "voltar" a posição) evita que passagens antigas sejam reprojetadas no equipamento.
+Reiniciar volta sempre ao mesmo ponto e o cenário é recriado. Recriar (em vez de
+"voltar" a posição) evita que passagens antigas sejam reprojetadas no equipamento.
+
+- **Banco local da demonstração** (``localhost``, fora de produção): os cadastros de
+  equipamento da rodada anterior — os nove do cenário, os acrescentados à mão e os
+  ensaios arquivados antigos — são **excluídos de vez**, com vínculos, histórico e
+  etiquetas sem uso. Após preparar sobram só os seis; após iniciar, os nove.
+- **Qualquer outro banco** (ex.: Neon): baixa lógica, como antes — inativos, sem
+  etiqueta e com o identificador marcado ``-ARQ-``; nada é apagado.
+
+Leituras brutas e passagens ficam (são do pipeline, por EPC); o vínculo novo começa
+no agora da simulação, então nada da rodada anterior vai para o equipamento novo.
 
 Nomes, tipos e EPCs ficam em ``EQUIPAMENTOS_ANTIGOS`` e ``EQUIPAMENTOS_NOVOS`` para
 ajustar antes das apresentações.
@@ -27,15 +34,17 @@ import math
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from api import service_cadastro
+from api.ambiente import em_producao
 from api.normalizacao import normalizar_nome
 from api.service_tipos_equipamento import criar as criar_tipo
 from db.models import (
     AssociacaoTagEquipamento,
     Equipamento,
+    HistoricoMovimentacao,
     Setor,
     SimulacaoLayout,
     SimulacaoSessao,
@@ -123,6 +132,35 @@ def _dar_baixa(db: Session, equipamento: Equipamento, agora: datetime) -> None:
     equipamento.identificador_interno_normalizado = normalizar_nome(equipamento.identificador_interno)
 
 
+HOSTS_LOCAIS = {"localhost", "127.0.0.1", "::1", "postgres"}
+
+
+def banco_local(db: Session) -> bool:
+    """Banco local da demonstração (Docker/Postgres na máquina), nunca em produção."""
+    return not em_producao() and (db.get_bind().url.host or "") in HOSTS_LOCAIS
+
+
+def _excluir_equipamentos(db: Session) -> int:
+    """Exclui de vez todos os cadastros de equipamento do banco local da demonstração.
+
+    Vai junto o que só existe por causa deles: vínculos de etiqueta, histórico de
+    movimentações e etiquetas que ficaram sem vínculo. Usuários, layouts, zonas,
+    leitores e leituras brutas ficam.
+    """
+    ids = list(db.scalars(select(Equipamento.id)))
+    if not ids:
+        return 0
+    db.execute(update(Equipamento).where(Equipamento.id.in_(ids)).values(
+        ultima_movimentacao_id=None, ultima_passagem_id=None))
+    db.execute(delete(HistoricoMovimentacao).where(HistoricoMovimentacao.equipamento_id.in_(ids)))
+    db.execute(delete(AssociacaoTagEquipamento).where(AssociacaoTagEquipamento.equipamento_id.in_(ids)))
+    db.execute(delete(Equipamento).where(Equipamento.id.in_(ids)))
+    db.execute(delete(Tag).where(~select(AssociacaoTagEquipamento.id).where(
+        AssociacaoTagEquipamento.tag_id == Tag.id).exists()))
+    db.flush()
+    return len(ids)
+
+
 def _epcs_manuais(db: Session, layout_id: int) -> set[str]:
     """Etiquetas dos itens acrescentados à mão na última sessão do layout padrão."""
     sessao = db.scalar(select(SimulacaoSessao).where(SimulacaoSessao.layout_id == layout_id)
@@ -180,15 +218,18 @@ def preparar(db: Session, *, encerrar_sessoes: bool = True) -> dict:
         if encerrar_sessoes:
             service._encerrar(sessao, agora)
             sessao.versao += 1
-    manuais = _epcs_manuais(db, registro.id)
-    anteriores = list(_ativos_do_cenario(db).values())
-    if manuais:
-        anteriores += db.scalars(select(Equipamento).join(
-            AssociacaoTagEquipamento, AssociacaoTagEquipamento.equipamento_id == Equipamento.id).join(
-            Tag, Tag.id == AssociacaoTagEquipamento.tag_id).where(
-            Tag.epc.in_(manuais), AssociacaoTagEquipamento.fim.is_(None))).all()
-    for equipamento in {item.id: item for item in anteriores}.values():
-        _dar_baixa(db, equipamento, agora)
+    if banco_local(db):
+        _excluir_equipamentos(db)
+    else:
+        manuais = _epcs_manuais(db, registro.id)
+        anteriores = list(_ativos_do_cenario(db).values())
+        if manuais:
+            anteriores += db.scalars(select(Equipamento).join(
+                AssociacaoTagEquipamento, AssociacaoTagEquipamento.equipamento_id == Equipamento.id).join(
+                Tag, Tag.id == AssociacaoTagEquipamento.tag_id).where(
+                Tag.epc.in_(manuais), AssociacaoTagEquipamento.fim.is_(None))).all()
+        for equipamento in {item.id: item for item in anteriores}.values():
+            _dar_baixa(db, equipamento, agora)
     db.flush()
     vinculos = topologia.aplicar(db, registro, layout)
     antigo = relogio.agora(agora) - recency_threshold_from_env() - FOLGA_ATENCAO

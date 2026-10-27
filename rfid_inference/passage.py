@@ -90,6 +90,12 @@ class _State:
     anchor: PortalObservation | None = None
     proposed_anchor: PortalObservation | None = None
     last_passage_at: datetime | None = None
+    # Passagem provisória (com ``confirm_after``): espera a origem ficar em silêncio.
+    tentative: DetectedPassage | None = None
+    tentative_anchor: PortalObservation | None = None
+    tentative_origin: PortalObservation | None = None
+    # Observação que chegou junto da confirmação e é reprocessada após a gravação.
+    replay: PortalObservation | None = None
 
 
 def _order(item: PortalObservation) -> tuple[datetime, int, str]:
@@ -113,13 +119,25 @@ class PassageDetector:
     ``max_interval=None`` não limita o tempo entre os lados: a tag vista num lado
     e depois no outro atravessou o portal, mesmo que devagar ou fora do alcance
     da antena de destino. O estado de cada EPC/portal é mantido e não expira.
+
+    ``confirm_after`` (opcional) torna a passagem *provisória*: o leitor multiplexa
+    as portas e, parada na porta, a tag é lida alternadamente pelas duas antenas,
+    em pedaços de observação que chegam antes das leituras seguintes da outra
+    antena. A passagem só é proposta quando o destino segue lido por
+    ``confirm_after`` sem a origem voltar (tempo das leituras), quando passa esse
+    tempo sem nada novo (``advance_time``) ou no encerramento (``flush``). Se a
+    origem volta a ler depois de ``overlap_grace`` do início do destino, a passagem
+    provisória é descartada: sem saídas e entradas falsas em sequência.
     """
 
     def __init__(self, max_interval: timedelta | None, *,
                  silence_grace: timedelta = timedelta(0),
                  refractory: timedelta = timedelta(0),
                  origin_active: Callable[[PortalObservation, PortalObservation], bool]
-                 | None = None):
+                 | None = None,
+                 confirm_after: timedelta | None = None,
+                 overlap_grace: timedelta = timedelta(0),
+                 confirm_check: Callable[[DetectedPassage], DetectedPassage | None] | None = None):
         """Inicializa PassageDetector com as dependências e valores recebidos."""
         if ((max_interval is not None and max_interval <= timedelta(0))
                 or silence_grace < timedelta(0) or refractory < timedelta(0)):
@@ -128,6 +146,10 @@ class PassageDetector:
         self.silence_grace = silence_grace
         self.refractory = refractory
         self.origin_active = origin_active
+        self.confirm_after = confirm_after
+        self.overlap_grace = overlap_grace
+        # Na confirmação: exige leituras isoladas de cada lado (ver PassageRepository).
+        self.confirm_check = confirm_check
         self.states: dict[tuple[str, int], _State] = {}
         self.counters = PassageCounters()
 
@@ -146,6 +168,32 @@ class PassageDetector:
         state.last_received_monotonic = received_at_monotonic
         if state.proposed is not None:
             return state.proposed
+        if state.tentative is not None:
+            tentative = state.tentative
+            if observation.side == tentative.first_side:
+                anchor = state.tentative_anchor
+                assert anchor is not None
+                if observation.first_seen_at > anchor.last_seen_at + self.overlap_grace:
+                    # O destino parou de ler antes de a origem voltar: a travessia valeu
+                    # e esta leitura já é a volta. Confirma e reprocessa depois da gravação.
+                    state.replay = observation
+                    proposal = self._confirm(state)
+                    if proposal is None:  # recusada: a leitura segue o fluxo normal agora
+                        state.replay = None
+                        return self.add(observation, received_at_monotonic=received_at_monotonic)
+                    return proposal
+                if observation.last_seen_at > tentative.second_observed_at + self.overlap_grace:
+                    # A origem lê junto com o destino: parada na porta, não atravessou.
+                    state.tentative = state.tentative_anchor = None
+                    state.candidate = observation
+                    self.counters.origin_still_active += 1
+                    _event("rfid_passage_tentative_discarded", *key)
+                return None
+            state.tentative_anchor = max((state.tentative_anchor, observation), key=_order)
+            assert self.confirm_after is not None
+            if observation.last_seen_at - tentative.second_observed_at >= self.confirm_after:
+                return self._confirm(state)
+            return None
         if state.confirmed:
             assert state.last_event_at is not None and state.anchor is not None
             anchor = state.anchor
@@ -182,7 +230,10 @@ class PassageDetector:
                 self.counters.same_side_observations += 1
                 _event("rfid_passage_same_side", *key)
                 return None
-            if self.origin_active is not None and self.origin_active(first, second):
+            # Com ``confirm_check`` a conferência das leituras isoladas, na confirmação,
+            # substitui esta: aqui o destino pode começar ainda na sobreposição da porta.
+            if (self.origin_active is not None and self.confirm_check is None
+                    and self.origin_active(first, second)):
                 # A origem segue lendo a tag: mantém a origem como referência.
                 self.counters.origin_still_active += 1
                 _event("rfid_passage_origin_still_active", *key)
@@ -192,6 +243,11 @@ class PassageDetector:
                 else:
                     state.candidate = first
                 return None
+            # Alcances que se tocam na porta: a origem ainda leu um instante depois do
+            # início do destino (dentro da tolerância de sobreposição, já que a origem
+            # não seguiu ativa). A evidência de origem passa a ser a primeira leitura
+            # dela, que de fato veio antes do destino; senão a ordem ficaria invertida.
+            overlap = first.last_seen_at > second.first_seen_at
             detected = DetectedPassage(
                 epc=observation.epc,
                 portal_id=observation.portal_id,
@@ -199,20 +255,52 @@ class PassageDetector:
                 second_side=second.side,
                 first_antenna_id=first.antenna_id,
                 second_antenna_id=second.antenna_id,
-                first_reading_id=first.last_reading_id,
+                first_reading_id=first.first_reading_id if overlap else first.last_reading_id,
                 second_reading_id=second.first_reading_id,
-                first_observed_at=first.last_seen_at,
+                first_observed_at=first.first_seen_at if overlap else first.last_seen_at,
                 second_observed_at=second.first_seen_at,
                 detected_at=max(first.last_seen_at, second.last_seen_at),
             )
+            state.last_event_at = max(first.last_seen_at, second.last_seen_at)
+            if self.confirm_after is not None:
+                state.tentative, state.tentative_anchor, state.tentative_origin = detected, second, first
+                state.candidate = None
+                return None
             state.proposed = detected
             state.proposed_anchor = second
-            state.last_event_at = max(first.last_seen_at, second.last_seen_at)
             return detected
         state.candidate = observation
         self.counters.candidates_started += 1
         _event("rfid_passage_candidate_started", *key)
         return None
+
+    def _confirm(self, state: _State) -> DetectedPassage | None:
+        """Promove a passagem provisória a proposta (aguardando a gravação).
+
+        Com ``confirm_check``, a evidência é conferida nas leituras gravadas; sem
+        leitura isolada de cada lado (só leituras alternadas na porta), a passagem
+        é recusada e a referência volta a ser o lado de origem.
+        """
+        assert state.tentative is not None
+        tentative, anchor, origin = state.tentative, state.tentative_anchor, state.tentative_origin
+        state.tentative = state.tentative_anchor = state.tentative_origin = None
+        if self.confirm_check is not None:
+            checked = self.confirm_check(tentative)
+            if checked is None:
+                state.candidate = origin
+                self.counters.origin_still_active += 1
+                _event("rfid_passage_without_exclusive_evidence", tentative.epc, tentative.portal_id)
+                return None
+            tentative = checked
+        state.proposed, state.proposed_anchor = tentative, anchor
+        return state.proposed
+
+    def flush(self) -> tuple[DetectedPassage, ...]:
+        """Encerramento: não chegarão mais leituras; as provisórias viram propostas."""
+        for state in self.states.values():
+            if state.tentative is not None and state.proposed is None:
+                self._confirm(state)
+        return self.pending()
 
     def mark_persisted(self, passage: DetectedPassage, *, duplicate: bool) -> None:
         """Confirma a proposta após persistência e conserva a observação de destino como âncora."""
@@ -232,6 +320,9 @@ class PassageDetector:
         else:
             self.counters.passages_confirmed += 1
             _event("rfid_passage_confirmed", *key)
+        if state.replay is not None:
+            replay, state.replay = state.replay, None
+            self.add(replay, received_at_monotonic=state.last_received_monotonic)
 
     def knows(self, epc: str, portal_id: int) -> bool:
         """Indica se há estado em memória para o EPC/portal."""
@@ -249,6 +340,12 @@ class PassageDetector:
 
     def advance_time(self, now_monotonic: float) -> None:
         """Expira estados de observação conforme o relógio monotônico e as janelas configuradas."""
+        if self.confirm_after is not None:
+            espera = self.confirm_after.total_seconds()
+            for state in self.states.values():
+                if (state.tentative is not None and state.proposed is None
+                        and now_monotonic - state.last_received_monotonic >= espera):
+                    self._confirm(state)  # nada novo da tag: a origem não voltou
         if self.max_interval is None:
             return  # sem limite: o último lado de cada tag nunca expira
         silence = (self.max_interval + self.silence_grace).total_seconds()

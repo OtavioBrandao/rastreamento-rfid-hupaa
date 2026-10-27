@@ -562,12 +562,27 @@ T0 = datetime.now(UTC).replace(microsecond=0) + timedelta(hours=1)
 EPC_MACA = "E2804C4100000000000000A1"
 
 
-def _receptor(pg_engine, tmp_path, relay=()):
+def _detector_de_producao(pg_engine, repositorio):
+    """Mesmos parâmetros do ingestor real (rfid_ingestion/__main__.py)."""
+    from rfid_ingestion.__main__ import janela_de_confirmacao
+
+    settings = Settings(mqtt_topic="easy/dev/hupaa/+/+/readings")
+    grace = timedelta(milliseconds=settings.rfid_passage_overlap_grace_ms)
+    hold = timedelta(milliseconds=settings.rfid_passage_origin_hold_ms)
+    return PassageDetector(
+        None, refractory=timedelta(milliseconds=settings.rfid_passage_refractory_ms),
+        origin_active=lambda origem, destino: repositorio.origin_active(origem, destino, grace=grace, hold=hold),
+        confirm_after=janela_de_confirmacao(settings), overlap_grace=grace,
+        confirm_check=lambda passagem: repositorio.exclusive_crossing(passagem, grace=grace))
+
+
+def _receptor(pg_engine, tmp_path, relay=(), producao=False):
     location = LocationProjectionService(pg_engine)
     direction = DirectionInferenceService(DirectionRepository(pg_engine), 100,
                                           confirmed_handler=location.process_passage)
-    passage = PassageInferenceService(PassageDetector(timedelta(seconds=3)),
-                                      PassageRepository(pg_engine),
+    repositorio = PassageRepository(pg_engine)
+    detector = _detector_de_producao(pg_engine, repositorio) if producao else PassageDetector(timedelta(seconds=3))
+    passage = PassageInferenceService(detector, repositorio,
                                       passage_persisted=direction.process_pending)
     factory = patch("rfid_ingestion.mqtt_client.create_client")
     client = factory.start().return_value
@@ -578,6 +593,7 @@ def _receptor(pg_engine, tmp_path, relay=()):
                             RawReadingRepository(pg_engine),
                             observation_handler=passage.handle_observation,
                             observation_tick_handler=passage.tick)
+    receiver.passage_service = passage
     return receiver, client, factory
 
 

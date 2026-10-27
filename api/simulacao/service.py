@@ -161,6 +161,26 @@ def atualizar_layout(db: Session, layout_id: int, *, nome: str | None, configura
     return registro
 
 
+def mover_rotulo(db: Session, layout_id: int, chave: str, x: float, y: float) -> SimulacaoLayout:
+    """Grava onde o nome da zona aparece no mapa; não mexe na área nem na topologia.
+
+    Fica no layout compartilhado (banco), não no navegador: vale após recarregar,
+    reiniciar e em outro navegador. A versão sobe para o editor aberto em outra aba
+    não sobrescrever a posição com uma cópia antiga.
+    """
+    registro = obter_layout(db, layout_id, travar=True)
+    configuracao = copy.deepcopy(registro.configuracao)
+    zona = next((zona for zona in configuracao.get("zonas", []) if zona.get("chave") == chave), None)
+    if zona is None:
+        raise SimulacaoRecusada("zona_inexistente", "zona não encontrada no layout", 404)
+    zona["rotulo"] = {"x": round(min(max(x, 0.0), 100.0), 2), "y": round(min(max(y, 0.0), 100.0), 2)}
+    registro.configuracao = _layout_dict(validar_layout(configuracao))
+    registro.versao += 1
+    db.commit()
+    db.refresh(registro)
+    return registro
+
+
 def restaurar_preset(db: Session, layout_id: int) -> SimulacaoLayout:
     """Volta a configuração do layout ao preset do cenário."""
     registro = obter_layout(db, layout_id, travar=True)

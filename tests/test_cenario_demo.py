@@ -94,18 +94,24 @@ def test_seis_antes_nove_ao_iniciar_onze_depois_do_cadastro_e_reinicio_previsive
         assert len(chegados) == 2 and all(h.origem_registro == "correcao_manual" for h in chegados)
         assert registrar_chegada(session, sessao.itens[-1]["epc"]) is False  # já tem histórico: não repete
 
-        # Reiniciar: mesmo link, volta a nove, sem duplicar nem perder histórico.
+        # Reiniciar (banco local): mesmo link, volta a nove e não sobra cadastro nenhum,
+        # nem os dois acrescentados à mão, nem cópias "-ARQ-" entre os inativos.
         reiniciada = cenario_demo.reiniciar(session, sessao.codigo)
         assert reiniciada.codigo == sessao.codigo and len(reiniciada.itens) == 9
         ativos = _ativos(session)
         assert len(ativos) == 9
         assert sorted(e.nome for e in ativos) == sorted(
             nome for nome, _, _ in cenario_demo.EQUIPAMENTOS_ANTIGOS + cenario_demo.EQUIPAMENTOS_NOVOS)
-        arquivados = session.scalars(select(Equipamento).where(Equipamento.status == "inativo")).all()
-        assert len(arquivados) == 11 and all("-ARQ-" in (e.identificador_interno or "") for e in arquivados)
+        assert session.scalar(select(func.count()).select_from(Equipamento)) == 9
+        assert session.scalar(select(func.count()).select_from(Equipamento).where(
+            Equipamento.identificador_interno.like("%-ARQ-%"))) == 0
+        por_zona = [contagem for _, contagem in session.execute(
+            select(Equipamento.ultima_zona_id, func.count()).group_by(Equipamento.ultima_zona_id)).all()]
+        assert sorted(por_zona) == [2, 2, 2, 3]  # dois por zona e três vindos do elevador
 
         cenario_demo.preparar(session)
         assert len(_ativos(session)) == 6
+        assert session.scalar(select(func.count()).select_from(Equipamento)) == 6
         assert cenario_demo.estado(session) == {"layout_id": layout_padrao, "layout": NOMES_PRESET["hupaa"],
                                                 "sessao": None, "antigos": 6, "novos": 0}
 
@@ -137,6 +143,21 @@ def test_cada_execucao_comeca_na_demonstracao_padrao_uma_vez_so(pg_engine, layou
         aberta = session.scalar(select(SimulacaoSessao).where(SimulacaoSessao.estado != "encerrada"))
         assert sorted(i["nome"] for i in aberta.itens) == sorted(
             nome for nome, _, _ in cenario_demo.EQUIPAMENTOS_ANTIGOS + cenario_demo.EQUIPAMENTOS_NOVOS)
+
+
+def test_limpeza_definitiva_so_no_banco_local(pg_engine, layout_padrao, monkeypatch):
+    """Fora do banco local (ex.: Neon), preparar continua com a baixa lógica: nada é apagado."""
+    with Session(pg_engine) as session:
+        assert cenario_demo.banco_local(session)
+        cenario_demo.preparar(session)
+        monkeypatch.setattr(cenario_demo, "banco_local", lambda _db: False)
+        cenario_demo.preparar(session)
+        assert len(_ativos(session)) == 6
+        arquivados = session.scalars(select(Equipamento).where(Equipamento.status == "inativo")).all()
+        assert len(arquivados) == 6 and all("-ARQ-" in e.identificador_interno for e in arquivados)
+        monkeypatch.setattr(cenario_demo, "banco_local", lambda _db: True)
+        cenario_demo.preparar(session)  # de volta ao local: limpa também os arquivados antigos
+        assert session.scalar(select(func.count()).select_from(Equipamento)) == 6
 
 
 def test_fora_de_servico_continua_no_painel_e_arquivado_nao(pg_engine, layout_padrao):

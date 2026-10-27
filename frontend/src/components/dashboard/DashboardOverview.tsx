@@ -1,5 +1,5 @@
 import type { AssetPage, EquipmentItem, OverviewSummary } from '../../types/dashboard'
-import { AssetStatusBadge, LocationBadge, PresenceBadge, ageLabel, antennaLabel, detectionLabel } from '../DashboardParts'
+import { AssetStatusBadge, LocationBadge, PresenceBadge, PresenceDot, ageLabel, antennaLabel, detectionLabel, isFresh } from '../DashboardParts'
 import { Icon } from '../layout/Icon'
 
 export function DashboardOverview({ data, summary, onSelect, onPage }: {
@@ -21,7 +21,7 @@ export function DashboardOverview({ data, summary, onSelect, onPage }: {
         <td>{item.tipo}<small>{item.epc ?? 'Sem EPC associado'}</small></td>
         <td>{item.ultima_zona?.caminho ?? 'Nenhuma localização registrada'}</td>
         <td><AssetStatusBadge item={item}/><LocationBadge item={item}/><PresenceBadge reading={item.ultima_leitura}/></td>
-        <td>{item.ultima_leitura ? <>{antennaLabel(item.ultima_leitura)}<small>{ageLabel(item.ultima_leitura.em)}</small></> : 'Sem leitura'}</td>
+        <td><PresenceDot reading={item.ultima_leitura}/>{item.ultima_leitura ? <small>{isFresh(item.ultima_leitura) ? '' : `${antennaLabel(item.ultima_leitura)} · `}{ageLabel(item.ultima_leitura.em)}</small> : <small>Nunca lida</small>}</td>
         <td>{detectionLabel(item.ultima_deteccao_em)}</td>
       </tr>)}</tbody>
     </table></div> : <div className="empty-panel"><h3>Nenhum equipamento encontrado</h3><p>Confira os filtros e tente novamente.</p></div>}

@@ -107,3 +107,29 @@ export function getReadSummary(windowSeconds: number, registeredOnly = false, si
   if (registeredOnly) params.set('somente_cadastradas', 'true')
   return readJson(`/api/leituras/resumo?${params}`, signal)
 }
+
+/** Leitura usada como evidência de uma etapa (antena e horário gravado). */
+export interface JourneyAntenna { porta: number; lido_em: string | null }
+/** Etapa confirmada: uma passagem (ou correção) de uma zona para outra. */
+export interface JourneyStep {
+  movimentacao_id: number; de: string; para: string; em: string | null
+  portal: string | null; leitor: string | null; antenas: JourneyAntenna[]; ordem: string | null
+  travessia_s: number | null; origem_registro: string
+}
+/** Acontecimento do histórico: percurso, correção manual ou observação sem entrada. */
+export interface JourneyEvent {
+  tipo: 'percurso' | 'correcao' | 'observacao'; titulo: string; em: string | null; completo: boolean
+  origem?: string | null; destino?: string | null; saida_registrada?: boolean; mesma_zona?: boolean
+  etapas?: JourneyStep[]; tempo_na_circulacao_s?: number | null
+  justificativa?: string | null; referencia?: string | null
+  inicio?: string; fim?: string; zona?: string | null; leitor?: string | null; porta?: number | null; leituras?: number
+  zona_confirmada_no_momento?: string | null
+}
+export interface LastObservation { em: string; zona: string | null; leitor: string | null; porta: number | null }
+export interface Journeys { items: JourneyEvent[]; em_circulacao: boolean; ultima_observacao: LastObservation | null }
+
+/** Histórico em percursos (origem → destino) com as evidências de cada etapa. */
+export async function getJourneys(equipmentId: number, signal?: AbortSignal): Promise<Journeys> {
+  const data = await readJson<Partial<Journeys>>(`/equipamentos/${equipmentId}/percursos`, signal)
+  return { items: Array.isArray(data?.items) ? data.items : [], em_circulacao: !!data?.em_circulacao, ultima_observacao: data?.ultima_observacao ?? null }
+}

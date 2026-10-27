@@ -1,9 +1,10 @@
 """Portal de entrada da zona e itens que surgem juntos (falhas do teste local de 26/10/2026).
 
-Falha 1: a cadeira foi lida pelas duas antenas do Leitor 1 (1→2 e 2→1), mas a zona 1
-não foi confirmada: a Antena 2 não pertencia a nenhum portal e o "portal" da Antena 1
-tinha o outro lado em outro leitor. Regra pedida: um leitor com duas antenas na entrada
-da zona é o portal dela; as duas antenas lendo, em qualquer ordem, confirmam a zona.
+Falha 1: a cadeira foi lida pelas duas antenas do Leitor 1, mas a zona 1 não foi
+confirmada: a Antena 2 não pertencia a nenhum portal e o "portal" da Antena 1 tinha o
+outro lado em outro leitor. Regra: um leitor com duas antenas na entrada da zona é o
+portal dela, com a Antena 1 na circulação: 1 → 2 entra na zona, 2 → 1 sai para a
+circulação (a regra "qualquer ordem" de 26/10 foi substituída em 27/10).
 
 Falha 2: a Maca HU-07 "passou" da Zona 2 para a Zona 3 sem ser movida de propósito: o
 trajeto foi executado nela porque surgiu a 3 unidades (≈16 px) da Cadeira HU-08 e os
@@ -30,10 +31,16 @@ from rfid_inference.direction import (
     infer_direction,
 )
 from rfid_location.service import corrigir_localizacao
-from tests.test_simulacao_trajeto import T0, _estado, _executar, _rodar, relogio_falso
+from tests.test_simulacao_trajeto import T0, _estado, _executar, relogio_falso
+from tests.test_simulacao_trajeto import _rodar as _rodar_teste
 
 EPC_CADEIRA = "E2804C41000000000000B108"
 EPC_MACA = "E2804C41000000000000B107"
+
+
+def _rodar(*args, **kwargs):
+    """Pipeline com o detector do ingestor real (janela de confirmação, origem ativa)."""
+    return _rodar_teste(*args, producao=True, **kwargs)
 
 
 def _layout_portal_zona_1() -> dict:
@@ -100,19 +107,42 @@ def test_antena_1_depois_2_confirma_a_entrada_na_zona_1(pg_engine, portal_entrad
     _executar(pg_engine, portal_entrada, "Cadeira", [(52, 15, 0), (30, 15, 5)])
     _rodar(pg_engine, tmp_path, portal_entrada, 6)
     assert _estado(pg_engine, portal_entrada, "Cadeira") == (portal_entrada["zonas"]["zona-1"], 2)
-    assert _passagens(pg_engine, EPC_CADEIRA) == [("confirmed", "entry_portal_any_order_v1",
+    assert _passagens(pg_engine, EPC_CADEIRA) == [("confirmed", "entry_portal_order_v1",
                                                    portal_entrada["zonas"]["zona-1"])]
 
 
-def test_antena_2_depois_1_tambem_confirma_a_zona_1(pg_engine, portal_entrada, tmp_path):
-    # A maca já está do lado de dentro (x 30) e atravessa a porta: lê 2 e depois 1.
+def test_antena_2_depois_1_e_saida_para_a_circulacao(pg_engine, portal_entrada, tmp_path):
+    # A maca está do lado de dentro (x 30) e atravessa a porta para fora: lê 2 e depois 1.
     _executar(pg_engine, portal_entrada, "Maca", [(30, 15, 0), (52, 15, 5)])
     _rodar(pg_engine, tmp_path, portal_entrada, 6)
     with Session(pg_engine) as session:
         ordem = [linha for linha in session.scalars(select(LeituraBruta.antena_id).where(
             LeituraBruta.epc == EPC_MACA).order_by(LeituraBruta.lido_em))]
     assert ordem[0] != ordem[-1]  # leu as duas antenas, a de dentro primeiro
-    assert _estado(pg_engine, portal_entrada, "Maca") == (portal_entrada["zonas"]["zona-1"], 2)
+    assert _estado(pg_engine, portal_entrada, "Maca") == (portal_entrada["zonas"]["circulacao"], 2)
+    assert _passagens(pg_engine, EPC_MACA) == [("confirmed", "entry_portal_order_v1",
+                                                portal_entrada["zonas"]["circulacao"])]
+
+
+def test_parado_na_porta_com_as_duas_antenas_e_volta_nao_entra(pg_engine, portal_entrada, tmp_path):
+    """Alcances sobrepostos: fica na porta, lido pelas duas antenas, e volta para fora.
+    A Antena 1 continua lendo enquanto a 2 lê: não é entrada (nem saída e entrada falsas)."""
+    _executar(pg_engine, portal_entrada, "Cadeira", [(52, 15, 0), (45, 15, 2), (45, 15.01, 8), (52, 15, 10)])
+    _rodar(pg_engine, tmp_path, portal_entrada, 11)
+    with Session(pg_engine) as session:
+        lidas = set(session.scalars(select(LeituraBruta.antena_id).where(LeituraBruta.epc == EPC_CADEIRA)))
+    assert len(lidas) == 2  # as duas antenas leram
+    assert _estado(pg_engine, portal_entrada, "Cadeira") == (portal_entrada["zonas"]["zona-2"], 1)
+
+
+def test_parado_na_porta_e_depois_entra_confirma_uma_entrada_so(pg_engine, portal_entrada, tmp_path):
+    """Fica na porta (as duas antenas alternando) e depois entra: uma entrada só, sem
+    saídas e entradas falsas durante a parada."""
+    _executar(pg_engine, portal_entrada, "Cadeira", [(52, 15, 0), (45, 15, 2), (45, 15.01, 8), (30, 15, 11)])
+    _rodar(pg_engine, tmp_path, portal_entrada, 12)
+    assert _estado(pg_engine, portal_entrada, "Cadeira") == (portal_entrada["zonas"]["zona-1"], 2)
+    assert _passagens(pg_engine, EPC_CADEIRA) == [("confirmed", "entry_portal_order_v1",
+                                                   portal_entrada["zonas"]["zona-1"])]
 
 
 def test_leitura_de_uma_antena_so_continua_sem_confirmar(pg_engine, portal_entrada, tmp_path):
@@ -123,8 +153,8 @@ def test_leitura_de_uma_antena_so_continua_sem_confirmar(pg_engine, portal_entra
     assert _passagens(pg_engine, EPC_CADEIRA) == []
 
 
-def test_portal_direcional_segue_igual_ordem_decide_o_destino():
-    """Sem o modo entrada (EASY, portais entre duas zonas), B → A continua indo para A."""
+def test_ordem_decide_o_destino_nos_dois_modos():
+    """Direcional (EASY, portais entre zonas) e de entrada: B → A vai para A; só muda a regra."""
     agora = datetime(2026, 10, 27, tzinfo=UTC)
 
     def evidencia(antena, leitura, lado, zona, segundos):
@@ -137,7 +167,7 @@ def test_portal_direcional_segue_igual_ordem_decide_o_destino():
     entrada = DirectionContext(passage_id=1, epc="E", portal_id=9, zone_a_id=10, zone_b_id=20,
                                first=contexto.first, second=contexto.second, entry_portal=True)
     resultado = infer_direction(entrada, timedelta(milliseconds=100))
-    assert (resultado.status, resultado.destination_zone_id, resultado.rule) == ("confirmed", 20, "entry_portal_any_order_v1")
+    assert (resultado.status, resultado.destination_zone_id, resultado.rule) == ("confirmed", 10, "entry_portal_order_v1")
 
 
 def test_itens_novos_surgem_afastados_e_trajeto_de_um_nao_le_o_outro(pg_engine, portal_entrada, tmp_path):

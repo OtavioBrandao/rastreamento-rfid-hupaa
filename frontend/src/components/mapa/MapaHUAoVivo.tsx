@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { hospitalContextAreas } from '../../config/mapaConfig'
 import type { BoundZone, MapTopology } from '../../services/mapTopology'
 import {
-  contornoCobertura, getLayouts, getMonitor, getSessions,
+  contornoCobertura, getLayouts, getMonitor, getSessions, moveZoneLabel,
   type LayoutResumo, type Monitor, type SessaoResumo,
 } from '../../services/simulacao'
 import type { AssetStatus, EquipmentItem } from '../../types/dashboard'
@@ -37,6 +37,12 @@ const hora = (ms: number) => new Date(ms).toLocaleTimeString('pt-BR', { hour: '2
 
 type Notificacao = { chave: string; texto: string }
 
+/** Preferência de cada navegador (só visual): planta colorida ou simplificada. */
+const MODO_PLANTA = 'hu-mapa-planta-simplificada'
+function lerModoPlanta() {
+  try { return localStorage.getItem(MODO_PLANTA) === '1' } catch { return false }
+}
+
 function lerVistos(): Set<string> {
   try { return new Set(JSON.parse(sessionStorage.getItem(VISTOS) ?? '[]') as string[]) } catch { return new Set() }
 }
@@ -60,6 +66,8 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
   const [sessao, setSessao] = useState<SessaoResumo | null>(null)
   const [monitor, setMonitor] = useState<Monitor | null>(null)
   const [cobertura, setCobertura] = useState(false)
+  const [simplificada, setSimplificada] = useState(lerModoPlanta)
+  const [erroRotulo, setErroRotulo] = useState<string | null>(null)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const primeira = useRef(true)
   const [eventos, setEventos] = useState<Evento[]>([])
@@ -163,7 +171,7 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
   const zonasIds = layout?.zonas_ids ?? {}
   const zones: BoundZone[] = config ? config.zonas.flatMap((zona) => zona.area && zonasIds[zona.chave] ? [{
     id: zona.chave, name: zona.nome, zoneId: zonasIds[zona.chave], porId: true,
-    x: zona.area.x + 3, y: zona.area.y + 2.5, description: zona.restrita ? 'Zona restrita' : 'Zona do HU',
+    x: zona.rotulo?.x ?? zona.area.x + 3, y: zona.rotulo?.y ?? zona.area.y + 2.5, description: zona.restrita ? 'Zona restrita' : 'Zona do HU',
     area: { x: zona.area.x, y: zona.area.y, width: zona.area.largura, height: zona.area.altura },
   }] : []) : []
   // Sem layout salvo e aplicado, vale a planta de referência com as zonas do seed.
@@ -200,17 +208,38 @@ export function MapaHUAoVivo({ topology, items, onSelect }: { topology: MapTopol
       <rect className={`hu-limite${zona.restrita ? ' restrita' : ''}`} x={zona.area.x} y={zona.area.y} width={zona.area.largura} height={zona.area.altura}/>
     </g>)}
   </>
+  // Nome da zona arrastado: grava no layout compartilhado (banco); a área não muda.
+  const moverRotulo = (chave: string, x: number, y: number) => {
+    if (!layout) return
+    setErroRotulo(null)
+    setLayout({ ...layout, configuracao: { ...layout.configuracao, zonas: layout.configuracao.zonas.map((zona) => zona.chave === chave ? { ...zona, rotulo: { x, y } } : zona) } })
+    moveZoneLabel(layout.id, chave, { x, y }).then((salvo) => setLayout(salvo)).catch(() => {
+      setErroRotulo('Não foi possível salvar a posição do nome da zona. A posição anterior foi mantida.')
+      setLayout(layout)
+    })
+  }
+  const alternarPlanta = (valor: boolean) => {
+    setSimplificada(valor)
+    try { localStorage.setItem(MODO_PLANTA, valor ? '1' : '0') } catch { /* sem armazenamento: vale nesta visita */ }
+  }
   const contagem = (status: AssetStatus) => items.filter((item) => item.status === status && zones.some((z) => item.ultima_zona?.id === z.zoneId)).length
 
   return <div className="map-main hu-tracking">
     {notificacoes.length > 0 && <div className="hu-toasts" role="alert">{notificacoes.map((n) => <p key={n.chave} className="hu-toast">⚠ {n.texto}
       <button type="button" aria-label="Dispensar notificação" onClick={() => setNotificacoes((velhas) => velhas.filter((v) => v.chave !== n.chave))}>×</button></p>)}</div>}
     {naRestrita.length > 0 && <p className="hu-restrita-agora" role="status"><strong>Atividade suspeita</strong> — na zona restrita agora: {naRestrita.map((a) => a.equipamento?.nome ?? `Tag …${a.epc.slice(-4)}`).join(', ')}</p>}
+    {erroRotulo && <p role="alert" className="hu-rotulo-erro">{erroRotulo}</p>}
     <MapWorkspace mode="hospital" zones={zones} portals={[]} items={items} onSelect={onSelect} markers={[...markers, ...naoConfirmados]} areas={hospitalContextAreas} svgExtras={svgExtras}
+      simplified={simplificada} onZoneLabelMove={moverRotulo}
       below={<div className="hu-legenda">
-        <ul className="hu-legend" aria-label="Cores da planta do HU">{LEGENDA_PLANTA.map((item) =>
+        <div className="hu-modo-planta" role="group" aria-label="Aparência da planta">
+          <button type="button" aria-pressed={!simplificada} onClick={() => alternarPlanta(false)}>Planta colorida</button>
+          <button type="button" aria-pressed={simplificada} onClick={() => alternarPlanta(true)}>Planta simplificada</button>
+          <small>Arraste o nome de uma zona para reposicioná-lo; a posição fica salva no layout.</small>
+        </div>
+        {!simplificada && <ul className="hu-legend" aria-label="Cores da planta do HU">{LEGENDA_PLANTA.map((item) =>
           <li key={item.nome}><span className="hu-planta-cor" style={{ background: item.cor }}/>{item.nome}</li>)}
-          <li><span className="hu-planta-cor hu-planta-zona"/>Limite de zona</li><li><span className="map-legend-dot marker-nao-confirmado"/>Zona não confirmada (visto perto da antena)</li><li><span className="hu-planta-cor hu-planta-restrita"/>Zona restrita</li></ul>
+          <li><span className="hu-planta-cor hu-planta-zona"/>Limite de zona</li><li><span className="map-legend-dot marker-nao-confirmado"/>Zona não confirmada (visto perto da antena)</li><li><span className="hu-planta-cor hu-planta-restrita"/>Zona restrita</li></ul>}
         <ul className="hu-legend" aria-label="Cores dos equipamentos, da maior para a menor prioridade de alerta">{PRIORIDADE_ALERTA.map((status) =>
           <li key={status}><span className={`map-legend-dot marker-${status}`}/>{ROTULO_STATUS[status]} ({contagem(status)})</li>)}</ul>
         <label className="hu-cobertura-toggle"><input type="checkbox" checked={cobertura} onChange={(e) => setCobertura(e.target.checked)}/> Áreas de cobertura

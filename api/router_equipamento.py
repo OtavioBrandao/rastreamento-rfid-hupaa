@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from api import service_equipamento as service
-from api import service_vistos
+from api import service_percursos, service_vistos
 from api.database import get_db
 from api.permissoes import Permissao, exigir_por_metodo
 from api.schemas_equipamento import (
@@ -49,6 +49,14 @@ def listar_vistos(equipamento_id: int, db: Session = Depends(get_db)) -> dict:
     if not movement_repository.equipment_exists(db.connection(), equipamento_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="equipamento inexistente")
     return {"items": service_vistos.visitas(db, equipamento_id)}
+
+
+@router.get("/{equipamento_id}/percursos", summary="Histórico em percursos (origem → destino) com evidências")
+def listar_percursos(equipamento_id: int, db: Session = Depends(get_db)) -> dict:
+    """Percursos, correções e observações do equipamento (ver api/service_percursos.py)."""
+    if not movement_repository.equipment_exists(db.connection(), equipamento_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="equipamento inexistente")
+    return service_percursos.percursos(db, equipamento_id)
 
 
 @router.get(

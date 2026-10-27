@@ -1,5 +1,9 @@
 # Portal de entrada da zona e itens sobrepostos (teste local de 26/10/2026)
 
+> **Atualização de 27/10/2026:** a regra "qualquer ordem" (`entry_portal_any_order_v1`)
+> foi substituída pela ordem das antenas: 1 → 2 entra na zona e 2 → 1 sai para a
+> circulação. Veja [sentido nos portais e histórico em percursos](historico-percursos-e-sentido-nos-portais.md).
+
 ## O problema
 
 No teste local (modo 1), apareceram duas falhas:

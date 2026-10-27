@@ -454,7 +454,7 @@ function ReaderForm({ config, leitor, focus, disabled, onChange, onPosition, onR
         onChange={(e) => { if (e.target.value) onPortalDaZona(e.target.value) }}>
         <option value="">{portal ? '—' : 'Não é portal de entrada'}</option>
         {config.zonas.filter((z) => !z.restrita && z.chave !== 'circulacao').map((z) => <option key={z.chave} value={z.chave}>Portal para {z.nome}</option>)}</select>
-        <small>{leitor.antenas.length < 2 ? 'Precisa de pelo menos duas antenas.' : 'As duas antenas lendo, em qualquer ordem, confirmam a entrada na zona. A 1ª antena fica do lado de fora.'}</small></label>
+        <small>{leitor.antenas.length < 2 ? 'Precisa de pelo menos duas antenas.' : 'A 1ª antena fica do lado de fora (circulação): 1 → 2 confirma a entrada na zona; 2 → 1, a saída para a circulação.'}</small></label>
     })()}
     <label className="checkbox-label"><input type="checkbox" checked={!!leitor.alerta_area_restrita} disabled={disabled} onChange={(e) => onChange((l) => {
       l.alerta_area_restrita = e.target.checked

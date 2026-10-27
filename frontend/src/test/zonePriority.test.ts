@@ -36,6 +36,6 @@ describe('prioridade estável nas tabelas do mapa', () => {
   it('só muda de grupo ao expirar a janela de presença', () => {
     const rows = [item(1, 'Bomba 1'), item(2, 'Bomba 2', { ultima_leitura: reading(0) })]
     expect(zonePriority(rows, now).map((entry) => entry.id)).toEqual([2, 1])
-    expect(zonePriority(rows, now + 31_000).map((entry) => entry.id)).toEqual([1, 2])
+    expect(zonePriority(rows, now + 91_000).map((entry) => entry.id)).toEqual([1, 2])
   })
 })

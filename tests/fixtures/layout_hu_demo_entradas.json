@@ -1,0 +1,261 @@
+{
+ "zonas": [
+  {
+   "cor": "#2f6fb2",
+   "area": {
+    "x": 13.3,
+    "y": 1.8,
+    "altura": 46.5,
+    "largura": 35.4
+   },
+   "nome": "Zona 1",
+   "chave": "zona-1",
+   "restrita": false,
+   "referencia_planta": null
+  },
+  {
+   "cor": "#1f8a70",
+   "area": {
+    "x": 58.0,
+    "y": 1.8,
+    "altura": 47.0,
+    "largura": 41.6
+   },
+   "nome": "Zona 2",
+   "chave": "zona-2",
+   "restrita": false,
+   "referencia_planta": null
+  },
+  {
+   "cor": "#b26b2f",
+   "area": {
+    "x": 11.2,
+    "y": 70.0,
+    "altura": 30.0,
+    "largura": 49.0
+   },
+   "nome": "Zona 3",
+   "chave": "zona-3",
+   "restrita": false,
+   "referencia_planta": null
+  },
+  {
+   "cor": "#7a3fb2",
+   "area": {
+    "x": 41.9,
+    "y": 59.5,
+    "altura": 10.3,
+    "largura": 6.8
+   },
+   "nome": "Circulação vertical (escada)",
+   "chave": "circulacao-vertical",
+   "restrita": true,
+   "referencia_planta": null
+  },
+  {
+   "cor": "#888888",
+   "area": null,
+   "nome": "Circulação (fora das zonas)",
+   "chave": "circulacao",
+   "restrita": false,
+   "referencia_planta": null
+  }
+ ],
+ "cenario": "hupaa",
+ "destino": null,
+ "portais": [
+  {
+   "modo": "entrada",
+   "nome": "Portal para Zona 1",
+   "chave": "portal-zona-1",
+   "zona_a": "circulacao",
+   "zona_b": "zona-1",
+   "posicao": {
+    "x": 43.0,
+    "y": 29.1
+   }
+  },
+  {
+   "modo": "entrada",
+   "nome": "Portal para Zona 2",
+   "chave": "portal-zona-2",
+   "zona_a": "circulacao",
+   "zona_b": "zona-2",
+   "posicao": {
+    "x": 62.0,
+    "y": 28.9
+   }
+  },
+  {
+   "modo": "entrada",
+   "nome": "Portal para Zona 3",
+   "chave": "portal-3-escada",
+   "zona_a": "circulacao",
+   "zona_b": "zona-3",
+   "posicao": {
+    "x": 55.0,
+    "y": 75.5
+   }
+  }
+ ],
+ "leitores": [
+  {
+   "nome": "Leitor 1",
+   "chave": "leitor-1",
+   "modelo": "EZ700",
+   "antenas": [
+    {
+     "lado": "a",
+     "nome": "Antena 1",
+     "zona": "circulacao",
+     "chave": "leitor-1-antena-1",
+     "porta": 1,
+     "portal": "portal-zona-1",
+     "alcance": 6.0,
+     "posicao": {
+      "x": 45.2,
+      "y": 28.8
+     },
+     "orientacao": 0.0,
+     "fator_traseiro": 0.15
+    },
+    {
+     "lado": "b",
+     "nome": "Antena 2",
+     "zona": "zona-1",
+     "chave": "leitor-1-antena-2",
+     "porta": 2,
+     "portal": "portal-zona-1",
+     "alcance": 6.0,
+     "posicao": {
+      "x": 40.9,
+      "y": 28.9
+     },
+     "orientacao": 180.0,
+     "fator_traseiro": 0.15
+    }
+   ],
+   "posicao": {
+    "x": 43.0,
+    "y": 29.1
+   },
+   "reader_id": "sim-hupaa-09",
+   "alerta_area_restrita": false
+  },
+  {
+   "nome": "Leitor 2",
+   "chave": "leitor-2",
+   "modelo": "EZ700",
+   "antenas": [
+    {
+     "lado": "a",
+     "nome": "Antena 1",
+     "zona": "circulacao",
+     "chave": "leitor-2-antena-1",
+     "porta": 1,
+     "portal": "portal-zona-2",
+     "alcance": 6.0,
+     "posicao": {
+      "x": 59.9,
+      "y": 28.7
+     },
+     "orientacao": 180.0,
+     "fator_traseiro": 0.15
+    },
+    {
+     "lado": "b",
+     "nome": "Antena 2",
+     "zona": "zona-2",
+     "chave": "leitor-2-antena-2",
+     "porta": 2,
+     "portal": "portal-zona-2",
+     "alcance": 6.0,
+     "posicao": {
+      "x": 64.2,
+      "y": 28.6
+     },
+     "orientacao": 0.0,
+     "fator_traseiro": 0.15
+    }
+   ],
+   "posicao": {
+    "x": 62.0,
+    "y": 28.9
+   },
+   "reader_id": "sim-hupaa-07",
+   "alerta_area_restrita": false
+  },
+  {
+   "nome": "Leitor 3",
+   "chave": "leitor-3",
+   "modelo": "DR_MAX",
+   "antenas": [
+    {
+     "lado": "a",
+     "nome": "Antena 1",
+     "zona": "circulacao",
+     "chave": "leitor-3-antena-1",
+     "porta": 1,
+     "portal": "portal-3-escada",
+     "alcance": 6.0,
+     "posicao": {
+      "x": 52.0,
+      "y": 68.9
+     },
+     "orientacao": 270.0,
+     "fator_traseiro": 0.15
+    },
+    {
+     "lado": "b",
+     "nome": "Antena 2",
+     "zona": "zona-3",
+     "chave": "leitor-3-antena-2",
+     "porta": 2,
+     "portal": "portal-3-escada",
+     "alcance": 6.0,
+     "posicao": {
+      "x": 48.8,
+      "y": 71.9
+     },
+     "orientacao": 90.0,
+     "fator_traseiro": 0.15
+    }
+   ],
+   "posicao": {
+    "x": 55.9,
+    "y": 71.5
+   },
+   "reader_id": "sim-hupaa-03",
+   "alerta_area_restrita": false
+  },
+  {
+   "nome": "Leitor 4 · zona restrita (escada)",
+   "chave": "leitor-4",
+   "modelo": "DR_MAX",
+   "antenas": [
+    {
+     "lado": null,
+     "nome": "Antena 1 · presença na escada",
+     "zona": "circulacao-vertical",
+     "chave": "leitor-4-antena-1",
+     "porta": 1,
+     "portal": null,
+     "alcance": 3.5,
+     "posicao": {
+      "x": 44.9,
+      "y": 65.5
+     },
+     "orientacao": 0.0,
+     "fator_traseiro": 0.35
+    }
+   ],
+   "posicao": {
+    "x": 44.0,
+    "y": 70.0
+   },
+   "reader_id": "sim-hupaa-04",
+   "alerta_area_restrita": true
+  }
+ ],
+ "proporcao": 2.05
+}

@@ -6,9 +6,12 @@ export type Modelo = 'EZ700' | 'DR_MAX'
 export interface Ponto { x: number; y: number }
 export interface Area { x: number; y: number; largura: number; altura: number }
 
-export interface ZonaLayout { chave: string; nome: string; cor: string; area: Area | null; referencia_planta: string | null; restrita: boolean }
-/** `entrada`: portal da zona B = um leitor com pelo menos duas antenas na entrada dela; as duas
- *  lendo, em qualquer ordem, confirmam a zona B. `direcional` (padrão): a ordem A → B / B → A decide. */
+export interface ZonaLayout { chave: string; nome: string; cor: string; area: Area | null; referencia_planta: string | null; restrita: boolean
+  /** Posição do nome da zona no mapa do HU (arrastável); ausente = canto da área. */
+  rotulo?: Ponto | null }
+/** `entrada`: portal da zona B = um leitor com pelo menos duas antenas na entrada dela, a 1ª do
+ *  lado de fora (circulação): 1 → 2 entra na zona B; 2 → 1 sai para a circulação.
+ *  `direcional` (padrão): a ordem A → B / B → A decide, entre duas zonas. */
 export interface PortalLayout { chave: string; nome: string; zona_a: string; zona_b: string; posicao: Ponto | null; modo?: 'direcional' | 'entrada' }
 
 /** Torna o leitor o portal de entrada da zona: 1ª antena fora (circulação), demais dentro. */
@@ -144,6 +147,8 @@ export interface Monitor {
 export const getSimConfig = (signal?: AbortSignal) => readJson<SimConfig>('/api/simulacao/config', signal)
 export const getLayouts = (cenario: Cenario, signal?: AbortSignal) => readJson<LayoutResumo[]>(`/api/simulacao/layouts?cenario=${cenario}`, signal)
 export const createLayout = (cenario: Cenario, nome?: string, configuracao?: LayoutConfig) => sendJson<LayoutResumo>('/api/simulacao/layouts', 'POST', { cenario, nome, configuracao })
+/** Grava a posição do nome da zona no layout compartilhado (não altera a área). */
+export const moveZoneLabel = (id: number, chave: string, ponto: Ponto) => sendJson<LayoutResumo>(`/api/simulacao/layouts/${id}/zonas/${encodeURIComponent(chave)}/rotulo`, 'PUT', ponto)
 export const saveLayout = (id: number, nome: string, configuracao: LayoutConfig, versao: number) => sendJson<LayoutResumo>(`/api/simulacao/layouts/${id}`, 'PUT', { nome, configuracao, versao })
 export const restorePreset = (id: number) => sendJson<LayoutResumo>(`/api/simulacao/layouts/${id}/restaurar-preset`, 'POST')
 export const archiveLayout = (id: number) => apiRequest<void>(`/api/simulacao/layouts/${id}`, { method: 'DELETE' })

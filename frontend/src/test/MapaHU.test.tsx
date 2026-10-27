@@ -105,6 +105,65 @@ describe('acompanhamento do HU', () => {
     expect(container.querySelectorAll('.hu-cobertura')).toHaveLength(2)
   })
 
+  it('alterna planta colorida e simplificada; no modo simplificado a legenda de cores some e o resto continua', async () => {
+    localStorage.clear()
+    const { container } = render(<MapaHUAoVivo topology={topology} items={itens} onSelect={() => undefined}/>)
+    const colorida = await screen.findByRole('button', { name: 'Planta colorida' })
+    expect(colorida).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('list', { name: 'Cores da planta do HU' })).toBeInTheDocument()
+    const cores = () => [...container.querySelectorAll('.floor-background g[opacity] path')].map((path) => path.getAttribute('fill')?.toUpperCase())
+    expect(cores()).toContain('#67008F')
+    fireEvent.click(screen.getByRole('button', { name: 'Planta simplificada' }))
+    expect(screen.getByRole('button', { name: 'Planta simplificada' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('list', { name: 'Cores da planta do HU' })).toBeNull()
+    // Corredor preto, verde em cinza, demais em branco; limites, leitores e equipamentos seguem lá.
+    expect(new Set(cores())).toEqual(new Set(['#111111', '#9AA0A6', '#FFFFFF']))
+    expect(container.querySelector('.floor-map-simplificado')).not.toBeNull()
+    expect(container.querySelectorAll('.hu-limite')).toHaveLength(3)
+    expect(screen.getByRole('button', { name: /^2 equipamentos em Zona 1/ })).toBeInTheDocument()
+    expect(screen.getByRole('list', { name: /Cores dos equipamentos/ })).toBeInTheDocument()
+    expect(screen.getByLabelText(/Áreas de cobertura/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Planta colorida' }))
+    expect(cores()).toContain('#67008F')
+  })
+
+  it('arrastar o nome da zona grava a posição no layout, sem expandir a zona nem mudar a área', async () => {
+    const chamadas: { url: string; corpo: unknown }[] = []
+    const anterior = globalThis.fetch
+    vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
+      if (String(input).includes('/rotulo')) {
+        const corpo = JSON.parse(String(init?.body))
+        chamadas.push({ url: String(input), corpo })
+        const zonas = config.zonas.map((zona) => zona.chave === 'zona-1' ? { ...zona, rotulo: corpo } : zona)
+        return json({ id: 1, nome: 'Hospital HUPAA (padrão)', cenario: 'hupaa', configuracao: { ...config, zonas }, versao: 12, arquivado: false,
+          aplicado_em: agora(), updated_at: agora(), avisos: [], zonas_ids: { 'zona-1': 41, 'zona-2': 42, escada: 43 } })
+      }
+      return anterior(input)
+    }))
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 1030, height: 1040, right: 1030, bottom: 1040, x: 0, y: 0, toJSON: () => ({}) })
+    const { container } = render(<MapaHUAoVivo topology={topology} items={itens} onSelect={() => undefined}/>)
+    const rotulo = await screen.findByRole('button', { name: /^Zona 1: Zona do HU/ })
+    const area = () => [...container.querySelectorAll('.hu-limite')][0].getAttribute('x')
+    const areaAntes = area()
+    fireEvent.pointerDown(rotulo, { clientX: 200, clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(rotulo, { clientX: 515, clientY: 520, pointerId: 1 })
+    fireEvent.pointerUp(rotulo, { clientX: 515, clientY: 520, pointerId: 1 })
+    fireEvent.click(rotulo)
+    await act(async () => { await Promise.resolve() })
+    expect(chamadas).toEqual([{ url: '/api/simulacao/layouts/1/zonas/zona-1/rotulo', corpo: { x: 50, y: 50 } }])
+    expect(rotulo).toHaveAttribute('aria-pressed', 'false')  // soltar não expandiu a zona
+    expect(screen.queryByRole('button', { name: /^Bomba HU-01/ })).toBeNull()
+    expect(rotulo.style.left).toBe(`${((50 + 1.5) / 103) * 100}%`)
+    expect(area()).toBe(areaAntes)
+    // Clique simples (sem arrastar) continua expandindo a zona.
+    fireEvent.pointerDown(rotulo, { clientX: 515, clientY: 520, pointerId: 1 })
+    fireEvent.pointerUp(rotulo, { clientX: 516, clientY: 521, pointerId: 1 })
+    fireEvent.click(rotulo)
+    expect(rotulo).toHaveAttribute('aria-pressed', 'true')
+    expect(chamadas).toHaveLength(1)
+    vi.restoreAllMocks()
+  })
+
   it('notifica uma vez a entrada confirmada na zona restrita, sem repetir enquanto o item fica lá', { timeout: 15000 }, async () => {
     const entrada = agora()
     monitor.alertas_restritos = [{ epc: 'E2804C41000000000000A107', entrada_em: entrada, zona: 'Circulação vertical (escada)', leitor: 'Leitor 4', reader_id: 'sim-hupaa-04',

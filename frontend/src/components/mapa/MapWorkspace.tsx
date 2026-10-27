@@ -41,10 +41,11 @@ export function posicoesNaZona(zone: BoundZone, total: number) {
 }
 
 /** Planta + abas compartilhando a zona selecionada. Os pontos não são posições físicas. */
-export function MapWorkspace({ mode, zones, portals, items, onSelect, markers = [], areas = [], showEquipment = true, svgExtras, extraTabs = [], below }: {
+export function MapWorkspace({ mode, zones, portals, items, onSelect, markers = [], areas = [], showEquipment = true, svgExtras, extraTabs = [], below, simplified, onZoneLabelMove }: {
   mode: 'hospital' | 'lab'; zones: BoundZone[]; portals: BoundPortal[]; items: EquipmentItem[]
   onSelect: (item: EquipmentItem) => void; markers?: MapMarker[]; areas?: MapZone[]; showEquipment?: boolean
   svgExtras?: ReactNode; extraTabs?: ExtraTab[]; below?: ReactNode
+  simplified?: boolean; onZoneLabelMove?: (id: string, x: number, y: number) => void
 }) {
   const [selectedId, setSelectedId] = useState('')
   // Se a topologia deixar de validar a zona, a seleção some junto com ela.
@@ -85,7 +86,7 @@ export function MapWorkspace({ mode, zones, portals, items, onSelect, markers = 
   const portalMarkers: MapMarker[] = portals.map((portal) => ({ id: portal.id, portalId: portal.portalId, kind: 'portal', x: portal.x, y: portal.y,
     label: `${portal.name} · Portal #${portal.portalId}`, detail: portal.detail }))
   return <>
-    <FloorMap mode={mode} zones={areas} mainZones={zones} selectedZoneId={selectedZone?.id} svgExtras={svgExtras}
+    <FloorMap mode={mode} zones={areas} mainZones={zones} selectedZoneId={selectedZone?.id} svgExtras={svgExtras} simplified={simplified} onZoneLabelMove={onZoneLabelMove}
       markers={[...markers, ...portalMarkers, ...equipmentMarkers]}
       onMarkerClick={(marker) => {
         if (marker.count !== undefined) toggle(marker.id.slice('zona-'.length))

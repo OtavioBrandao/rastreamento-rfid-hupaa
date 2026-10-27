@@ -37,6 +37,7 @@ beforeEach(() => {
     if (url.pathname === '/api/ativos' || url.pathname === '/api/ativos/1') return response(ativoAtual(url.pathname === '/api/ativos/1'))
     if (url.pathname === '/api/dashboard/resumo') return response({ registered: 10 + revision, disponivel: 2 + revision, atencao: 0, fora_de_servico: 0, nunca_detectado: 0 })
     if (url.pathname === '/api/dashboard/atividade') return response({ items: [{ id: revision + 1, equipamento_nome: `Evento ${revision}`, zona_origem: 'Sala A', zona_destino: 'Sala B', movimentada_em: '2026-10-05T12:00:00Z' }] })
+    if (url.pathname.endsWith('/percursos')) return response({ em_circulacao: false, ultima_observacao: null, items: [{ tipo: 'percurso', titulo: `Sala A → Destino ${revision}`, origem: 'Sala A', destino: `Destino ${revision}`, em: '2026-10-05T12:00:00Z', completo: true, etapas: [] }] })
     if (url.pathname.endsWith('/movimentacoes')) return response({ items: [{ id: revision + 1, zona_origem: 'Sala A', zona_destino: `Destino ${revision}`, movimentada_em: '2026-10-05T12:00:00Z' }], page: 1, pages: 1 })
     if (url.pathname === '/api/laboratorio/leituras') return response({ items: Number(url.searchParams.get('after_id')) < revision + 1 ? [{ id: revision + 1, epc: `TAG-${revision}`, antena_porta: 1, recebido_em: '2026-10-05T12:00:00Z' }] : [], next_id: revision + 1 })
     throw new Error(`Endpoint não esperado: ${url.pathname}`)

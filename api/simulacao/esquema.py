@@ -79,6 +79,8 @@ class ZonaLayout(BaseModel):
     area: Area | None = None
     referencia_planta: str | None = Field(None, max_length=60)
     restrita: bool = False
+    # Onde o nome da zona aparece no mapa do HU (arrastável); nulo = canto da área.
+    rotulo: Ponto | None = None
 
     @field_validator("nome")
     @classmethod
@@ -100,7 +102,7 @@ class PortalLayout(BaseModel):
     zona_b: str
     posicao: Ponto | None = None
     # 'entrada': portal da zona B = um leitor com pelo menos duas antenas na entrada
-    # dela; as duas lendo, em qualquer ordem, confirmam a zona B. O lado A é "fora".
+    # dela, lado A = "fora" (circulação): 1 → 2 entra na zona B, 2 → 1 sai para fora.
     modo: Literal["direcional", "entrada"] = "direcional"
 
 

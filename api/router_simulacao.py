@@ -200,6 +200,25 @@ def salvar_layout(layout_id: int, payload: LayoutSalvar, db: Session = Depends(g
     return service.resumo_layout(registro)
 
 
+class RotuloZona(BaseModel):
+    """Posição do nome da zona na planta (0–100)."""
+
+    x: float = Field(..., ge=0, le=100)
+    y: float = Field(..., ge=0, le=100)
+
+
+@router.put("/layouts/{layout_id}/zonas/{chave}/rotulo", dependencies=[Depends(_PERMISSAO)],
+            summary="Mover o nome da zona no mapa")
+def mover_rotulo(layout_id: int, chave: str, payload: RotuloZona, db: Session = Depends(get_db),
+                 config: config_simulador.ConfigSimulador = Depends(obter_config)) -> dict:
+    """Grava a posição do nome no layout compartilhado (não altera os limites da zona)."""
+    _fora_de_producao(config)
+    try:
+        return service.resumo_layout(service.mover_rotulo(db, layout_id, chave, payload.x, payload.y))
+    except service.SimulacaoRecusada as erro:
+        raise _traduzir(erro) from erro
+
+
 @router.post("/layouts/{layout_id}/restaurar-preset", dependencies=[Depends(_PERMISSAO)],
              summary="Restaurar configuração predefinida")
 def restaurar(layout_id: int, db: Session = Depends(get_db),

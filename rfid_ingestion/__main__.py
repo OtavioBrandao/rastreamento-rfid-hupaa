@@ -22,6 +22,19 @@ from .reader_status import ReaderMonitor, StatusPolicy
 from .repository import RawReadingRepository
 
 
+def janela_de_confirmacao(settings: Settings) -> timedelta:
+    """Quanto o destino precisa seguir lido, sem a origem voltar, para a passagem valer.
+
+    A janela de "origem ainda ativa" (tolerância + retenção) mais o atraso com que um
+    pedaço de observação chega (janela do debounce, tolerância de ordem e duração
+    máxima da observação).
+    """
+    return timedelta(milliseconds=(
+        settings.rfid_passage_origin_hold_ms + settings.rfid_passage_overlap_grace_ms
+        + settings.rfid_debounce_window_ms + settings.rfid_out_of_order_tolerance_ms
+        + settings.rfid_debounce_max_observation_ms))
+
+
 def main() -> int:
     """Executa a entrada de linha de comando de rfid_ingestion.__main__; devolve o código de saída quando aplicável."""
     try:
@@ -66,6 +79,12 @@ def main() -> int:
                 refractory=timedelta(milliseconds=settings.rfid_passage_refractory_ms),
                 origin_active=lambda origin, destination: passage_repository.origin_active(
                     origin, destination, grace=overlap_grace, hold=origin_hold),
+                # Parada na porta, o leitor alterna as antenas: a passagem só vale
+                # depois da janela de evidência sem a origem voltar a ler.
+                confirm_after=janela_de_confirmacao(settings),
+                overlap_grace=overlap_grace,
+                confirm_check=lambda passage: passage_repository.exclusive_crossing(
+                    passage, grace=overlap_grace),
             ),
             passage_repository,
             passage_persisted=direction_service.process_pending,

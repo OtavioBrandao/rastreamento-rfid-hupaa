@@ -70,11 +70,11 @@ def _executar(pg_engine, hu, nome, pontos):
 
 
 def _rodar(pg_engine, tmp_path, hu, segundos, *, passo=0.1, entregar=None, perder=None,
-           finalizar=True, durante=None):
+           finalizar=True, durante=None, producao=False):
     """Ciclos do motor com o relógio falso andando; cada publicação vai ao ingestor."""
     PublicadorCapturado.instancias.clear()
     motor = MotorSimulacao(HABILITADO, pg_engine, fabrica_publicador=PublicadorCapturado)
-    receiver, client, factory = _receptor(pg_engine, tmp_path)
+    receiver, client, factory = _receptor(pg_engine, tmp_path, producao=producao)
     relogio, mono, mid, atrasadas, publicadas = hu["relogio"], 0.0, 0, [], 0
     try:
         while mono < segundos:
@@ -104,6 +104,7 @@ def _rodar(pg_engine, tmp_path, hu, segundos, *, passo=0.1, entregar=None, perde
             relogio.agora += timedelta(seconds=passo)
         if finalizar:
             receiver.flush_debounce()
+            receiver.passage_service.flush()
     finally:
         factory.stop()
         motor.parar()
@@ -373,4 +374,5 @@ def test_historico_mostra_visto_perto_sem_confirmar_zona(pg_engine, hu, tmp_path
     with Session(pg_engine) as session:
         zonas = [v["zona"] for v in visitas(session, hu["equipamentos"]["Maca 01"])]
     assert "Zona 2" not in zonas  # a leitura do lado B é a própria transição confirmada
-    assert zonas.count("Zona 1") == 2  # a visita antiga e o lado A da travessia, antes da confirmação
+    # Só a visita antiga: o lado A da travessia é evidência da passagem confirmada e não se repete.
+    assert zonas.count("Zona 1") == 1

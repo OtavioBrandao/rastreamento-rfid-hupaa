@@ -47,7 +47,7 @@ beforeEach(() => {
     calls.push(String(input))
     const url = new URL(String(input), 'http://localhost')
     if (url.pathname === '/auth/me') return sessionResponse()
-    if (historyFailure && url.pathname.endsWith('/movimentacoes')) return { ok: false, status: 503 }
+    if (historyFailure && url.pathname.endsWith('/percursos')) return { ok: false, status: 503 }
     if (assetsFailure && url.pathname === '/api/ativos') return { ok: false, status: 503 }
     if (activityFailure && url.pathname === '/api/dashboard/atividade') return { ok: false, status: 503 }
     let body: unknown
@@ -74,6 +74,12 @@ beforeEach(() => {
     } else if (url.pathname === '/api/laboratorio/leituras') {
       body = { items: url.searchParams.get('after_id') === '0' ? [{ id: 8, epc: assets[2].epc,
         antena_porta: 1, recebido_em: '2026-09-26T12:00:00Z' }] : [], next_id: 8 }
+    } else if (url.pathname.match(/^\/equipamentos\/\d+\/percursos$/)) {
+      body = { em_circulacao: false, ultima_observacao: null, items: [{ tipo: 'percurso', titulo: 'Zona 0 → Zona 1', origem: 'Zona 0',
+        destino: 'Zona 1', em: '2026-09-26T12:00:00Z', completo: true, saida_registrada: true, mesma_zona: false,
+        tempo_na_circulacao_s: null, etapas: [{ movimentacao_id: 10, de: 'Zona 0', para: 'Zona 1', em: '2026-09-26T12:00:00Z',
+          portal: 'Portal 1', leitor: 'Leitor 1', antenas: [{ porta: 1, lido_em: '2026-09-26T11:59:58Z' }, { porta: 2, lido_em: '2026-09-26T12:00:00Z' }],
+          ordem: '1 → 2', travessia_s: 2, origem_registro: 'passagem_automatica' }] }] }
     } else if (url.pathname.match(/^\/equipamentos\/\d+\/movimentacoes$/)) {
       body = { items: [{ id: 10, origem_registro: 'automatico', zona_origem: 'Zona 0',
         zona_destino: 'Zona 1', movimentada_em: '2026-09-26T12:00:00Z',
@@ -133,10 +139,14 @@ describe('integração da busca', () => {
     fireEvent.click(within(table).getByRole('button', { name: /Maca 1/ }))
     expect(screen.getByRole('dialog')).toHaveTextContent('Localização pode estar desatualizada')
     expect(screen.getByRole('dialog')).toHaveTextContent('2º andar → Bloco B → Zona 1')
+    // Resumo já aberto com o percurso; o histórico completo traz as etapas e as evidências.
+    expect(await within(screen.getByRole('dialog')).findByText(/Percurso concluído/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Ver histórico completo' }))
-    expect(await screen.findByText('Zona 0 → Zona 1')).toBeInTheDocument()
+    expect((await screen.findAllByText('Zona 0 → Zona 1')).length).toBe(2)  // resumo e título do bloco
+    expect(screen.getByText(/Portal 1 · Leitor 1 · antenas 1 → 2/)).toBeInTheDocument()
+    expect(screen.getByText(/Leituras usadas: Antena 1 às .*; Antena 2 às .*travessia em 2 s/)).toBeInTheDocument()
     expect(screen.getByRole('dialog')).toHaveTextContent('26/09/2026')
-    expect(calls.some((url) => url.includes('/equipamentos/1/movimentacoes?page=1&size=20'))).toBe(true)
+    expect(calls.some((url) => url.includes('/equipamentos/1/percursos'))).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Fechar painel' }))
     fireEvent.change(screen.getByRole('searchbox', { name: 'EPC' }), { target: { value: assets[0].epc } })
     fireEvent.click(screen.getByRole('button', { name: 'Buscar' }))
@@ -209,7 +219,7 @@ describe('integração da busca', () => {
       render(<App/>)
       const dashboard = await screen.findByRole('table')
       expect(within(dashboard).getByText('Zona não confirmada')).toBeInTheDocument()
-      expect(within(dashboard).getByText(/Lida agora · Antena 1 · Sala A/)).toBeInTheDocument()
+      expect(within(dashboard).getByText(/Leitura recente · Antena 1 · Sala A/)).toBeInTheDocument()
       fireEvent.click(screen.getByRole('link', { name: 'Mapa / Planta' }))
       const region = await screen.findByRole('region', { name: 'Detectados recentemente' })
       const rows = await within(region).findAllByRole('row')
@@ -302,9 +312,8 @@ describe('integração da busca', () => {
   it('não exibe histórico antigo quando a consulta falha e permite nova tentativa', async () => {
     await renderApp()
     const table = await screen.findByRole('table')
-    fireEvent.click(within(table).getByRole('button', { name: /Maca 1/ }))
     historyFailure = true
-    fireEvent.click(screen.getByRole('button', { name: 'Ver histórico completo' }))
+    fireEvent.click(within(table).getByRole('button', { name: /Maca 1/ }))
     expect(await screen.findByText(/Não foi possível carregar o histórico/)).toBeInTheDocument()
     expect(screen.queryByText('Zona 0 → Zona 1')).not.toBeInTheDocument()
     historyFailure = false
