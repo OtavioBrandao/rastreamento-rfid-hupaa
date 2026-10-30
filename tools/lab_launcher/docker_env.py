@@ -75,8 +75,29 @@ def executar(args: list[str], *, env: dict[str, str] | None = None,
 def compose(arquivo: Path, perfil: str, *args: str, env: dict[str, str] | None = None,
             mostrar: bool = False) -> str:
     """Invoca deploy/compose.yaml com perfil e arquivo explícitos, preservando a raiz do projeto."""
-    return executar(["docker", "compose", "-f", str(ROOT / "deploy" / "compose.yaml"), "--env-file", str(arquivo), "--profile", perfil,
-                     *args], env=env, mostrar=mostrar)
+    offline = perfil == "local" and env is not None and env.get("RFID_LAB_OFFLINE") == "1"
+    arquivos = ["-f", str(ROOT / "deploy" / "compose.yaml")]
+    if offline:
+        arquivos += ["-f", str(ROOT / "deploy" / "compose.offline.yaml")]
+        if args and args[0] == "up":
+            args = ("up", "--pull", "never", "--no-build", *args[1:])
+    return executar(["docker", "compose", *arquivos, "--env-file", str(arquivo),
+                     "--profile", perfil, *args], env=env, mostrar=mostrar)
+
+
+def verificar_imagens_locais(arquivo: Path, env: dict[str, str]) -> None:
+    """Confere todas as imagens sem consultar registries nem alterar serviços/dados."""
+    imagens = compose(arquivo, "local", "config", "--images", env=env).splitlines()
+    faltantes = []
+    for imagem in sorted(set(imagens)):
+        try:
+            executar(["docker", "image", "inspect", imagem], env=env)
+        except RuntimeError:
+            faltantes.append(imagem)
+    if faltantes:
+        raise ValueError("teste 1 offline: imagens locais indisponíveis: " + ", ".join(faltantes)
+                         + ". Prepare as imagens antes da demonstração conforme "
+                         "docs/operations/teste1-offline.md. Nenhum download foi tentado.")
 
 
 def _diagnostico(arquivo: Path, perfil: str, servico: str,

@@ -26,6 +26,7 @@ from .docker_env import (
     porta_disponivel,
     portas_do_projeto,
     processos_nas_portas,
+    verificar_imagens_locais,
 )
 from .session import iniciar as iniciar_sessao
 from .session import parar as parar_sessao
@@ -247,6 +248,14 @@ def start(
         if transporte == "plain":
             _avisar_transporte_plain(valores, interativo)
         ambiente = dict(os.environ, **valores)
+        # O teste 1 nunca instala dependências nem consulta registries na demonstração.
+        offline = modo == "local" and origem == "synthetic"
+        ambiente.pop("RFID_LAB_OFFLINE", None)
+        if offline:
+            ambiente["RFID_LAB_OFFLINE"] = "1"
+            etapa = "verificação das imagens locais (offline)"
+            verificar_imagens_locais(arquivo, ambiente)
+            print("Teste 1 offline: imagens locais; sem downloads ou build.")
         print(f"Configuração carregada de {arquivo.name}")
         if modo == "managed":
             print(f"Broker externo: {valores['MQTT_HOST']}:{valores.get('MQTT_PORT', '8883')} "
@@ -295,10 +304,11 @@ def start(
                 aguardar(arquivo, modo, servico, env=ambiente)
         migracao = "migrate-local" if modo == "local" else "migrate-managed"
         ingestor = "ingestor-local" if modo == "local" else "ingestor-managed"
-        etapa = "build da imagem e migrations"
-        print("Construindo imagem e aplicando migrations...")
+        etapa = "migrations locais" if offline else "build da imagem e migrations"
+        print("Aplicando migrations com a imagem local..." if offline
+              else "Construindo imagem e aplicando migrations...")
         started = True
-        compose(arquivo, modo, "up", "-d", "--build", migracao, env=ambiente,
+        compose(arquivo, modo, "up", "-d", *([] if offline else ["--build"]), migracao, env=ambiente,
                 mostrar=True)
         etapa = "conclusão das migrations"
         aguardar(arquivo, modo, migracao, completo=True, env=ambiente)

@@ -101,6 +101,11 @@ python scripts/dev.py --teste 1
 
 O launcher prepara PostgreSQL e Mosquitto locais, aplica migrations, cadastra a topologia EASY e inicia o ingestor. A API sobe com o **simulador web** habilitado e o navegador abre em [localhost:5173/#/simulador](http://localhost:5173/#/simulador). Não há aplicativo desktop: tudo acontece no navegador.
 
+O **teste 1 funciona sem internet e sem Wi-Fi** com as dependências e imagens já
+instaladas: não faz downloads nem build durante a demonstração. Os atalhos
+`rfid-teste1` e `rfid-parar` continuam válidos e reaproveitam os dados locais.
+[Preparação e verificação offline](docs/operations/teste1-offline.md).
+
 1. Escolha **Laboratório EASY** (duas salas, um portal, duas antenas) ou **Hospital HUPAA** (planta de referência, leitores EZ700 e DR Max virtuais).
 2. Crie o layout padrão e, no HUPAA, posicione leitores, antenas, portais e zonas no editor; salve.
 3. Clique em **Iniciar simulação**: o link de controle abre em outra aba.

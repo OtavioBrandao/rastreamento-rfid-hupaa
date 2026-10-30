@@ -38,6 +38,10 @@ O launcher aguarda saúde dos serviços, aplica migrations e semeia a topologia.
 No modo local pergunta sobre reaproveitamento dos dados. O reset remove volumes
 somente após escolha explícita. O projeto externo nunca recebe reset de volumes.
 
+O teste 1 usa somente imagens e dependências instaladas, sem downloads ou build
+na inicialização. Pode ser demonstrado com Wi-Fi desligado; `rfid-teste1` e
+`rfid-parar` mantêm os dados locais. Veja a [preparação offline](teste1-offline.md).
+
 ## Perfis locais
 
 ```bash

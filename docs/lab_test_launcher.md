@@ -72,6 +72,11 @@ uma `DATABASE_URL` externa exportada no shell não será usada nesse modo.
 
 ## Pré-requisitos
 
+O teste 1 (`local` + `synthetic`) reutiliza imagens instaladas, sem pull ou build.
+Código e migrations do checkout são montados na imagem local. Com dependências
+preparadas, não precisa de internet nem Wi-Fi. Os atalhos `rfid-teste1` e
+`rfid-parar` continuam funcionando. Veja a [preparação offline](operations/teste1-offline.md).
+
 - Python 3.12 e `pip install -r requirements/lab.txt` no host. Não há
   dependência gráfica desktop: o simulador roda no navegador.
 - Windows 11: Docker Desktop com backend WSL2. O launcher abre três abas

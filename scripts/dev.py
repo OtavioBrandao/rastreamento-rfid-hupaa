@@ -63,6 +63,14 @@ def ambiente_simulador(modo: str, valores: dict[str, str]) -> dict[str, str]:
     a credencial de PUBLICAÇÃO de ``.env.cloud.reader-01`` (nunca a do ingestor)."""
     extras = {"SIMULADOR_HABILITADO": "true", "APP_ENV": valores.get("APP_ENV") or "development",
               "SIMULADOR_TOPICO_INGESTOR": valores.get("MQTT_TOPIC") or "easy/dev/hupaa/+/+/readings"}
+    if modo == "local":
+        # Sobrepõe também eventuais variáveis SIMULADOR_MQTT_* externas do shell/perfil.
+        extras.update({"SIMULADOR_MQTT_MODE": "local", "SIMULADOR_MQTT_HOST": "127.0.0.1",
+                       "SIMULADOR_MQTT_PORT": valores.get("MQTT_LOCAL_PORT", "1883"),
+                       "SIMULADOR_MQTT_TLS_ENABLED": "false", "SIMULADOR_MQTT_INSECURE_LAB": "false",
+                       "SIMULADOR_MQTT_USERNAME": "", "SIMULADOR_MQTT_PASSWORD": "",
+                       "SIMULADOR_MQTT_CA_CERT": "", "SIMULADOR_MQTT_TOPICO_RELAY": "",
+                       "SIMULADOR_MQTT_TOPICO_PERMITIDO": ""})
     if modo == "managed" and valores.get("MQTT_INSECURE_LAB") != "true":
         from tools.lab_launcher.cli import _perfil_publicador
 
@@ -174,10 +182,12 @@ def porta_ocupada(host: str, porta: int) -> bool:
 
 def aguardar_http(url: str, processo: subprocess.Popen, timeout: float = 30) -> bool:
     """Aguarda resposta HTTP enquanto o subprocesso está vivo, respeitando timeout."""
+    # As sondas locais não passam por um proxy externo herdado do shell.
+    local = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     prazo = time.monotonic() + timeout
     while time.monotonic() < prazo and processo.poll() is None:
         try:
-            with urllib.request.urlopen(url, timeout=1):
+            with local.open(url, timeout=1):
                 return True
         except OSError:
             time.sleep(0.5)
@@ -217,6 +227,17 @@ def ultimas_linhas(log: Path | None, quantidade: int = 15) -> str:
     if log is None or not log.exists():
         return ""
     return "\n".join(log.read_text(encoding="utf-8", errors="replace").splitlines()[-quantidade:])
+
+
+def preparar_frontend(npm: str, offline: bool) -> None:
+    """No teste 1 exige Vite instalado; os demais modos mantêm a instalação automática."""
+    if offline:
+        if not (FRONTEND / "node_modules" / "vite" / "bin" / "vite.js").is_file():
+            sys.exit("Teste 1 offline: dependências do frontend ausentes. Antes da demonstração, "
+                     "execute npm --prefix frontend ci. Nenhum download foi tentado.")
+    elif not (FRONTEND / "node_modules").exists():
+        print("Instalando dependências do frontend (npm ci)...", flush=True)
+        subprocess.run([npm, "ci"], cwd=FRONTEND, check=True)
 
 
 def main() -> int:
@@ -260,12 +281,24 @@ def main() -> int:
     npm = shutil.which("npm")
     if npm is None:
         sys.exit("npm não encontrado no PATH. Instale o Node.js.")
-    if not (FRONTEND / "node_modules").exists():
-        print("Instalando dependências do frontend (npm ci)...", flush=True)
-        subprocess.run([npm, "ci"], cwd=FRONTEND, check=True)
+    offline = modo == "local" and origem == "synthetic"
+    preparar_frontend(npm, offline)
+    if offline:
+        sys.path.insert(0, str(ROOT))
+        from tools.lab_launcher.config import carregar
+        from tools.lab_launcher.docker_env import verificar_imagens_locais
+
+        arquivo, valores = carregar(modo, Path(args.env_file) if args.env_file else None, False)
+        try:
+            verificar_imagens_locais(arquivo, dict(os.environ) | valores | {"RFID_LAB_OFFLINE": "1"})
+        except (ValueError, RuntimeError, OSError) as erro:
+            sys.exit(str(erro))
+        print("Teste 1 offline: todos os serviços e arquivos são locais.", flush=True)
 
     ambiente = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8",
                     RFID_API_URL=f"http://{args.host}:{args.api_port}")
+    if offline:
+        ambiente.update(npm_config_offline="true", npm_config_update_notifier="false")
     # Com o launcher na frente, API e frontend escrevem em arquivo para não poluir o menu.
     com_launcher = origem is not None
     LOGS.mkdir(parents=True, exist_ok=True)

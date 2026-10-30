@@ -1,0 +1,16 @@
+# Teste 1: reutiliza dependências da imagem e executa o código atual do checkout.
+# O launcher combina este arquivo com compose.yaml e proíbe pull/build.
+x-codigo-local: &codigo-local
+  - ../alembic:/app/alembic:ro
+  - ../config/alembic.ini:/app/config/alembic.ini:ro
+  - ../db:/app/db:ro
+  - ../rfid_ingestion:/app/rfid_ingestion:ro
+  - ../rfid_inference:/app/rfid_inference:ro
+  - ../rfid_movement:/app/rfid_movement:ro
+  - ../rfid_location:/app/rfid_location:ro
+
+services:
+  migrate-local:
+    volumes: *codigo-local
+  ingestor-local:
+    volumes: *codigo-local
